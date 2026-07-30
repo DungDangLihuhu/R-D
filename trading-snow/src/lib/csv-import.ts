@@ -1,6 +1,12 @@
 import type { AssetType, Transaction, TransactionType } from "./types";
 
-export type CsvFormat = "auto" | "generic" | "ibkr" | "tradingview";
+export type CsvFormat =
+  | "auto"
+  | "generic"
+  | "ibkr"
+  | "tradingview"
+  | "snowball_holdings"
+  | "snowball_transactions";
 
 export interface CsvRow {
   date: string;
@@ -16,6 +22,8 @@ export interface CsvParseResult {
   rows: CsvRow[];
   errors: string[];
   format: CsvFormat;
+  marketPrices?: Record<string, number>;
+  info?: string;
 }
 
 const TYPE_MAP: Record<string, TransactionType> = {
@@ -32,6 +40,23 @@ const TYPE_MAP: Record<string, TransactionType> = {
   deposit: "DEPOSIT",
   withdraw: "WITHDRAW",
   withdrawal: "WITHDRAW",
+  cash_in: "DEPOSIT",
+  cash_out: "WITHDRAW",
+};
+
+const SNOWBALL_EVENT_MAP: Record<string, TransactionType | null> = {
+  buy: "BUY",
+  sell: "SELL",
+  dividend: "DIVIDEND",
+  stock_as_dividend: "DIVIDEND",
+  cash_in: "DEPOSIT",
+  cash_out: "WITHDRAW",
+  cash_gain: "DEPOSIT",
+  cash_expense: "WITHDRAW",
+  fee: null,
+  split: null,
+  spinoff: null,
+  cash_convert: null,
 };
 
 function parseCsvLine(line: string): string[] {
@@ -59,6 +84,12 @@ function normHeader(h: string): string {
 
 function detectFormat(headers: string[]): CsvFormat {
   const h = headers.map(normHeader);
+  if (h.includes("holding") && h.includes("shares") && h.includes("costpershare")) {
+    return "snowball_holdings";
+  }
+  if (h.includes("event") && h.includes("symbol") && h.includes("quantity")) {
+    return "snowball_transactions";
+  }
   if (h.includes("tradedate") || h.includes("ibcommission")) return "ibkr";
   if (h.includes("ticker") && h.includes("side")) return "tradingview";
   return "generic";
@@ -76,9 +107,7 @@ function colIndex(headers: string[], ...candidates: string[]): number {
 function parseDate(raw: string): string | null {
   const s = raw.trim();
   if (!s) return null;
-  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s).toISOString();
-  // MM/DD/YYYY or DD/MM/YYYY — assume MM/DD for US brokers
   const mdy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (mdy) {
     const [, m, d, y] = mdy;
@@ -89,8 +118,9 @@ function parseDate(raw: string): string | null {
 }
 
 function parseType(raw: string): TransactionType | null {
-  const key = raw.trim().toLowerCase();
+  const key = raw.trim().toLowerCase().replace(/\s+/g, "_");
   if (TYPE_MAP[key]) return TYPE_MAP[key];
+  if (SNOWBALL_EVENT_MAP[key] !== undefined) return SNOWBALL_EVENT_MAP[key];
   if (key.includes("buy")) return "BUY";
   if (key.includes("sell")) return "SELL";
   if (key.includes("div")) return "DIVIDEND";
@@ -98,41 +128,182 @@ function parseType(raw: string): TransactionType | null {
 }
 
 function parseNum(raw: string): number {
-  const n = parseFloat(raw.replace(/[,$]/g, ""));
+  const n = parseFloat(String(raw).replace(/[,$]/g, ""));
   return isNaN(n) ? 0 : Math.abs(n);
 }
 
-export function parseBrokerCsv(
-  text: string,
-  format: CsvFormat = "auto"
+function parseSnowballHoldings(
+  headers: string[],
+  lines: string[]
 ): CsvParseResult {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+  const iSymbol = colIndex(headers, "holding");
+  const iQty = colIndex(headers, "shares");
+  const iCost = colIndex(headers, "costpershare");
+  const iMarket = colIndex(headers, "shareprice");
+  const iName = colIndex(headers, "holdingsname");
 
   const errors: string[] = [];
-  if (lines.length < 2) {
-    return { rows: [], errors: ["File CSV cần ít nhất header + 1 dòng"], format: "generic" };
+  const rows: CsvRow[] = [];
+  const marketPrices: Record<string, number> = {};
+  const importDate = new Date().toISOString();
+
+  if (iSymbol < 0 || iQty < 0 || iCost < 0) {
+    return {
+      rows: [],
+      errors: ["Snowball Holdings: thiếu cột Holding, Shares hoặc Cost per share"],
+      format: "snowball_holdings",
+    };
   }
 
-  const headers = parseCsvLine(lines[0]);
-  const detected = format === "auto" ? detectFormat(headers) : format;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    if (cols.every((c) => !c)) continue;
 
+    const symbol = (cols[iSymbol] ?? "").toUpperCase().replace(/\s/g, "");
+    const quantity = parseNum(cols[iQty] ?? "0");
+    const price = parseNum(cols[iCost] ?? "0");
+    const name = iName >= 0 ? cols[iName] : "";
+
+    if (!symbol) {
+      errors.push(`Dòng ${i + 1}: thiếu mã`);
+      continue;
+    }
+    if (quantity <= 0) continue;
+    if (price <= 0) {
+      errors.push(`Dòng ${i + 1} (${symbol}): Cost per share không hợp lệ`);
+      continue;
+    }
+
+    if (iMarket >= 0) {
+      const mp = parseNum(cols[iMarket] ?? "0");
+      if (mp > 0) marketPrices[symbol] = mp;
+    }
+
+    rows.push({
+      date: importDate,
+      symbol,
+      type: "BUY",
+      quantity,
+      price,
+      fee: 0,
+      notes: name ? `Snowball: ${name}` : "Snowball Holdings import",
+    });
+  }
+
+  return {
+    rows,
+    errors,
+    format: "snowball_holdings",
+    marketPrices,
+    info:
+      "File Holdings Snowball — tạo lệnh MUA giả định theo giá vốn TB. Để import lịch sử giao dịch, xuất Transactions từ Snowball.",
+  };
+}
+
+function parseSnowballTransactions(
+  headers: string[],
+  lines: string[]
+): CsvParseResult {
+  const iEvent = colIndex(headers, "event");
+  const iDate = colIndex(headers, "date");
+  const iSymbol = colIndex(headers, "symbol");
+  const iPrice = colIndex(headers, "price");
+  const iQty = colIndex(headers, "quantity");
+  const iFee = colIndex(headers, "feetax", "feetax", "fee");
+
+  const errors: string[] = [];
+  const rows: CsvRow[] = [];
+
+  if (iEvent < 0 || iDate < 0 || iPrice < 0 || iQty < 0) {
+    return {
+      rows: [],
+      errors: ["Snowball Transactions: thiếu cột Event, Date, Price hoặc Quantity"],
+      format: "snowball_transactions",
+    };
+  }
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    if (cols.every((c) => !c)) continue;
+
+    const eventRaw = (cols[iEvent] ?? "").trim();
+    const type = parseType(eventRaw);
+    if (type === null) {
+      if (eventRaw) errors.push(`Dòng ${i + 1}: bỏ qua event "${eventRaw}"`);
+      continue;
+    }
+
+    const date = parseDate(cols[iDate] ?? "");
+    const symbol = (cols[iSymbol] ?? "").toUpperCase().replace(/\s/g, "");
+    const quantity = parseNum(cols[iQty] ?? "0");
+    const price = parseNum(cols[iPrice] ?? "0");
+    const fee = iFee >= 0 ? parseNum(cols[iFee] ?? "0") : 0;
+
+    const isCash = type === "DEPOSIT" || type === "WITHDRAW";
+
+    if (!date) {
+      errors.push(`Dòng ${i + 1}: ngày không hợp lệ`);
+      continue;
+    }
+    if (!isCash && !symbol) {
+      errors.push(`Dòng ${i + 1}: thiếu Symbol`);
+      continue;
+    }
+    if (quantity <= 0 || price <= 0) {
+      errors.push(`Dòng ${i + 1}: quantity/price phải > 0`);
+      continue;
+    }
+
+    rows.push({
+      date,
+      symbol: isCash ? "CASH" : symbol,
+      type,
+      quantity,
+      price,
+      fee,
+      notes: `Snowball: ${eventRaw}`,
+    });
+  }
+
+  return { rows, errors, format: "snowball_transactions" };
+}
+
+function parseGenericTransactions(
+  headers: string[],
+  lines: string[],
+  format: CsvFormat
+): CsvParseResult {
   const iDate = colIndex(headers, "date", "tradedate", "datetime", "time");
-  const iSymbol = colIndex(headers, "symbol", "ticker", "instrument");
-  const iType = colIndex(headers, "type", "side", "action", "buysell", "transactiontype");
+  const iSymbol = colIndex(headers, "symbol", "ticker", "instrument", "holding");
+  const iType = colIndex(
+    headers,
+    "type",
+    "side",
+    "action",
+    "buysell",
+    "transactiontype",
+    "event"
+  );
   const iQty = colIndex(headers, "quantity", "qty", "shares", "amount");
-  const iPrice = colIndex(headers, "price", "tradeprice", "fillprice", "avgprice");
-  const iFee = colIndex(headers, "fee", "commission", "ibcommission", "fees");
+  const iPrice = colIndex(
+    headers,
+    "price",
+    "tradeprice",
+    "fillprice",
+    "avgprice",
+    "costpershare"
+  );
+  const iFee = colIndex(headers, "fee", "commission", "ibcommission", "fees", "feetax");
+
+  const errors: string[] = [];
 
   if (iDate < 0 || iSymbol < 0 || iType < 0 || iQty < 0 || iPrice < 0) {
     return {
       rows: [],
       errors: [
-        "Không map được cột. Cần: date, symbol, type/side, quantity, price. Tùy chọn: fee",
+        "Không map được cột. Cần: date, symbol, type/side, quantity, price. Tùy chọn: fee. Hoặc dùng export Holdings/Transactions từ Snowball.",
       ],
-      format: detected,
+      format,
     };
   }
 
@@ -169,7 +340,37 @@ export function parseBrokerCsv(
     rows.push({ date, symbol, type, quantity, price, fee });
   }
 
-  return { rows, errors, format: detected };
+  return { rows, errors, format };
+}
+
+export function parseBrokerCsv(
+  text: string,
+  format: CsvFormat = "auto"
+): CsvParseResult {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length < 2) {
+    return {
+      rows: [],
+      errors: ["File CSV cần ít nhất header + 1 dòng"],
+      format: "generic",
+    };
+  }
+
+  const headers = parseCsvLine(lines[0]);
+  const detected = format === "auto" ? detectFormat(headers) : format;
+
+  if (detected === "snowball_holdings") {
+    return parseSnowballHoldings(headers, lines);
+  }
+  if (detected === "snowball_transactions") {
+    return parseSnowballTransactions(headers, lines);
+  }
+
+  return parseGenericTransactions(headers, lines, detected);
 }
 
 export function csvRowsToTransactions(
@@ -186,6 +387,6 @@ export function csvRowsToTransactions(
     price: r.price,
     fee: r.fee,
     date: r.date,
-    notes: r.notes ? `CSV: ${r.notes}` : "Import CSV",
+    notes: r.notes ? r.notes : "Import CSV",
   }));
 }

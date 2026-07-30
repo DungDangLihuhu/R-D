@@ -30,6 +30,7 @@ interface AppContextValue {
   importTransactions: (txs: Omit<Transaction, "id">[]) => void;
   deleteTransaction: (id: string) => void;
   setMarketPrice: (symbol: string, price: number) => void;
+  setMarketPrices: (prices: Record<string, number>) => void;
   refreshPrices: (symbols?: string[]) => Promise<void>;
   exportData: () => string;
   importData: (json: string) => boolean;
@@ -138,6 +139,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setMarketPrices = useCallback((prices: Record<string, number>) => {
+    setState((s) => ({
+      ...s,
+      marketPrices: { ...s.marketPrices, ...prices },
+      pricesUpdatedAt: new Date().toISOString(),
+    }));
+  }, []);
+
   const exportData = useCallback(() => JSON.stringify(state, null, 2), [state]);
 
   const importData = useCallback((json: string) => {
@@ -173,6 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         importTransactions,
         deleteTransaction,
         setMarketPrice,
+        setMarketPrices,
         refreshPrices,
         exportData,
         importData,
