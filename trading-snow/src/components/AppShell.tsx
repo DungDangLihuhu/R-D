@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   CalendarDays,
+  History,
   LayoutDashboard,
   LineChart,
   Snowflake,
@@ -16,6 +17,7 @@ const nav = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/trades", label: "Giao dịch", icon: Wallet },
   { href: "/portfolio", label: "Danh mục", icon: LineChart },
+  { href: "/closed", label: "Lệnh đóng", icon: History },
   { href: "/dividends", label: "Cổ tức", icon: CalendarDays },
   { href: "/analytics", label: "Thống kê", icon: BarChart3 },
 ];

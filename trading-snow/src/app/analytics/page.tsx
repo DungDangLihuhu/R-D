@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { EquityChart, MonthlyPnlChart } from "@/components/Charts";
+import { ClosedTradesTable } from "@/components/ClosedTradesTable";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
-import { formatDate, formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 
 export default function AnalyticsPage() {
   const { stats } = useApp();
@@ -48,38 +50,17 @@ export default function AnalyticsPage() {
       </div>
 
       {stats.closedTrades.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-zinc-800">
-          <h2 className="border-b border-zinc-800 px-4 py-3 font-semibold">
-            Lệnh đã chốt (gần nhất)
-          </h2>
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-900 text-left text-zinc-400">
-              <tr>
-                <th className="px-4 py-2">Ngày</th>
-                <th className="px-4 py-2">Mã</th>
-                <th className="px-4 py-2 text-right">P&L</th>
-                <th className="px-4 py-2 text-right">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...stats.closedTrades].reverse().slice(0, 20).map((t, i) => (
-                <tr key={i} className="border-t border-zinc-800">
-                  <td className="px-4 py-2">{formatDate(t.date)}</td>
-                  <td className="px-4 py-2">{t.symbol}</td>
-                  <td
-                    className={`px-4 py-2 text-right tabular-nums ${
-                      t.pnl >= 0 ? "text-emerald-400" : "text-rose-400"
-                    }`}
-                  >
-                    {formatMoney(t.pnl)}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">
-                    {formatPercent(t.pnlPercent)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-semibold">Lệnh đã chốt (10 gần nhất)</h2>
+            <Link
+              href="/closed"
+              className="text-sm text-sky-400 hover:text-sky-300"
+            >
+              Xem tất cả →
+            </Link>
+          </div>
+          <ClosedTradesTable trades={stats.closedTrades.slice(-10)} showFooter={false} />
         </div>
       )}
     </div>
