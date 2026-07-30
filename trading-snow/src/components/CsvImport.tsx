@@ -7,22 +7,26 @@ import {
   csvRowsToTransactions,
   parseBrokerCsv,
   type CsvFormat,
+  type CsvParseResult,
   type CsvRow,
 } from "@/lib/csv-import";
 import { formatDate, formatMoney } from "@/lib/format";
 
 const FORMATS: { value: CsvFormat; label: string }[] = [
   { value: "auto", label: "Tự nhận diện" },
+  { value: "snowball_holdings", label: "Snowball — Holdings (vị thế)" },
+  { value: "snowball_transactions", label: "Snowball — Transactions" },
   { value: "generic", label: "Generic (date,symbol,type,qty,price,fee)" },
   { value: "ibkr", label: "Interactive Brokers" },
   { value: "tradingview", label: "TradingView / Side+Ticker" },
 ];
 
 export function CsvImport() {
-  const { activePortfolioId, importTransactions } = useApp();
+  const { activePortfolioId, importTransactions, setMarketPrices } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const [format, setFormat] = useState<CsvFormat>("auto");
   const [preview, setPreview] = useState<CsvRow[] | null>(null);
+  const [parseResult, setParseResult] = useState<CsvParseResult | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [detectedFormat, setDetectedFormat] = useState<CsvFormat>("generic");
   const [open, setOpen] = useState(false);
@@ -34,6 +38,7 @@ export function CsvImport() {
     reader.onload = () => {
       const result = parseBrokerCsv(reader.result as string, format);
       setPreview(result.rows);
+      setParseResult(result);
       setErrors(result.errors);
       setDetectedFormat(result.format);
     };
@@ -45,10 +50,22 @@ export function CsvImport() {
     if (!preview || preview.length === 0) return;
     const txs = csvRowsToTransactions(preview, activePortfolioId);
     importTransactions(txs);
+
+    if (parseResult?.marketPrices && Object.keys(parseResult.marketPrices).length > 0) {
+      setMarketPrices(parseResult.marketPrices);
+    }
+
+    const parts = [`Đã import ${txs.length} giao dịch`];
+    if (parseResult?.marketPrices) {
+      const n = Object.keys(parseResult.marketPrices).length;
+      if (n > 0) parts.push(`cập nhật giá ${n} mã`);
+    }
+
     setPreview(null);
+    setParseResult(null);
     setErrors([]);
     setOpen(false);
-    alert(`Đã import ${txs.length} giao dịch`);
+    alert(parts.join(", "));
   };
 
   if (!open) {
@@ -71,6 +88,7 @@ export function CsvImport() {
           onClick={() => {
             setOpen(false);
             setPreview(null);
+            setParseResult(null);
           }}
           className="text-sm text-zinc-500 hover:text-zinc-300"
         >
@@ -79,7 +97,8 @@ export function CsvImport() {
       </div>
 
       <p className="text-sm text-zinc-500">
-        Hỗ trợ: Generic, Interactive Brokers, TradingView. Cột tối thiểu:{" "}
+        Snowball: chọn đúng <strong>Holdings</strong> (snapshot vị thế) hoặc{" "}
+        <strong>Transactions</strong> (lịch sử). Generic cần cột{" "}
         <code className="text-sky-400">date, symbol, type/side, quantity, price</code>
       </p>
 
@@ -110,10 +129,19 @@ export function CsvImport() {
         />
       </div>
 
+      {parseResult?.info && (
+        <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+          {parseResult.info}
+        </p>
+      )}
+
       {preview && (
         <p className="text-sm text-sky-400">
           Nhận diện format: <strong>{detectedFormat}</strong> · {preview.length}{" "}
           dòng hợp lệ
+          {parseResult?.marketPrices &&
+            Object.keys(parseResult.marketPrices).length > 0 &&
+            ` · ${Object.keys(parseResult.marketPrices).length} giá thị trường`}
         </p>
       )}
 
