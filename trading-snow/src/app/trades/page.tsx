@@ -1,6 +1,7 @@
 "use client";
 
 import { CsvImport } from "@/components/CsvImport";
+import { SmsImport } from "@/components/SmsImport";
 import { TradeForm } from "@/components/TradeForm";
 import { TradeTable } from "@/components/TradeTable";
 
@@ -10,10 +11,13 @@ export default function TradesPage() {
       <div>
         <h1 className="text-2xl font-bold">Giao dịch</h1>
         <p className="text-sm text-zinc-500">
-          Nhập thủ công hoặc import CSV từ broker
+          Nhập thủ công, import CSV hoặc dán tin nhắn ngân hàng
         </p>
       </div>
-      <CsvImport />
+      <div className="flex flex-wrap gap-2">
+        <CsvImport />
+        <SmsImport />
+      </div>
       <TradeForm />
       <TradeTable />
     </div>
