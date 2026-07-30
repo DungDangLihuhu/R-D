@@ -1,0 +1,70 @@
+export type TransactionType = "BUY" | "SELL" | "DIVIDEND" | "DEPOSIT" | "WITHDRAW";
+
+export type AssetType = "STOCK" | "ETF" | "CRYPTO" | "FOREX" | "OTHER";
+
+export interface Portfolio {
+  id: string;
+  name: string;
+  currency: string;
+  createdAt: string;
+}
+
+export interface Transaction {
+  id: string;
+  portfolioId: string;
+  type: TransactionType;
+  symbol: string;
+  assetType: AssetType;
+  quantity: number;
+  price: number;
+  fee: number;
+  date: string;
+  notes?: string;
+}
+
+export interface Holding {
+  symbol: string;
+  assetType: AssetType;
+  quantity: number;
+  avgCost: number;
+  totalCost: number;
+  marketPrice?: number;
+}
+
+export interface ClosedTrade {
+  symbol: string;
+  quantity: number;
+  costBasis: number;
+  proceeds: number;
+  pnl: number;
+  pnlPercent: number;
+  date: string;
+}
+
+export interface PortfolioStats {
+  totalDeposits: number;
+  totalWithdrawals: number;
+  totalDividends: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  totalPnl: number;
+  portfolioValue: number;
+  cashBalance: number;
+  winCount: number;
+  lossCount: number;
+  winRate: number;
+  avgWin: number;
+  avgLoss: number;
+  profitFactor: number;
+  totalTrades: number;
+  holdings: Holding[];
+  closedTrades: ClosedTrade[];
+  monthlyPnl: { month: string; pnl: number }[];
+  equityCurve: { date: string; equity: number }[];
+}
+
+export interface AppState {
+  portfolios: Portfolio[];
+  transactions: Transaction[];
+  marketPrices: Record<string, number>;
+}
