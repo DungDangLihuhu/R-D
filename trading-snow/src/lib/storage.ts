@@ -13,6 +13,7 @@ export const defaultState = (): AppState => ({
   ],
   transactions: [],
   marketPrices: {},
+  pricesUpdatedAt: null,
 });
 
 export function loadState(): AppState {

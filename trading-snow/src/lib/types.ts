@@ -67,4 +67,14 @@ export interface AppState {
   portfolios: Portfolio[];
   transactions: Transaction[];
   marketPrices: Record<string, number>;
+  pricesUpdatedAt?: string | null;
+}
+
+export interface DividendCalendarItem {
+  symbol: string;
+  date: string;
+  amount: number;
+  source: "recorded" | "yahoo";
+  quantity?: number;
+  total?: number;
 }

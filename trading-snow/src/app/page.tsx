@@ -2,6 +2,7 @@
 
 import { EquityChart } from "@/components/Charts";
 import { DataTools } from "@/components/DataTools";
+import { PriceRefresh } from "@/components/PriceRefresh";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
@@ -18,7 +19,10 @@ export default function DashboardPage() {
             Theo dõi P&L, win rate và đường vốn — lưu local trên trình duyệt
           </p>
         </div>
-        <DataTools />
+        <div className="flex flex-wrap items-center gap-2">
+          <PriceRefresh />
+          <DataTools />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

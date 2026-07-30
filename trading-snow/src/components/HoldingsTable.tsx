@@ -104,7 +104,7 @@ export function HoldingsTable() {
         </tbody>
       </table>
       <p className="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500">
-        Bấm giá thị trường để cập nhật thủ công (chưa có API giá realtime).
+        Giá từ Yahoo Finance. Bấm giá để sửa thủ công nếu cần.
       </p>
     </div>
   );

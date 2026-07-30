@@ -24,10 +24,13 @@ interface AppContextValue {
   activePortfolioId: string;
   setActivePortfolioId: (id: string) => void;
   stats: PortfolioStats;
+  priceLoading: boolean;
   addPortfolio: (name: string, currency: string) => void;
   addTransaction: (tx: Omit<Transaction, "id">) => void;
+  importTransactions: (txs: Omit<Transaction, "id">[]) => void;
   deleteTransaction: (id: string) => void;
   setMarketPrice: (symbol: string, price: number) => void;
+  refreshPrices: (symbols?: string[]) => Promise<void>;
   exportData: () => string;
   importData: (json: string) => boolean;
 }
@@ -38,6 +41,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
   const [activePortfolioId, setActivePortfolioId] = useState("default");
   const [hydrated, setHydrated] = useState(false);
+  const [priceLoading, setPriceLoading] = useState(false);
 
   useEffect(() => {
     const loaded = loadState();
@@ -51,9 +55,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [state, hydrated]);
 
   const stats = useMemo(
-    () => computePortfolioStats(state.transactions, activePortfolioId, state.marketPrices),
+    () =>
+      computePortfolioStats(
+        state.transactions,
+        activePortfolioId,
+        state.marketPrices
+      ),
     [state.transactions, state.marketPrices, activePortfolioId]
   );
+
+  const holdingSymbols = useMemo(
+    () => stats.holdings.map((h) => h.symbol),
+    [stats.holdings]
+  );
+
+  const refreshPrices = useCallback(async (symbols?: string[]) => {
+    const list = symbols ?? holdingSymbols;
+    if (list.length === 0) return;
+
+    setPriceLoading(true);
+    try {
+      const res = await fetch(`/api/quotes?symbols=${list.join(",")}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setState((s) => ({
+        ...s,
+        marketPrices: { ...s.marketPrices, ...data.prices },
+        pricesUpdatedAt: data.updatedAt ?? new Date().toISOString(),
+      }));
+    } finally {
+      setPriceLoading(false);
+    }
+  }, [holdingSymbols]);
+
+  useEffect(() => {
+    if (!hydrated || holdingSymbols.length === 0) return;
+    const stale =
+      !state.pricesUpdatedAt ||
+      Date.now() - new Date(state.pricesUpdatedAt).getTime() > 5 * 60 * 1000;
+    if (stale) refreshPrices(holdingSymbols);
+  }, [hydrated, holdingSymbols.join(","), refreshPrices, state.pricesUpdatedAt]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
@@ -70,6 +111,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((s) => ({
       ...s,
       transactions: [...s.transactions, { ...tx, id: uuid() }],
+    }));
+  }, []);
+
+  const importTransactions = useCallback((txs: Omit<Transaction, "id">[]) => {
+    setState((s) => ({
+      ...s,
+      transactions: [
+        ...s.transactions,
+        ...txs.map((tx) => ({ ...tx, id: uuid() })),
+      ],
     }));
   }, []);
 
@@ -116,10 +167,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         activePortfolioId,
         setActivePortfolioId,
         stats,
+        priceLoading,
         addPortfolio,
         addTransaction,
+        importTransactions,
         deleteTransaction,
         setMarketPrice,
+        refreshPrices,
         exportData,
         importData,
       }}

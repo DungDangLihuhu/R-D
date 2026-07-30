@@ -1,6 +1,7 @@
 "use client";
 
 import { HoldingsTable } from "@/components/HoldingsTable";
+import { PriceRefresh } from "@/components/PriceRefresh";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
 
@@ -9,11 +10,14 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Danh mục</h1>
-        <p className="text-sm text-zinc-500">
-          Vị thế đang giữ · cập nhật giá thị trường thủ công
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Danh mục</h1>
+          <p className="text-sm text-zinc-500">
+            Giá realtime từ Yahoo Finance · tự refresh mỗi 5 phút
+          </p>
+        </div>
+        <PriceRefresh />
       </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <Mini label="Giá trị CP" value={formatMoney(
