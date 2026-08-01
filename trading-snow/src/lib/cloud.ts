@@ -3,15 +3,51 @@ import type { AppState } from "./types";
 
 const KEY_PREFIX = "trading-snow";
 
-export function isCloudConfigured(): boolean {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+function trimEnv(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
+
+/** Resolve Redis REST credentials from Upstash or Vercel KV env names */
+export function getRedisCredentials(): { url: string; token: string } | null {
+  const url = trimEnv(
+    process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
   );
+  const token = trimEnv(
+    process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
+  );
+  if (!url || !token) return null;
+  return { url, token };
+}
+
+export function isCloudConfigured(): boolean {
+  return getRedisCredentials() !== null;
+}
+
+export function getCloudConfigStatus() {
+  const hasUpstashUrl = Boolean(trimEnv(process.env.UPSTASH_REDIS_REST_URL));
+  const hasUpstashToken = Boolean(trimEnv(process.env.UPSTASH_REDIS_REST_TOKEN));
+  const hasKvUrl = Boolean(trimEnv(process.env.KV_REST_API_URL));
+  const hasKvToken = Boolean(trimEnv(process.env.KV_REST_API_TOKEN));
+  const creds = getRedisCredentials();
+
+  return {
+    configured: creds !== null,
+    hasUpstashUrl,
+    hasUpstashToken,
+    hasKvUrl,
+    hasKvToken,
+    using: creds
+      ? hasUpstashUrl
+        ? "upstash"
+        : "kv"
+      : null,
+  };
 }
 
 export function getRedis(): Redis | null {
-  if (!isCloudConfigured()) return null;
-  return Redis.fromEnv();
+  const creds = getRedisCredentials();
+  if (!creds) return null;
+  return new Redis({ url: creds.url, token: creds.token });
 }
 
 export function normalizeRoomId(room: string): string | null {

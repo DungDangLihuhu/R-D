@@ -80,10 +80,21 @@ export function SyncPanel() {
           {msg && <p className="text-xs text-sky-600">{msg}</p>}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-gray-500">
-          Cloud chưa bật trên server. Cần thêm Upstash Redis trên Vercel (xem README). Hiện chỉ lưu
-          trên trình duyệt này.
-        </p>
+        <div className="mt-2 space-y-1 text-xs text-gray-500">
+          <p>
+            Cloud chưa bật trên server. Kiểm tra Vercel env{" "}
+            <code className="text-rose-600">UPSTASH_REDIS_REST_URL</code> +{" "}
+            <code className="text-rose-600">UPSTASH_REDIS_REST_TOKEN</code> →{" "}
+            <strong>Redeploy</strong>.
+          </p>
+          <p>
+            Test:{" "}
+            <a href="/api/data?check=1" className="text-sky-600 underline" target="_blank">
+              /api/data?check=1
+            </a>{" "}
+            — cần <code>configured: true</code>
+          </p>
+        </div>
       )}
     </div>
   );
