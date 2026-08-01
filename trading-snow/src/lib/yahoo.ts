@@ -19,6 +19,42 @@ export interface DividendEvent {
   amount: number;
 }
 
+export interface HistoryPoint {
+  date: string;
+  close: number;
+}
+
+export async function fetchPriceHistory(
+  symbol: string,
+  from: Date,
+  to: Date
+): Promise<HistoryPoint[]> {
+  const period1 = Math.floor(from.getTime() / 1000);
+  const period2 = Math.floor(to.getTime() / 1000);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(symbol)}?interval=1d&period1=${period1}&period2=${period2}`;
+  const res = await fetch(url, {
+    headers: YAHOO_HEADERS,
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  const timestamps: number[] = result?.timestamp ?? [];
+  const closes: number[] = result?.indicators?.quote?.[0]?.close ?? [];
+
+  const points: HistoryPoint[] = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const close = closes[i];
+    if (close == null || close <= 0) continue;
+    points.push({
+      date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
+      close,
+    });
+  }
+  return points;
+}
+
 async function fetchQuoteOne(
   yahooSymbol: string,
   requestedSymbol: string
