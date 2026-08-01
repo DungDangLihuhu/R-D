@@ -587,24 +587,6 @@ function AssessmentPanel({
           </dd>
         </div>
       </dl>
-      <ul className="mt-3 space-y-1 border-t border-black/5 pt-3 text-[11px] text-gray-600">
-        {assessment.signals.map((s) => (
-          <li key={s.label} className="flex justify-between gap-2">
-            <span className="truncate">{s.label}</span>
-            <span
-              className={`shrink-0 tabular-nums ${
-                s.score > 0.15
-                  ? "text-emerald-600"
-                  : s.score < -0.15
-                    ? "text-rose-600"
-                    : "text-gray-400"
-              }`}
-            >
-              {s.score > 0.15 ? "+" : s.score < -0.15 ? "−" : "○"}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
