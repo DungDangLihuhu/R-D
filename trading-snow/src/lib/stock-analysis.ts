@@ -44,6 +44,24 @@ export interface RecommendationRow {
   strongSell: number;
 }
 
+export interface PriceLevelLine {
+  price: number;
+  label: string;
+}
+
+export interface PriceTarget {
+  price: number;
+  upsidePercent: number;
+  method: string;
+}
+
+export interface PriceLevels {
+  targetAnalyst?: PriceTarget;
+  targetFundamental?: PriceTarget;
+  support: PriceLevelLine[];
+  resistance: PriceLevelLine[];
+}
+
 export interface StockAnalysis {
   symbol: string;
   name: string;
@@ -72,6 +90,7 @@ export interface StockAnalysis {
   insiderTransactions: InsiderRow[];
   news: NewsRow[];
   priceHistory: { date: string; close: number }[];
+  priceLevels: PriceLevels;
   sources: string[];
   note?: string;
 }
@@ -115,6 +134,157 @@ function capMillions(m: number | null | undefined): string {
   if (usd >= 1e9) return `${(usd / 1e9).toFixed(2)}B`;
   if (usd >= 1e6) return `${(usd / 1e6).toFixed(2)}M`;
   return usd.toFixed(0);
+}
+
+function clusterLevels(
+  prices: number[],
+  tolerancePct = 0.02
+): { price: number; touches: number }[] {
+  if (!prices.length) return [];
+  const sorted = [...prices].sort((a, b) => a - b);
+  const clusters: { sum: number; count: number }[] = [];
+
+  for (const p of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && Math.abs(p - last.sum / last.count) / (last.sum / last.count) <= tolerancePct) {
+      last.sum += p;
+      last.count += 1;
+    } else {
+      clusters.push({ sum: p, count: 1 });
+    }
+  }
+
+  return clusters
+    .map((c) => ({ price: c.sum / c.count, touches: c.count }))
+    .sort((a, b) => b.touches - a.touches || a.price - b.price);
+}
+
+function findSwingLevels(
+  history: { date: string; close: number }[],
+  window = 5
+): { lows: number[]; highs: number[] } {
+  const lows: number[] = [];
+  const highs: number[] = [];
+  if (history.length < window * 2 + 1) return { lows, highs };
+
+  for (let i = window; i < history.length - window; i++) {
+    const slice = history.slice(i - window, i + window + 1).map((h) => h.close);
+    const c = history[i].close;
+    if (c === Math.min(...slice)) lows.push(c);
+    if (c === Math.max(...slice)) highs.push(c);
+  }
+
+  return { lows, highs };
+}
+
+function computePriceLevels(
+  price: number,
+  metrics: Record<string, number>,
+  priceHistory: { date: string; close: number }[],
+  recommendations: RecommendationRow[],
+  earningsUpcoming: StockAnalysis["earningsUpcoming"]
+): PriceLevels {
+  const levels: PriceLevels = { support: [], resistance: [] };
+  if (!Number.isFinite(price) || price <= 0) return levels;
+
+  const epsTtm = metrics.epsTTM;
+  const forwardPe = metrics.forwardPE;
+  const peTtm = metrics.peTTM;
+
+  if (epsTtm && forwardPe && epsTtm > 0 && forwardPe > 0) {
+    const target = epsTtm * forwardPe;
+    levels.targetFundamental = {
+      price: target,
+      upsidePercent: ((target - price) / price) * 100,
+      method: "EPS TTM × P/E Forward",
+    };
+  } else if (epsTtm && peTtm && epsTtm > 0 && peTtm > 0) {
+    const target = epsTtm * peTtm;
+    levels.targetFundamental = {
+      price: target,
+      upsidePercent: ((target - price) / price) * 100,
+      method: "EPS TTM × P/E TTM",
+    };
+  }
+
+  const latestRec = recommendations[0];
+  if (latestRec) {
+    const total =
+      latestRec.strongBuy +
+      latestRec.buy +
+      latestRec.hold +
+      latestRec.sell +
+      latestRec.strongSell;
+    if (total > 0) {
+      const score =
+        (latestRec.strongBuy * 2 +
+          latestRec.buy -
+          latestRec.sell -
+          latestRec.strongSell * 2) /
+        (total * 2);
+      const consensusTarget = price * (1 + score * 0.25);
+      levels.targetAnalyst = {
+        price: consensusTarget,
+        upsidePercent: ((consensusTarget - price) / price) * 100,
+        method: `Khuyến nghị ${latestRec.period}`,
+      };
+    }
+  }
+
+  const nextEps = earningsUpcoming[0]?.epsEstimate;
+  if (nextEps && forwardPe && nextEps > 0 && forwardPe > 0) {
+    const implied = nextEps * 4 * forwardPe;
+    if (levels.targetAnalyst) {
+      const blended = (levels.targetAnalyst.price + implied) / 2;
+      levels.targetAnalyst = {
+        price: blended,
+        upsidePercent: ((blended - price) / price) * 100,
+        method: "Khuyến nghị + EPS dự báo × P/E Forward",
+      };
+    } else {
+      levels.targetAnalyst = {
+        price: implied,
+        upsidePercent: ((implied - price) / price) * 100,
+        method: "EPS dự báo (annualized) × P/E Forward",
+      };
+    }
+  }
+
+  const high52 = metrics["52WeekHigh"];
+  const low52 = metrics["52WeekLow"];
+  const { lows, highs } = findSwingLevels(priceHistory);
+
+  const supportCandidates = clusterLevels(lows)
+    .filter((c) => c.price < price * 0.995)
+    .slice(0, 3);
+  const resistanceCandidates = clusterLevels(highs)
+    .filter((c) => c.price > price * 1.005)
+    .slice(0, 3);
+
+  levels.support = supportCandidates.map((c, i) => ({
+    price: c.price,
+    label: `Hỗ trợ ${i + 1}`,
+  }));
+
+  levels.resistance = resistanceCandidates.map((c, i) => ({
+    price: c.price,
+    label: `Kháng cự ${i + 1}`,
+  }));
+
+  if (low52 && low52 < price && !levels.support.some((s) => Math.abs(s.price - low52) / low52 < 0.02)) {
+    levels.support.push({ price: low52, label: "Thấp 52 tuần" });
+    levels.support.sort((a, b) => b.price - a.price);
+  }
+
+  if (high52 && high52 > price && !levels.resistance.some((r) => Math.abs(r.price - high52) / high52 < 0.02)) {
+    levels.resistance.push({ price: high52, label: "Cao 52 tuần" });
+    levels.resistance.sort((a, b) => a.price - b.price);
+  }
+
+  levels.support = levels.support.slice(0, 4);
+  levels.resistance = levels.resistance.slice(0, 4);
+
+  return levels;
 }
 
 function buildSections(
@@ -355,6 +525,13 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     })),
     news,
     priceHistory,
+    priceLevels: computePriceLevels(
+      quote.price,
+      m,
+      priceHistory,
+      recommendations,
+      earningsUpcoming
+    ),
     sources,
     note,
   };
