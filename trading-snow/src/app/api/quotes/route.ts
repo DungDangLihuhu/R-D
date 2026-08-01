@@ -6,7 +6,11 @@ import {
   inspectTwelveDataKey,
   testFinnhubKey,
 } from "@/lib/quote-config";
-import { fillMissingQuotes } from "@/lib/quote-providers";
+import {
+  fetchQuotesForSymbols,
+  QUOTE_BATCH_SIZE,
+  QUOTE_MAX_SYMBOLS,
+} from "@/lib/quote-providers";
 import { fetchQuoteFinnhubOne, fetchQuotes } from "@/lib/yahoo";
 
 async function runQuoteCheck() {
@@ -43,6 +47,11 @@ async function runQuoteCheck() {
     finnhubTest,
     finnhubPaTest,
     twelveData,
+    limits: {
+      batchSize: QUOTE_BATCH_SIZE,
+      maxSymbols: QUOTE_MAX_SYMBOLS,
+      note: "App tự chia batch — không phải giới hạn Yahoo 50 mã",
+    },
     steps: [
       "1. Key Finnhub lấy tại https://finnhub.io/dashboard (copy nguyên chuỗi từ dashboard)",
       "2. Vercel env: FINNHUB_API_KEY = key Finnhub (Production + Preview)",
@@ -66,26 +75,19 @@ export async function GET(req: NextRequest) {
   const list = symbols
     .split(",")
     .map((s) => s.trim().toUpperCase())
-    .filter(Boolean)
-    .slice(0, 50);
+    .filter(Boolean);
 
   try {
-    const quotes = await fetchQuotes(list);
-    const prices: Record<string, number> = {};
-    for (const q of quotes) {
-      if (q.price > 0) prices[q.symbol] = q.price;
-    }
-
-    const missing = list.filter((s) => !prices[s]);
-    const unresolved = await fillMissingQuotes(missing, prices, quotes);
-
+    const result = await fetchQuotesForSymbols(list);
     const finnhub = inspectFinnhubKey();
 
     return NextResponse.json({
-      quotes,
-      prices,
+      quotes: result.quotes,
+      prices: result.prices,
       updatedAt: new Date().toISOString(),
-      unresolved,
+      unresolved: result.unresolved,
+      requested: result.requested,
+      truncated: result.truncated,
       providers: {
         yahoo: true,
         finnhub: finnhub.configured && finnhub.valid,
