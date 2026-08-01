@@ -1,8 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
+import { inspectFinnhubKey, inspectTwelveDataKey } from "@/lib/quote-config";
 import { fillMissingQuotes } from "@/lib/quote-providers";
-import { fetchQuotes } from "@/lib/yahoo";
+import { fetchQuoteFinnhubOne, fetchQuotes } from "@/lib/yahoo";
+
+async function runQuoteCheck() {
+  const finnhub = inspectFinnhubKey(process.env.FINNHUB_API_KEY);
+  const twelveData = inspectTwelveDataKey(process.env.TWELVE_DATA_API_KEY);
+
+  const yahooTest = await fetchQuotes(["AAPL", "BNP.PA"]);
+  const yahooOk = yahooTest.length > 0;
+
+  let finnhubTest: { ok: boolean; price?: number; error?: string } | null = null;
+  if (finnhub.configured && finnhub.valid) {
+    const q = await fetchQuoteFinnhubOne("AAPL", process.env.FINNHUB_API_KEY!);
+    finnhubTest = q
+      ? { ok: true, price: q.price }
+      : { ok: false, error: "Finnhub không trả giá AAPL — kiểm tra key hoặc quota" };
+  } else if (finnhub.configured) {
+    finnhubTest = { ok: false, error: finnhub.hint };
+  }
+
+  return {
+    yahoo: { ok: yahooOk, samples: yahooTest.map((q) => q.symbol) },
+    finnhub,
+    finnhubTest,
+    twelveData,
+    steps: [
+      "1. Key Finnhub lấy tại https://finnhub.io/dashboard (KHÔNG dùng Stripe sk_live_…)",
+      "2. Vercel env: FINNHUB_API_KEY = key Finnhub (Production + Preview)",
+      "3. Redeploy sau khi đổi env",
+      "4. Bấm Refresh giá trên Danh mục",
+      "5. Yahoo lấy được US + .PA; Finnhub free chủ yếu US realtime",
+    ],
+  };
+}
 
 export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get("check") === "1") {
+    return NextResponse.json(await runQuoteCheck());
+  }
+
   const symbols = req.nextUrl.searchParams.get("symbols");
   if (!symbols) {
     return NextResponse.json({ error: "symbols required" }, { status: 400 });
@@ -24,6 +61,8 @@ export async function GET(req: NextRequest) {
     const missing = list.filter((s) => !prices[s]);
     const unresolved = await fillMissingQuotes(missing, prices, quotes);
 
+    const finnhub = inspectFinnhubKey(process.env.FINNHUB_API_KEY);
+
     return NextResponse.json({
       quotes,
       prices,
@@ -31,7 +70,8 @@ export async function GET(req: NextRequest) {
       unresolved,
       providers: {
         yahoo: true,
-        finnhub: Boolean(process.env.FINNHUB_API_KEY),
+        finnhub: finnhub.configured && finnhub.valid,
+        finnhubHint: finnhub.hint,
         twelveData: Boolean(process.env.TWELVE_DATA_API_KEY),
       },
     });

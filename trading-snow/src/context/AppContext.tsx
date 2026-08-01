@@ -170,8 +170,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setQuoteUnresolved([]);
     try {
       const res = await fetch(`/api/quotes?symbols=${list.join(",")}`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error ?? `Không lấy được giá (HTTP ${res.status})`);
+        return;
+      }
       const quotes: {
         symbol: string;
         price: number;
@@ -202,6 +205,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
       });
       setQuoteUnresolved(data.unresolved ?? []);
+      if (data.providers?.finnhubHint && !data.providers?.finnhub) {
+        console.warn(data.providers.finnhubHint);
+      }
     } finally {
       setPriceLoading(false);
     }

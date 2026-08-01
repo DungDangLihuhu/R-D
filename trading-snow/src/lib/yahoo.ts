@@ -5,7 +5,9 @@ import {
 } from "./symbol";
 
 const YAHOO_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (compatible; TradingSnow/1.0)",
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "application/json,text/plain,*/*",
 };
 
 export interface QuoteResult {
@@ -68,29 +70,36 @@ async function fetchQuoteOne(
   requestedSymbol: string,
   source: QuoteResult["source"] = "yahoo"
 ): Promise<QuoteResult | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=1d&range=1d`;
-  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 60 } });
-  if (!res.ok) return null;
+  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
 
-  const json = await res.json();
-  const meta = json?.chart?.result?.[0]?.meta;
-  if (!meta?.regularMarketPrice) return null;
+  for (const host of hosts) {
+    const url = `https://${host}/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=1d&range=1d`;
+    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 60 } });
+    if (!res.ok) continue;
 
-  const prev = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
-  const change = meta.regularMarketPrice - prev;
-  const changePercent = prev > 0 ? (change / prev) * 100 : 0;
+    const json = await res.json();
+    const meta = json?.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) continue;
 
-  return {
-    symbol: requestedSymbol,
-    yahooSymbol: meta.symbol ?? yahooSymbol,
-    exchangeName: meta.fullExchangeName ?? meta.exchangeName,
-    shortName: meta.shortName ?? meta.longName,
-    price: meta.regularMarketPrice,
-    change,
-    changePercent,
-    currency: meta.currency ?? "USD",
-    source,
-  };
+    const prev =
+      meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
+    const change = meta.regularMarketPrice - prev;
+    const changePercent = prev > 0 ? (change / prev) * 100 : 0;
+
+    return {
+      symbol: requestedSymbol,
+      yahooSymbol: meta.symbol ?? yahooSymbol,
+      exchangeName: meta.fullExchangeName ?? meta.exchangeName,
+      shortName: meta.shortName ?? meta.longName,
+      price: meta.regularMarketPrice,
+      change,
+      changePercent,
+      currency: meta.currency ?? "USD",
+      source,
+    };
+  }
+
+  return null;
 }
 
 async function searchYahooSymbol(query: string): Promise<string | null> {
