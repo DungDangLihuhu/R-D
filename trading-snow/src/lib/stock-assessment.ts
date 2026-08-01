@@ -229,14 +229,15 @@ function computeBuySellPrices(price: number, levels: PriceLevels): {
   const fair = levels.targetFundamental?.price;
   const analyst = levels.targetAnalyst?.price;
 
-  let buyPrice =
-    supports.length > 0
-      ? supports.reduce((a, b) => a + b, 0) / supports.length
-      : price * 0.97;
+  const nearestSupport = supports.length > 0 ? Math.max(...supports) : undefined;
+  const buyCandidates: number[] = [];
+  if (fair && fair > 0) buyCandidates.push(fair);
+  if (nearestSupport) buyCandidates.push(nearestSupport);
 
-  if (fair && fair < price * 0.98) {
-    buyPrice = Math.min(buyPrice, fair);
-  }
+  let buyPrice =
+    buyCandidates.length > 0
+      ? buyCandidates.reduce((a, b) => a + b, 0) / buyCandidates.length
+      : price * 0.97;
   buyPrice = Math.min(buyPrice, price * 0.995);
 
   let sellPrice =
