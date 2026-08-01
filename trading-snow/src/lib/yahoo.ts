@@ -182,18 +182,22 @@ export async function fetchQuoteFinnhubOne(
     const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
     const res = await fetch(url, { next: { revalidate: 60 } });
     if (!res.ok) continue;
-    const q = await res.json();
-    if (q.c > 0) {
-      return {
-        symbol: requestedSymbol.toUpperCase(),
-        yahooSymbol: sym,
-        price: q.c,
-        change: q.d ?? 0,
-        changePercent: q.dp ?? 0,
-        currency: "USD",
-        source: "finnhub",
-      };
-    }
+    const q = (await res.json()) as {
+      c?: number;
+      d?: number;
+      dp?: number;
+      error?: string;
+    };
+    if (q.error || !q.c || q.c <= 0) continue;
+    return {
+      symbol: requestedSymbol.toUpperCase(),
+      yahooSymbol: sym,
+      price: q.c,
+      change: q.d ?? 0,
+      changePercent: q.dp ?? 0,
+      currency: "USD",
+      source: "finnhub",
+    };
   }
   return null;
 }

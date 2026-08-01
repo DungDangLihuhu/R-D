@@ -1,3 +1,4 @@
+import { getFinnhubApiKey, getTwelveDataApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
 import type { QuoteResult } from "./yahoo";
 
@@ -87,7 +88,7 @@ export async function fillMissingQuotes(
 ): Promise<string[]> {
   let unresolved = [...missing];
 
-  const finnhubKey = process.env.FINNHUB_API_KEY;
+  const finnhubKey = getFinnhubApiKey();
   if (finnhubKey && unresolved.length > 0) {
     const { fetchQuoteFinnhubOne } = await import("./yahoo");
     const results = await Promise.all(
@@ -101,7 +102,7 @@ export async function fillMissingQuotes(
     unresolved = unresolved.filter((s) => !prices[s]);
   }
 
-  const twelveKey = process.env.TWELVE_DATA_API_KEY;
+  const twelveKey = getTwelveDataApiKey();
   if (twelveKey && unresolved.length > 0) {
     const results = await Promise.all(
       unresolved.map((sym) => fetchQuoteTwelveDataOne(sym, twelveKey))
