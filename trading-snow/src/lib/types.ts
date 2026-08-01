@@ -31,6 +31,13 @@ export interface Holding {
   marketPrice?: number;
 }
 
+export interface MarketQuote {
+  price: number;
+  change: number;
+  changePercent: number;
+  name?: string;
+}
+
 export interface ClosedTrade {
   symbol: string;
   quantity: number;
@@ -67,6 +74,7 @@ export interface AppState {
   portfolios: Portfolio[];
   transactions: Transaction[];
   marketPrices: Record<string, number>;
+  marketQuotes?: Record<string, MarketQuote>;
   pricesUpdatedAt?: string | null;
 }
 

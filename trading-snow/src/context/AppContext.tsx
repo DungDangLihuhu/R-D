@@ -168,11 +168,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/quotes?symbols=${list.join(",")}`);
       if (!res.ok) return;
       const data = await res.json();
-      setState((s) => ({
-        ...s,
-        marketPrices: { ...s.marketPrices, ...data.prices },
-        pricesUpdatedAt: data.updatedAt ?? new Date().toISOString(),
-      }));
+      const quotes: {
+        symbol: string;
+        price: number;
+        change?: number;
+        changePercent?: number;
+        shortName?: string;
+      }[] = data.quotes ?? [];
+
+      setState((s) => {
+        const marketPrices = { ...s.marketPrices, ...data.prices };
+        const marketQuotes = { ...(s.marketQuotes ?? {}) };
+        for (const q of quotes) {
+          if (q.price > 0) {
+            marketPrices[q.symbol] = q.price;
+            marketQuotes[q.symbol] = {
+              price: q.price,
+              change: q.change ?? 0,
+              changePercent: q.changePercent ?? 0,
+              name: q.shortName,
+            };
+          }
+        }
+        return {
+          ...s,
+          marketPrices,
+          marketQuotes,
+          pricesUpdatedAt: data.updatedAt ?? new Date().toISOString(),
+        };
+      });
     } finally {
       setPriceLoading(false);
     }
@@ -255,6 +279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...s,
       transactions: [],
       marketPrices: {},
+      marketQuotes: {},
       pricesUpdatedAt: null,
     }));
   }, []);
