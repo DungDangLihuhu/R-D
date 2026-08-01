@@ -7,7 +7,10 @@ import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
 
 export default function AnalyticsPage() {
-  const { stats } = useApp();
+  const { stats, state, activePortfolioId } = useApp();
+  const transactions = state.transactions.filter(
+    (t) => t.portfolioId === activePortfolioId
+  );
 
   return (
     <div className="space-y-6">
@@ -48,7 +51,10 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <BenchmarkComparison equityCurve={stats.equityCurve} />
+      <BenchmarkComparison
+        equityCurve={stats.equityCurve}
+        transactions={transactions}
+      />
     </div>
   );
 }
