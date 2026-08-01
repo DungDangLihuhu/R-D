@@ -58,6 +58,8 @@ export interface PortfolioStats {
   portfolioValue: number;
   /** Giá trị vị thế hiện tại + lãi/lỗ đã chốt */
   tradingValue: number;
+  /** Nạp ròng = tổng giá trị − P&L lệnh đã đóng */
+  netCapital: number;
   cashBalance: number;
   winCount: number;
   lossCount: number;

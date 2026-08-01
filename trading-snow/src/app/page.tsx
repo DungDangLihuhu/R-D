@@ -47,7 +47,7 @@ export default function DashboardPage() {
             }
           />
           <Row label="Cổ tức" value={formatMoney(stats.totalDividends)} />
-          <Row label="Nạp ròng" value={formatMoney(stats.totalDeposits - stats.totalWithdrawals)} />
+          <Row label="Nạp ròng" value={formatMoney(stats.netCapital)} />
           <Row
             label="Lãi chưa chốt"
             value={formatMoney(stats.unrealizedPnl)}
