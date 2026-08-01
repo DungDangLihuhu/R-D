@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   checkWriteKey,
+  getCloudConfigStatus,
   getRedis,
   isCloudConfigured,
   normalizeRoomId,
@@ -11,7 +12,7 @@ import {
 
 export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get("check") === "1") {
-    return NextResponse.json({ configured: isCloudConfigured() });
+    return NextResponse.json(getCloudConfigStatus());
   }
 
   const room = normalizeRoomId(req.nextUrl.searchParams.get("room") ?? "");
