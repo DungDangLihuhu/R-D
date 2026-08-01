@@ -274,7 +274,7 @@ export function EventsCalendar() {
 function CategoryBadge({ category }: { category: EventCategory }) {
   const style = CATEGORY_STYLE[category];
   return (
-    <span className={`rounded px-2 py-0.5 text-xs ${style.badge}`}>
+    <span className={`inline-block shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-xs ${style.badge}`}>
       {style.label}
     </span>
   );
