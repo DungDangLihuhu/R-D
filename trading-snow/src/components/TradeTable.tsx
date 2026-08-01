@@ -117,9 +117,6 @@ function TradeRow({
                 {typeLabels[tx.type]}
               </p>
               <p className="truncate text-sm font-medium">{displayName}</p>
-              {!cash && (
-                <p className="truncate text-xs text-gray-500">{tx.symbol}</p>
-              )}
             </div>
           </div>
           <div className="shrink-0 text-right">
@@ -193,9 +190,6 @@ function TradeRow({
           {!cash && <SymbolAvatar symbol={tx.symbol} size="sm" />}
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{displayName}</p>
-            {!cash && (
-              <p className="truncate text-xs text-gray-500">{tx.symbol}</p>
-            )}
           </div>
         </div>
 
