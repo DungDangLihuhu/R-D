@@ -63,6 +63,11 @@ export function SnowballStatCard({
                 : "bg-rose-500/15 text-rose-400"
             }`}
           >
+            {badge.positive ? (
+              <ArrowUp className="h-3 w-3" />
+            ) : (
+              <ArrowDown className="h-3 w-3" />
+            )}
             {badge.text}
           </span>
         )}
