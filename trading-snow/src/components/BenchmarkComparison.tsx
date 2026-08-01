@@ -19,8 +19,8 @@ import {
   type BenchmarkRange,
   type ComparisonResult,
 } from "@/lib/benchmark";
-import { formatDate, formatPercent } from "@/lib/format";
-import type { PortfolioStats } from "@/lib/types";
+import { formatDate, formatMoney, formatPercent } from "@/lib/format";
+import type { PortfolioStats, Transaction } from "@/lib/types";
 
 const GRID = "#e2e5ea";
 const TICK = "#6b7280";
@@ -33,8 +33,10 @@ const TOOLTIP = {
 
 export function BenchmarkComparison({
   equityCurve,
+  transactions,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
+  transactions: Transaction[];
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
@@ -55,10 +57,13 @@ export function BenchmarkComparison({
       return;
     }
 
+    const historyStart = sorted[0].date.slice(0, 10);
+    const fetchFrom = window.from < historyStart ? window.from : historyStart;
+
     setLoading(true);
     setError(null);
 
-    fetch(`/api/benchmark?from=${window.from}&to=${window.to}`)
+    fetch(`/api/benchmark?from=${fetchFrom}&to=${window.to}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
@@ -66,7 +71,12 @@ export function BenchmarkComparison({
           setComparison(null);
           return;
         }
-        const result = buildBenchmarkComparison(sorted, data.points ?? [], window);
+        const result = buildBenchmarkComparison(
+          sorted,
+          data.points ?? [],
+          transactions,
+          window,
+        );
         if (!result) {
           setError("Không đủ dữ liệu để so sánh");
           setComparison(null);
@@ -78,6 +88,7 @@ export function BenchmarkComparison({
       .finally(() => setLoading(false));
   }, [
     equityCurve,
+    transactions,
     range,
   ]);
 
@@ -98,11 +109,13 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Chuẩn hóa = 100 tại ngày đầu · nguồn Yahoo Finance (^GSPC / SPY)
+            Cùng dòng tiền: mỗi lần mua/nạp = bỏ vào S&P 500 · 100 = hoà vốn
             {comparison && (
               <>
                 {" "}
                 · {formatDate(comparison.from)} – {formatDate(comparison.to)}
+                {" "}
+                · Vốn bỏ ra: {formatMoney(comparison.investedCapital)}
               </>
             )}
           </p>
@@ -138,12 +151,12 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Lợi nhuận danh mục"
+              label="Lãi trên vốn (danh mục)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="S&P 500"
+              label="Lãi trên vốn (S&P 500)"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
@@ -181,7 +194,7 @@ export function BenchmarkComparison({
               <Tooltip
                 contentStyle={TOOLTIP}
                 formatter={(v, name) => [
-                  `${Number(v ?? 0).toFixed(2)}`,
+                  `${Number(v ?? 0).toFixed(1)} (${Number(v ?? 0) >= 100 ? "+" : ""}${(Number(v ?? 0) - 100).toFixed(1)}%)`,
                   name === "portfolio" ? "Danh mục" : "S&P 500",
                 ]}
                 labelFormatter={(l) => `Ngày: ${l}`}
