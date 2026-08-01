@@ -169,6 +169,7 @@ export function computePortfolioStats(
 
   const holdingsCost = holdings.reduce((s, h) => s + h.totalCost, 0);
   const portfolioValue = cashBalance + holdingsValue;
+  const tradingValue = holdingsValue + realizedPnl;
 
   const now = new Date().toISOString();
   const lastPoint = equityPoints[equityPoints.length - 1];
@@ -217,6 +218,7 @@ export function computePortfolioStats(
     unrealizedPnl,
     totalPnl: realizedPnl + unrealizedPnl,
     portfolioValue,
+    tradingValue,
     cashBalance,
     winCount,
     lossCount,
