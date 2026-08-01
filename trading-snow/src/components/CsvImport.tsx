@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import {
@@ -11,6 +11,7 @@ import {
   type CsvRow,
 } from "@/lib/csv-import";
 import { formatDate, formatMoney } from "@/lib/format";
+import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 
 const FORMATS: { value: CsvFormat; label: string }[] = [
   { value: "auto", label: "Tự nhận diện" },
@@ -22,7 +23,7 @@ const FORMATS: { value: CsvFormat; label: string }[] = [
 ];
 
 export function CsvImport() {
-  const { activePortfolioId, importTransactions, setMarketPrices } = useApp();
+  const { state, activePortfolioId, importTransactions, setMarketPrices } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   const [format, setFormat] = useState<CsvFormat>("auto");
   const [preview, setPreview] = useState<CsvRow[] | null>(null);
@@ -46,16 +47,22 @@ export function CsvImport() {
     e.target.value = "";
   };
 
-  const confirmImport = () => {
-    if (!preview || preview.length === 0) return;
+  const importPreview = useMemo(() => {
+    if (!preview || preview.length === 0) return null;
     const txs = csvRowsToTransactions(preview, activePortfolioId);
-    importTransactions(txs);
+    return filterDuplicateTransactions(state.transactions, txs);
+  }, [preview, activePortfolioId, state.transactions]);
+
+  const confirmImport = () => {
+    if (!preview || preview.length === 0 || !importPreview) return;
+    const { added, skipped } = importTransactions(importPreview.transactions);
 
     if (parseResult?.marketPrices && Object.keys(parseResult.marketPrices).length > 0) {
       setMarketPrices(parseResult.marketPrices);
     }
 
-    const parts = [`Đã import ${txs.length} giao dịch`];
+    const parts = [`Đã import ${added} giao dịch`];
+    if (skipped > 0) parts.push(`bỏ qua ${skipped} trùng`);
     if (parseResult?.marketPrices) {
       const n = Object.keys(parseResult.marketPrices).length;
       if (n > 0) parts.push(`cập nhật giá ${n} mã`);
@@ -135,10 +142,14 @@ export function CsvImport() {
         </p>
       )}
 
-      {preview && (
+      {preview && importPreview && (
         <p className="text-sm text-sky-600">
           Nhận diện format: <strong>{detectedFormat}</strong> · {preview.length}{" "}
           dòng hợp lệ
+          {importPreview.skipped > 0 &&
+            ` · ${importPreview.skipped} trùng (sẽ bỏ qua)`}
+          {importPreview.transactions.length > 0 &&
+            ` · ${importPreview.transactions.length} mới`}
           {parseResult?.marketPrices &&
             Object.keys(parseResult.marketPrices).length > 0 &&
             ` · ${Object.keys(parseResult.marketPrices).length} giá thị trường`}
@@ -156,7 +167,7 @@ export function CsvImport() {
         </div>
       )}
 
-      {preview && preview.length > 0 && (
+      {preview && importPreview && importPreview.transactions.length > 0 && (
         <>
           <div className="max-h-48 overflow-auto rounded-lg border border-gray-200">
             <table className="w-full text-xs">
@@ -188,9 +199,15 @@ export function CsvImport() {
             onClick={confirmImport}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
           >
-            Xác nhận import {preview.length} giao dịch
+            Xác nhận import {importPreview.transactions.length} giao dịch
           </button>
         </>
+      )}
+
+      {preview && importPreview && importPreview.transactions.length === 0 && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Tất cả {preview.length} dòng đã tồn tại — không có gì để import.
+        </p>
       )}
     </div>
   );

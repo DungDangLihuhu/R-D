@@ -20,6 +20,7 @@ import {
 } from "@/lib/remote-storage";
 import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
 import { defaultState, loadState, saveState } from "@/lib/storage";
+import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import type {
   AppState,
   Portfolio,
@@ -38,7 +39,10 @@ interface AppContextValue {
   syncRoom: string;
   addPortfolio: (name: string, currency: string) => void;
   addTransaction: (tx: Omit<Transaction, "id">) => void;
-  importTransactions: (txs: Omit<Transaction, "id">[]) => void;
+  importTransactions: (txs: Omit<Transaction, "id">[]) => {
+    added: number;
+    skipped: number;
+  };
   deleteTransaction: (id: string) => void;
   setMarketPrice: (symbol: string, price: number) => void;
   setMarketPrices: (prices: Record<string, number>) => void;
@@ -269,13 +273,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const importTransactions = useCallback((txs: Omit<Transaction, "id">[]) => {
-    setState((s) => ({
-      ...s,
-      transactions: [
-        ...s.transactions,
-        ...txs.map((tx) => ({ ...tx, id: uuid() })),
-      ],
-    }));
+    let added = 0;
+    let skipped = 0;
+
+    setState((s) => {
+      const { transactions: newTxs, skipped: dupCount } = filterDuplicateTransactions(
+        s.transactions,
+        txs
+      );
+      added = newTxs.length;
+      skipped = dupCount;
+      if (newTxs.length === 0) return s;
+      return {
+        ...s,
+        transactions: [
+          ...s.transactions,
+          ...newTxs.map((tx) => ({ ...tx, id: uuid() })),
+        ],
+      };
+    });
+
+    return { added, skipped };
   }, []);
 
   const deleteTransaction = useCallback((id: string) => {
