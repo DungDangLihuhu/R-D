@@ -17,6 +17,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "invalid date" }, { status: 400 });
   }
 
+  if (fromDate.getTime() >= toDate.getTime()) {
+    fromDate.setDate(fromDate.getDate() - 30);
+  }
+
   toDate.setHours(23, 59, 59, 999);
 
   try {

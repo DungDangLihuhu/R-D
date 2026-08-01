@@ -70,6 +70,8 @@ export interface PortfolioStats {
   closedTrades: ClosedTrade[];
   monthlyPnl: { month: string; pnl: number }[];
   equityCurve: { date: string; equity: number }[];
+  /** Vị thế + lãi/lỗ đã chốt theo thời gian (dùng cho benchmark) */
+  tradingEquityCurve: { date: string; equity: number }[];
   holdingsValue: number;
   holdingsCost: number;
   totalFees: number;
