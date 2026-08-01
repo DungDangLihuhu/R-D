@@ -58,12 +58,11 @@ export function BenchmarkComparison({
     }
 
     const historyStart = sorted[0].date.slice(0, 10);
-    const fetchFrom = window.from < historyStart ? window.from : historyStart;
 
     setLoading(true);
     setError(null);
 
-    fetch(`/api/benchmark?from=${fetchFrom}&to=${window.to}`)
+    fetch(`/api/benchmark?from=${historyStart}&to=${window.to}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
