@@ -27,7 +27,7 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
   if (data.length < 2) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-gray-500">
-        Cần thêm giao dịch để vẽ đường vốn
+        Cần thêm giao dịch để vẽ lợi nhuận ròng
       </div>
     );
   }

@@ -46,7 +46,7 @@ export default function AnalyticsPage() {
           <MonthlyPnlChart data={stats.monthlyPnl} />
         </div>
         <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-4 font-semibold">Equity curve</h2>
+          <h2 className="mb-4 font-semibold">Lợi nhuận ròng</h2>
           <EquityChart data={stats.equityCurve} />
         </div>
       </div>
