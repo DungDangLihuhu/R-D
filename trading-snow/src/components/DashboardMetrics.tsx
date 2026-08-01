@@ -90,7 +90,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         value={formatMoney(stats.portfolioValue)}
         sub={`${formatMoney(stats.holdingsCost)} đã đầu tư`}
         icon={Wallet}
-        iconClassName="bg-sky-500/20 text-sky-400"
+        iconClassName="bg-sky-100 text-sky-600"
         tooltip={valueTooltip}
         hidden={hideValues}
         onToggleHidden={() => setHideValues((v) => !v)}
@@ -104,7 +104,10 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
             : `Đã chốt: ${formatMoney(stats.realizedPnl)}`
         }
         icon={TrendingUp}
-        iconClassName="bg-emerald-500/20 text-emerald-400"
+        iconClassName="bg-emerald-100 text-emerald-600"
+        valueClassName={
+          stats.totalProfit >= 0 ? "text-emerald-600" : "text-rose-600"
+        }
         badge={{
           text: formatSignedPercent(stats.totalProfitPercent),
           positive: stats.totalProfitPercent >= 0,
@@ -119,7 +122,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         }
         sub={`${formatSignedPercent(stats.profitExDivSalesPercent)} vị thế hiện tại`}
         icon={Calendar}
-        iconClassName="bg-violet-500/20 text-violet-400"
+        iconClassName="bg-violet-100 text-violet-600"
         tooltip={irrTooltip}
         hidden={hideValues}
       />
@@ -128,7 +131,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         value={`${passiveIncome.yieldPercent.toFixed(1)}%`}
         sub={`${formatMoney(passiveIncome.annualIncome)} / năm`}
         icon={PiggyBank}
-        iconClassName="bg-emerald-500/20 text-emerald-400"
+        iconClassName="bg-emerald-100 text-emerald-600"
         tooltip={passiveTooltip}
         hidden={hideValues}
       />
