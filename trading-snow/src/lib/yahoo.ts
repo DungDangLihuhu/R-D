@@ -28,6 +28,13 @@ export interface DividendEvent {
   amount: number;
 }
 
+export interface SymbolSearchResult {
+  symbol: string;
+  name: string;
+  exchange?: string;
+  quoteType?: string;
+}
+
 export interface HistoryPoint {
   date: string;
   close: number;
@@ -103,18 +110,50 @@ async function fetchQuoteOne(
 }
 
 async function searchYahooSymbol(query: string): Promise<string | null> {
-  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=8&newsCount=0`;
+  const results = await searchYahooSymbols(query, 8);
+  return results[0]?.symbol ?? null;
+}
+
+export async function searchYahooSymbols(
+  query: string,
+  limit = 8
+): Promise<SymbolSearchResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=${limit}&newsCount=0`;
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 3600 } });
-  if (!res.ok) return null;
+  if (!res.ok) return [];
 
   const json = await res.json();
-  const quotes: { symbol?: string; quoteType?: string }[] = json?.quotes ?? [];
-  const equity = quotes.find(
-    (q) =>
-      q.symbol &&
-      (q.quoteType === "EQUITY" || q.quoteType === "ETF" || !q.quoteType)
-  );
-  return equity?.symbol?.toUpperCase() ?? null;
+  const quotes: {
+    symbol?: string;
+    quoteType?: string;
+    shortname?: string;
+    longname?: string;
+    exchDisp?: string;
+    exchange?: string;
+  }[] = json?.quotes ?? [];
+
+  const allowed = new Set(["EQUITY", "ETF"]);
+  const seen = new Set<string>();
+
+  return quotes
+    .filter((item) => {
+      if (!item.symbol) return false;
+      if (item.quoteType && !allowed.has(item.quoteType)) return false;
+      const sym = item.symbol.toUpperCase();
+      if (seen.has(sym)) return false;
+      seen.add(sym);
+      return true;
+    })
+    .slice(0, limit)
+    .map((item) => ({
+      symbol: item.symbol!.toUpperCase(),
+      name: item.longname ?? item.shortname ?? item.symbol!,
+      exchange: item.exchDisp ?? item.exchange,
+      quoteType: item.quoteType,
+    }));
 }
 
 export async function fetchQuoteForSymbol(requested: string): Promise<QuoteResult | null> {
