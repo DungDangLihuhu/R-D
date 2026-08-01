@@ -270,7 +270,7 @@ export function HoldingsTable() {
       </div>
 
       <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
-        Giá từ Yahoo Finance (logo dùng mã CP). Bấm giá/cp để sửa thủ công.
+        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Bấm giá/cp sửa thủ công.
       </p>
 
       <Pagination

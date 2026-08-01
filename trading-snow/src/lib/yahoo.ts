@@ -17,7 +17,7 @@ export interface QuoteResult {
   yahooSymbol?: string;
   exchangeName?: string;
   shortName?: string;
-  source?: "yahoo" | "finnhub" | "yahoo-search";
+  source?: "yahoo" | "finnhub" | "yahoo-search" | "twelve-data";
 }
 
 export interface DividendEvent {

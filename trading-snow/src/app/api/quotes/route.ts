@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchQuoteFinnhubOne, fetchQuotes } from "@/lib/yahoo";
+import { fillMissingQuotes } from "@/lib/quote-providers";
+import { fetchQuotes } from "@/lib/yahoo";
 
 export async function GET(req: NextRequest) {
   const symbols = req.nextUrl.searchParams.get("symbols");
@@ -20,25 +21,19 @@ export async function GET(req: NextRequest) {
       if (q.price > 0) prices[q.symbol] = q.price;
     }
 
-    const finnhubKey = process.env.FINNHUB_API_KEY;
     const missing = list.filter((s) => !prices[s]);
-
-    if (finnhubKey && missing.length > 0) {
-      const fallback = await Promise.all(
-        missing.map((sym) => fetchQuoteFinnhubOne(sym, finnhubKey))
-      );
-      for (const q of fallback) {
-        if (!q || q.price <= 0) continue;
-        quotes.push(q);
-        prices[q.symbol] = q.price;
-      }
-    }
+    const unresolved = await fillMissingQuotes(missing, prices, quotes);
 
     return NextResponse.json({
       quotes,
       prices,
       updatedAt: new Date().toISOString(),
-      unresolved: list.filter((s) => !prices[s]),
+      unresolved,
+      providers: {
+        yahoo: true,
+        finnhub: Boolean(process.env.FINNHUB_API_KEY),
+        twelveData: Boolean(process.env.TWELVE_DATA_API_KEY),
+      },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
