@@ -97,7 +97,7 @@ export function DividendCalendar() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Lịch cổ tức</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-gray-500">
             Đã nhận từ giao dịch + dự kiến từ Yahoo Finance
           </p>
         </div>
@@ -116,7 +116,7 @@ export function DividendCalendar() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => setMonth(subMonths(month, 1))}
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-900"
+          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
         >
           ←
         </button>
@@ -125,20 +125,20 @@ export function DividendCalendar() {
         </span>
         <button
           onClick={() => setMonth(addMonths(month, 1))}
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-900"
+          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
         >
           →
         </button>
       </div>
 
       {inMonth.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-zinc-500">
+        <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
           Không có cổ tức trong tháng này
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-zinc-800">
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-900 text-left text-zinc-400">
+            <thead className="bg-gray-50 text-left text-gray-500">
               <tr>
                 <th className="px-4 py-3">Ngày</th>
                 <th className="px-4 py-3">Mã</th>
@@ -150,7 +150,7 @@ export function DividendCalendar() {
             </thead>
             <tbody>
               {inMonth.map((d, i) => (
-                <tr key={i} className="border-t border-zinc-800">
+                <tr key={i} className="border-t border-gray-200">
                   <td className="px-4 py-3">{formatDate(d.date)}</td>
                   <td className="px-4 py-3 font-medium">{d.symbol}</td>
                   <td className="px-4 py-3 text-right tabular-nums">
@@ -159,15 +159,15 @@ export function DividendCalendar() {
                   <td className="px-4 py-3 text-right tabular-nums">
                     {d.quantity?.toFixed(2) ?? "—"}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-emerald-400">
+                  <td className="px-4 py-3 text-right tabular-nums text-emerald-600">
                     {d.total ? formatMoney(d.total) : "—"}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded px-2 py-0.5 text-xs ${
                         d.source === "recorded"
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-sky-500/15 text-sky-400"
+                          ? "bg-emerald-500/15 text-emerald-600"
+                          : "bg-sky-500/15 text-sky-600"
                       }`}
                     >
                       {d.source === "recorded" ? "Đã nhận" : "Dự kiến"}
@@ -185,8 +185,8 @@ export function DividendCalendar() {
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs text-gray-500">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
     </div>
   );

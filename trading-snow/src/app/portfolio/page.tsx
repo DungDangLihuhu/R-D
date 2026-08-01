@@ -13,7 +13,7 @@ export default function PortfolioPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Danh mục</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-gray-500">
             Giá realtime từ Yahoo Finance · tự refresh mỗi 5 phút
           </p>
         </div>
@@ -36,8 +36,8 @@ export default function PortfolioPage() {
 
 function Mini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-      <p className="text-xs text-zinc-500">{label}</p>
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs text-gray-500">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
     </div>
   );

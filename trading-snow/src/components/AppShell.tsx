@@ -27,17 +27,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { state, activePortfolioId, setActivePortfolioId } = useApp();
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
+    <div className="min-h-screen bg-[#eef0f3] text-gray-900">
+      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Snowflake className="h-5 w-5 text-sky-400" />
+          <Link href="/" className="flex items-center gap-2 font-semibold text-gray-900">
+            <Snowflake className="h-5 w-5 text-sky-600" />
             <span>Trading Snow</span>
           </Link>
           <select
             value={activePortfolioId}
             onChange={(e) => setActivePortfolioId(e.target.value)}
-            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm shadow-sm"
           >
             {state.portfolios.map((p) => (
               <option key={p.id} value={p.id}>
@@ -55,8 +55,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={href}
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
                   active
-                    ? "bg-sky-500/15 text-sky-300"
-                    : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    ? "bg-sky-100 text-sky-700"
+                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                 }`}
               >
                 <Icon className="h-4 w-4" />
