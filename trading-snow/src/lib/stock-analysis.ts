@@ -187,24 +187,31 @@ function computePriceLevels(
   const levels: PriceLevels = { support: [], resistance: [] };
   if (!Number.isFinite(price) || price <= 0) return levels;
 
+  const saneTarget = (target: number) =>
+    Number.isFinite(target) && target > 0 && target >= price * 0.2 && target <= price * 5;
+
   const epsTtm = metrics.epsTTM;
   const forwardPe = metrics.forwardPE;
   const peTtm = metrics.peTTM;
 
   if (epsTtm && forwardPe && epsTtm > 0 && forwardPe > 0) {
     const target = epsTtm * forwardPe;
-    levels.targetFundamental = {
-      price: target,
-      upsidePercent: ((target - price) / price) * 100,
-      method: "EPS TTM × P/E Forward",
-    };
+    if (saneTarget(target)) {
+      levels.targetFundamental = {
+        price: target,
+        upsidePercent: ((target - price) / price) * 100,
+        method: "EPS TTM × P/E Forward",
+      };
+    }
   } else if (epsTtm && peTtm && epsTtm > 0 && peTtm > 0) {
     const target = epsTtm * peTtm;
-    levels.targetFundamental = {
-      price: target,
-      upsidePercent: ((target - price) / price) * 100,
-      method: "EPS TTM × P/E TTM",
-    };
+    if (saneTarget(target)) {
+      levels.targetFundamental = {
+        price: target,
+        upsidePercent: ((target - price) / price) * 100,
+        method: "EPS TTM × P/E TTM",
+      };
+    }
   }
 
   const latestRec = recommendations[0];
@@ -234,19 +241,23 @@ function computePriceLevels(
   const nextEps = earningsUpcoming[0]?.epsEstimate;
   if (nextEps && forwardPe && nextEps > 0 && forwardPe > 0) {
     const implied = nextEps * 4 * forwardPe;
-    if (levels.targetAnalyst) {
-      const blended = (levels.targetAnalyst.price + implied) / 2;
-      levels.targetAnalyst = {
-        price: blended,
-        upsidePercent: ((blended - price) / price) * 100,
-        method: "Khuyến nghị + EPS dự báo × P/E Forward",
-      };
-    } else {
-      levels.targetAnalyst = {
-        price: implied,
-        upsidePercent: ((implied - price) / price) * 100,
-        method: "EPS dự báo (annualized) × P/E Forward",
-      };
+    if (saneTarget(implied)) {
+      if (levels.targetAnalyst) {
+        const blended = (levels.targetAnalyst.price + implied) / 2;
+        if (saneTarget(blended)) {
+          levels.targetAnalyst = {
+            price: blended,
+            upsidePercent: ((blended - price) / price) * 100,
+            method: "Khuyến nghị + EPS dự báo × P/E Forward",
+          };
+        }
+      } else {
+        levels.targetAnalyst = {
+          price: implied,
+          upsidePercent: ((implied - price) / price) * 100,
+          method: "EPS dự báo (annualized) × P/E Forward",
+        };
+      }
     }
   }
 
