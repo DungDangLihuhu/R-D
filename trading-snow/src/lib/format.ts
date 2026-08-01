@@ -35,3 +35,23 @@ export function formatDate(date: string): string {
     year: "numeric",
   }).format(new Date(date));
 }
+
+/** Finnhub market cap is in millions USD */
+export function formatMarketCap(millions: number, currency = "USD"): string {
+  const usd = millions * 1_000_000;
+  const abs = Math.abs(usd);
+  if (abs >= 1e12) return `${(usd / 1e12).toFixed(2)}T ${currency}`;
+  if (abs >= 1e9) return `${(usd / 1e9).toFixed(2)}B ${currency}`;
+  if (abs >= 1e6) return `${(usd / 1e6).toFixed(2)}M ${currency}`;
+  return formatMoney(usd, currency);
+}
+
+export function formatRatio(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return value.toFixed(digits);
+}
+
+export function formatPct(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(digits)}%`;
+}
