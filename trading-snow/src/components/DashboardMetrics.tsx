@@ -1,10 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Calendar, PiggyBank, TrendingUp, Wallet } from "lucide-react";
 import { SnowballStatCard } from "@/components/SnowballStatCard";
 import type { PortfolioStats } from "@/lib/types";
 import { formatMoney } from "@/lib/format";
+import {
+  projectPassiveIncome,
+  type DividendEventLike,
+} from "@/lib/portfolio-snowball";
 
 function formatSignedMoney(value: number): string {
   const prefix = value > 0 ? "+" : value < 0 ? "−" : "";
@@ -18,106 +22,116 @@ function formatSignedPercent(value: number): string {
 
 export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
   const [hideValues, setHideValues] = useState(false);
+  const [dividendEvents, setDividendEvents] = useState<DividendEventLike[]>([]);
 
-  const metrics = useMemo(() => {
-    const netInvested = stats.totalDeposits - stats.totalWithdrawals;
-    const totalReturnPct =
-      netInvested > 0 ? (stats.totalPnl / netInvested) * 100 : 0;
+  const symbols = useMemo(
+    () => stats.holdings.map((h) => h.symbol).join(","),
+    [stats.holdings]
+  );
 
-    const curve = stats.equityCurve;
-    let recentChange = 0;
-    let recentChangePct = 0;
-    if (curve.length >= 2) {
-      const last = curve[curve.length - 1];
-      const prev = curve[curve.length - 2];
-      recentChange = last.equity - prev.equity;
-      recentChangePct = prev.equity > 0 ? (recentChange / prev.equity) * 100 : 0;
+  useEffect(() => {
+    if (!symbols) {
+      setDividendEvents([]);
+      return;
     }
 
-    let annualizedReturn = 0;
-    if (curve.length >= 2 && netInvested > 0) {
-      const start = curve[0];
-      const end = curve[curve.length - 1];
-      const days =
-        (new Date(end.date).getTime() - new Date(start.date).getTime()) /
-        (1000 * 60 * 60 * 24);
-      if (days >= 30 && end.equity > 0) {
-        annualizedReturn =
-          (Math.pow(end.equity / netInvested, 365 / days) - 1) * 100;
-      }
-    }
+    let cancelled = false;
+    fetch(`/api/dividends?symbols=${encodeURIComponent(symbols)}`)
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((data: { events?: DividendEventLike[] }) => {
+        if (!cancelled) setDividendEvents(data.events ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setDividendEvents([]);
+      });
 
-    const holdingsCost = stats.holdings.reduce((s, h) => s + h.totalCost, 0);
-    const holdingsReturnPct =
-      holdingsCost > 0 ? (stats.unrealizedPnl / holdingsCost) * 100 : 0;
-
-    const dividendYield =
-      stats.portfolioValue > 0
-        ? (stats.totalDividends / stats.portfolioValue) * 100
-        : 0;
-
-    return {
-      netInvested,
-      totalReturnPct,
-      recentChange,
-      recentChangePct,
-      annualizedReturn,
-      holdingsReturnPct,
-      dividendYield,
+    return () => {
+      cancelled = true;
     };
-  }, [stats]);
+  }, [symbols]);
+
+  const passiveIncome = useMemo(
+    () =>
+      projectPassiveIncome(
+        stats.holdings,
+        dividendEvents,
+        stats.holdingsValue
+      ),
+    [stats.holdings, stats.holdingsValue, dividendEvents]
+  );
+
+  const valueTooltip = [
+    "Giá trị danh mục hiện tại.",
+    "Vị thế: " + formatMoney(stats.holdingsValue),
+    "Tiền mặt: " + formatMoney(stats.cashBalance),
+  ].join("\n");
+
+  const profitTooltip = [
+    "Lợi nhuận tổng gồm cổ tức, lãi/lỗ bán, phí và lãi/lỗ chưa chốt.",
+    "Không gồm nạp/rút tiền.",
+  ].join("\n");
+
+  const irrTooltip = [
+    "IRR — tỷ suất sinh lời nội bộ hàng năm.",
+    "Tính từ mua, bán, cổ tức, phí và giá trị hiện tại.",
+  ].join("\n");
+
+  const passiveTooltip = [
+    "Cổ tức dự kiến 12 tháng tới (theo lịch sử 12 tháng).",
+    "Tỷ suất % trên giá trị vị thế (không gồm tiền mặt).",
+  ].join("\n");
+
+  const hasDailyQuote = stats.holdings.some((h) => h.marketPrice != null);
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <SnowballStatCard
         label="Giá trị"
         value={formatMoney(stats.portfolioValue)}
-        sub={`${formatMoney(metrics.netInvested)} đã đầu tư`}
+        sub={`${formatMoney(stats.holdingsCost)} đã đầu tư`}
         icon={Wallet}
         iconClassName="bg-sky-500/20 text-sky-400"
-        tooltip="Tổng giá trị danh mục = tiền mặt + vị thế theo giá thị trường"
+        tooltip={valueTooltip}
         hidden={hideValues}
         onToggleHidden={() => setHideValues((v) => !v)}
       />
       <SnowballStatCard
         label="Lợi nhuận"
-        value={formatSignedMoney(stats.totalPnl)}
+        value={formatSignedMoney(stats.totalProfit)}
         sub={
-          curveHasChange(stats)
-            ? `${formatSignedMoney(metrics.recentChange)} ${formatSignedPercent(metrics.recentChangePct)} kể từ GD gần nhất`
+          hasDailyQuote
+            ? `${formatSignedMoney(stats.dailyHoldingsProfit)} ${formatSignedPercent(stats.dailyHoldingsProfitPercent)} phiên gần nhất`
             : `Đã chốt: ${formatMoney(stats.realizedPnl)}`
         }
         icon={TrendingUp}
         iconClassName="bg-emerald-500/20 text-emerald-400"
         badge={{
-          text: formatSignedPercent(metrics.totalReturnPct),
-          positive: metrics.totalReturnPct >= 0,
+          text: formatSignedPercent(stats.totalProfitPercent),
+          positive: stats.totalProfitPercent >= 0,
         }}
-        tooltip="Lợi nhuận tổng = đã chốt + chưa chốt"
+        tooltip={profitTooltip}
         hidden={hideValues}
       />
       <SnowballStatCard
         label="IRR"
-        value={`${metrics.annualizedReturn.toFixed(2)}%`}
-        sub={`${formatSignedPercent(metrics.holdingsReturnPct)} vị thế hiện tại`}
+        value={
+          stats.irr != null ? `${stats.irr.toFixed(2)}%` : "—"
+        }
+        sub={`${formatSignedPercent(stats.profitExDivSalesPercent)} vị thế hiện tại`}
         icon={Calendar}
         iconClassName="bg-violet-500/20 text-violet-400"
-        tooltip="Tỷ suất sinh lời nội bộ ước tính từ đường vốn và vốn đã nạp"
+        tooltip={irrTooltip}
         hidden={hideValues}
       />
       <SnowballStatCard
         label="Thu nhập thụ động"
-        value={`${metrics.dividendYield.toFixed(1)}%`}
-        sub={`${formatMoney(stats.totalDividends)} cổ tức đã nhận`}
+        value={`${passiveIncome.yieldPercent.toFixed(1)}%`}
+        sub={`${formatMoney(passiveIncome.annualIncome)} / năm`}
         icon={PiggyBank}
         iconClassName="bg-emerald-500/20 text-emerald-400"
-        tooltip="Tỷ suất cổ tức trên giá trị danh mục hiện tại"
+        tooltip={passiveTooltip}
         hidden={hideValues}
       />
     </div>
   );
-}
-
-function curveHasChange(stats: PortfolioStats): boolean {
-  return stats.equityCurve.length >= 2;
 }
