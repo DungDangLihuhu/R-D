@@ -303,3 +303,74 @@ export function toYahooSymbol(
 export function encodeYahooSymbol(symbol: string): string {
   return encodeURIComponent(symbol.toUpperCase());
 }
+
+/**
+ * Broker / Snowball / OTC tickers → alternate Yahoo symbols (fallback order).
+ * Only used when the primary symbol returns no quote.
+ */
+export const YAHOO_SYMBOL_ALIASES: Record<string, string[]> = {
+  // TotalEnergies OTC & legacy
+  TTFNF: ["TTE.PA", "TOT"],
+  TTF: ["TTE.PA", "TOT"],
+  FP: ["TTE.PA", "FP.PA"],
+  TTE: ["TTE.PA"],
+  TOT: ["TTE.PA", "TOT"],
+
+  // Euronext Paris (when imported without .PA suffix)
+  BNP: ["BNP.PA"],
+  GLE: ["GLE.PA"],
+  CS: ["CS.PA"],
+  BVI: ["BVI.PA"],
+  EDEN: ["EDEN.PA"],
+  SAN: ["SAN.PA"],
+  MC: ["MC.PA"],
+  OR: ["OR.PA"],
+  AI: ["AI.PA"],
+  SU: ["SU.PA"],
+  DG: ["DG.PA"],
+  KER: ["KER.PA"],
+  RMS: ["RMS.PA"],
+  EL: ["EL.PA"],
+  VIV: ["VIV.PA"],
+  CAP: ["CAP.PA"],
+  PUB: ["PUB.PA"],
+  HO: ["HO.PA"],
+  LR: ["LR.PA"],
+  RI: ["RI.PA"],
+  EN: ["EN.PA"],
+  ENGI: ["ENGI.PA"],
+  ACA: ["ACA.PA"],
+  ML: ["ML.PA"],
+  VIE: ["VIE.PA"],
+  URW: ["URW.PA"],
+  STM: ["STM.PA"],
+  STMPA: ["STM.PA"],
+
+  // US leveraged ETFs (some brokers use odd tickers)
+  UPRO: ["UPRO"],
+  SSO: ["SSO"],
+};
+
+/** Yahoo symbols to try for quote lookup, in order */
+export function resolveYahooSymbolCandidates(ticker: string): string[] {
+  const upper = ticker.trim().toUpperCase().replace(/\s/g, "");
+  if (!upper || upper === "CASH") return [];
+
+  const candidates: string[] = [];
+  const add = (s: string) => {
+    const v = s.trim().toUpperCase();
+    if (v && !candidates.includes(v)) candidates.push(v);
+  };
+
+  add(toYahooSymbol(upper));
+
+  const bare = upper.includes(".") ? upper.split(".")[0] : upper;
+  const aliasLists = [YAHOO_SYMBOL_ALIASES[upper], YAHOO_SYMBOL_ALIASES[bare]];
+  for (const list of aliasLists) {
+    if (!list) continue;
+    for (const alias of list) add(alias);
+  }
+
+  return candidates;
+}
+
