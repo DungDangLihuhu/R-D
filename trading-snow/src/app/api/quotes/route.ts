@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchQuotes } from "@/lib/yahoo";
+import { fetchQuoteFinnhubOne, fetchQuotes } from "@/lib/yahoo";
 
 export async function GET(req: NextRequest) {
   const symbols = req.nextUrl.searchParams.get("symbols");
@@ -14,17 +14,32 @@ export async function GET(req: NextRequest) {
     .slice(0, 50);
 
   try {
-    let quotes = await fetchQuotes(list);
-    const finnhubKey = process.env.FINNHUB_API_KEY;
-    if (quotes.length === 0 && finnhubKey) {
-      const { fetchQuotesFinnhub } = await import("@/lib/yahoo");
-      quotes = await fetchQuotesFinnhub(list, finnhubKey);
-    }
+    const quotes = await fetchQuotes(list);
     const prices: Record<string, number> = {};
     for (const q of quotes) {
       if (q.price > 0) prices[q.symbol] = q.price;
     }
-    return NextResponse.json({ quotes, prices, updatedAt: new Date().toISOString() });
+
+    const finnhubKey = process.env.FINNHUB_API_KEY;
+    const missing = list.filter((s) => !prices[s]);
+
+    if (finnhubKey && missing.length > 0) {
+      const fallback = await Promise.all(
+        missing.map((sym) => fetchQuoteFinnhubOne(sym, finnhubKey))
+      );
+      for (const q of fallback) {
+        if (!q || q.price <= 0) continue;
+        quotes.push(q);
+        prices[q.symbol] = q.price;
+      }
+    }
+
+    return NextResponse.json({
+      quotes,
+      prices,
+      updatedAt: new Date().toISOString(),
+      unresolved: list.filter((s) => !prices[s]),
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
     return NextResponse.json({ error: msg }, { status: 502 });

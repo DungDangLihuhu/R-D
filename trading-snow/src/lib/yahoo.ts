@@ -1,4 +1,8 @@
-import { encodeYahooSymbol, toYahooSymbol } from "./symbol";
+import {
+  encodeYahooSymbol,
+  resolveYahooSymbolCandidates,
+  toYahooSymbol,
+} from "./symbol";
 
 const YAHOO_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; TradingSnow/1.0)",
@@ -13,6 +17,7 @@ export interface QuoteResult {
   yahooSymbol?: string;
   exchangeName?: string;
   shortName?: string;
+  source?: "yahoo" | "finnhub" | "yahoo-search";
 }
 
 export interface DividendEvent {
@@ -31,9 +36,10 @@ export async function fetchPriceHistory(
   from: Date,
   to: Date
 ): Promise<HistoryPoint[]> {
+  const yahoo = toYahooSymbol(symbol);
   const period1 = Math.floor(from.getTime() / 1000);
   const period2 = Math.floor(to.getTime() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(symbol)}?interval=1d&period1=${period1}&period2=${period2}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?interval=1d&period1=${period1}&period2=${period2}`;
   const res = await fetch(url, {
     headers: YAHOO_HEADERS,
     next: { revalidate: 3600 },
@@ -59,7 +65,8 @@ export async function fetchPriceHistory(
 
 async function fetchQuoteOne(
   yahooSymbol: string,
-  requestedSymbol: string
+  requestedSymbol: string,
+  source: QuoteResult["source"] = "yahoo"
 ): Promise<QuoteResult | null> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=1d&range=1d`;
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 60 } });
@@ -82,7 +89,40 @@ async function fetchQuoteOne(
     change,
     changePercent,
     currency: meta.currency ?? "USD",
+    source,
   };
+}
+
+async function searchYahooSymbol(query: string): Promise<string | null> {
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=8&newsCount=0`;
+  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 3600 } });
+  if (!res.ok) return null;
+
+  const json = await res.json();
+  const quotes: { symbol?: string; quoteType?: string }[] = json?.quotes ?? [];
+  const equity = quotes.find(
+    (q) =>
+      q.symbol &&
+      (q.quoteType === "EQUITY" || q.quoteType === "ETF" || !q.quoteType)
+  );
+  return equity?.symbol?.toUpperCase() ?? null;
+}
+
+async function fetchQuoteForSymbol(requested: string): Promise<QuoteResult | null> {
+  const candidates = resolveYahooSymbolCandidates(requested);
+
+  for (const yahoo of candidates) {
+    const quote = await fetchQuoteOne(yahoo, requested, "yahoo");
+    if (quote) return quote;
+  }
+
+  const searched = await searchYahooSymbol(requested);
+  if (searched && !candidates.includes(searched)) {
+    const quote = await fetchQuoteOne(searched, requested, "yahoo-search");
+    if (quote) return quote;
+  }
+
+  return null;
 }
 
 export async function fetchQuotes(symbols: string[]): Promise<QuoteResult[]> {
@@ -91,12 +131,7 @@ export async function fetchQuotes(symbols: string[]): Promise<QuoteResult[]> {
   );
   if (unique.length === 0) return [];
 
-  const results = await Promise.all(
-    unique.map(async (requested) => {
-      const yahoo = toYahooSymbol(requested);
-      return fetchQuoteOne(yahoo, requested);
-    })
-  );
+  const results = await Promise.all(unique.map((requested) => fetchQuoteForSymbol(requested)));
   return results.filter((r): r is QuoteResult => r !== null);
 }
 
@@ -104,7 +139,8 @@ export async function fetchDividends(
   symbol: string,
   requestedSymbol?: string
 ): Promise<DividendEvent[]> {
-  const yahoo = toYahooSymbol(symbol);
+  const candidates = resolveYahooSymbolCandidates(symbol);
+  const yahoo = candidates[0] ?? toYahooSymbol(symbol);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?range=2y&interval=1d&events=div`;
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 3600 } });
   if (!res.ok) return [];
@@ -123,26 +159,44 @@ export async function fetchDividends(
   );
 }
 
-/** Optional Finnhub fallback when FINNHUB_API_KEY is set */
+/** Finnhub fallback — per symbol, tries alias candidates */
+export async function fetchQuoteFinnhubOne(
+  requestedSymbol: string,
+  apiKey: string
+): Promise<QuoteResult | null> {
+  const candidates = [
+    ...resolveYahooSymbolCandidates(requestedSymbol),
+    requestedSymbol.toUpperCase(),
+  ];
+
+  for (const sym of [...new Set(candidates)]) {
+    const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
+    const res = await fetch(url, { next: { revalidate: 60 } });
+    if (!res.ok) continue;
+    const q = await res.json();
+    if (q.c > 0) {
+      return {
+        symbol: requestedSymbol.toUpperCase(),
+        yahooSymbol: sym,
+        price: q.c,
+        change: q.d ?? 0,
+        changePercent: q.dp ?? 0,
+        currency: "USD",
+        source: "finnhub",
+      };
+    }
+  }
+  return null;
+}
+
 export async function fetchQuotesFinnhub(
   symbols: string[],
   apiKey: string
 ): Promise<QuoteResult[]> {
   const results: QuoteResult[] = [];
   for (const sym of symbols.slice(0, 30)) {
-    const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${apiKey}`;
-    const res = await fetch(url, { next: { revalidate: 60 } });
-    if (!res.ok) continue;
-    const q = await res.json();
-    if (q.c > 0) {
-      results.push({
-        symbol: sym.toUpperCase(),
-        price: q.c,
-        change: q.d ?? 0,
-        changePercent: q.dp ?? 0,
-        currency: "USD",
-      });
-    }
+    const quote = await fetchQuoteFinnhubOne(sym, apiKey);
+    if (quote) results.push(quote);
   }
   return results;
 }
