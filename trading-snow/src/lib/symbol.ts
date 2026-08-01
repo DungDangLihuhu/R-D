@@ -371,6 +371,11 @@ export function resolveYahooSymbolCandidates(ticker: string): string[] {
     for (const alias of list) add(alias);
   }
 
+  // Suffixed symbol (e.g. BNP.PA) → try base ticker if Yahoo has no .PA listing
+  if (upper.includes(".") && bare && bare !== upper) {
+    add(bare);
+  }
+
   return candidates;
 }
 

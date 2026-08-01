@@ -230,18 +230,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated || holdingSymbols.length === 0) return;
-    const missingPrices = stats.holdings.some((h) => !h.marketPrice);
     const stale =
       !state.pricesUpdatedAt ||
       Date.now() - new Date(state.pricesUpdatedAt).getTime() > 5 * 60 * 1000;
-    if (stale || missingPrices) refreshPrices(holdingSymbols);
-  }, [
-    hydrated,
-    holdingSymbols.join(","),
-    refreshPrices,
-    state.pricesUpdatedAt,
-    stats.holdings.map((h) => (h.marketPrice ? "1" : "0")).join(""),
-  ]);
+    if (stale) refreshPrices(holdingSymbols);
+  }, [hydrated, holdingSymbols.join(","), refreshPrices, state.pricesUpdatedAt]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
