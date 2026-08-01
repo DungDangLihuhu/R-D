@@ -125,10 +125,18 @@ async function fetchQuoteForSymbol(requested: string): Promise<QuoteResult | nul
     if (quote) return quote;
   }
 
-  const searched = await searchYahooSymbol(requested);
-  if (searched && !candidates.includes(searched)) {
-    const quote = await fetchQuoteOne(searched, requested, "yahoo-search");
-    if (quote) return quote;
+  const searchQueries = [requested];
+  if (requested.includes(".")) {
+    const base = requested.split(".")[0];
+    if (base) searchQueries.push(base);
+  }
+
+  for (const query of searchQueries) {
+    const searched = await searchYahooSymbol(query);
+    if (searched && !candidates.includes(searched)) {
+      const quote = await fetchQuoteOne(searched, requested, "yahoo-search");
+      if (quote) return quote;
+    }
   }
 
   return null;
