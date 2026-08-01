@@ -1,4 +1,5 @@
 import type { AssetType, Transaction, TransactionType } from "./types";
+import { toYahooSymbol } from "./symbol";
 
 export type CsvFormat =
   | "auto"
@@ -132,6 +133,22 @@ function parseNum(raw: string): number {
   return isNaN(n) ? 0 : Math.abs(n);
 }
 
+function resolveSymbol(
+  cols: string[],
+  headers: string[],
+  symbolCol: number,
+  extra?: { exchangeCol?: number; countryCol?: number }
+): string {
+  const ticker = cols[symbolCol] ?? "";
+  const iExchange =
+    extra?.exchangeCol ??
+    colIndex(headers, "exchange", "market", "mic", "primaryexchange", "listingexchange");
+  const iCountry = extra?.countryCol ?? colIndex(headers, "country", "nation", "region");
+  const exchange = iExchange >= 0 ? cols[iExchange] : undefined;
+  const country = iCountry >= 0 ? cols[iCountry] : undefined;
+  return toYahooSymbol(ticker, exchange, country);
+}
+
 function parseSnowballHoldings(
   headers: string[],
   lines: string[]
@@ -141,6 +158,8 @@ function parseSnowballHoldings(
   const iCost = colIndex(headers, "costpershare");
   const iMarket = colIndex(headers, "shareprice");
   const iName = colIndex(headers, "holdingsname");
+  const iCountry = colIndex(headers, "country");
+  const iExchange = colIndex(headers, "exchange", "market");
 
   const errors: string[] = [];
   const rows: CsvRow[] = [];
@@ -159,7 +178,10 @@ function parseSnowballHoldings(
     const cols = parseCsvLine(lines[i]);
     if (cols.every((c) => !c)) continue;
 
-    const symbol = (cols[iSymbol] ?? "").toUpperCase().replace(/\s/g, "");
+    const symbol = resolveSymbol(cols, headers, iSymbol, {
+      exchangeCol: iExchange,
+      countryCol: iCountry,
+    });
     const quantity = parseNum(cols[iQty] ?? "0");
     const price = parseNum(cols[iCost] ?? "0");
     const name = iName >= 0 ? cols[iName] : "";
@@ -196,7 +218,7 @@ function parseSnowballHoldings(
     format: "snowball_holdings",
     marketPrices,
     info:
-      "File Holdings Snowball — tạo lệnh MUA giả định theo giá vốn TB. Để import lịch sử giao dịch, xuất Transactions từ Snowball.",
+      "File Holdings Snowball — mã quốc tế hóa theo Country/Exchange (vd. SAN + France → SAN.PA). Để import lịch sử giao dịch, xuất Transactions từ Snowball.",
   };
 }
 
@@ -210,6 +232,8 @@ function parseSnowballTransactions(
   const iPrice = colIndex(headers, "price");
   const iQty = colIndex(headers, "quantity");
   const iFee = colIndex(headers, "feetax", "feetax", "fee");
+  const iCountry = colIndex(headers, "country");
+  const iExchange = colIndex(headers, "exchange", "market");
 
   const errors: string[] = [];
   const rows: CsvRow[] = [];
@@ -234,7 +258,13 @@ function parseSnowballTransactions(
     }
 
     const date = parseDate(cols[iDate] ?? "");
-    const symbol = (cols[iSymbol] ?? "").toUpperCase().replace(/\s/g, "");
+    const symbol =
+      iSymbol >= 0
+        ? resolveSymbol(cols, headers, iSymbol, {
+            exchangeCol: iExchange,
+            countryCol: iCountry,
+          })
+        : "";
     const quantity = parseNum(cols[iQty] ?? "0");
     const price = parseNum(cols[iPrice] ?? "0");
     const fee = iFee >= 0 ? parseNum(cols[iFee] ?? "0") : 0;
@@ -294,6 +324,15 @@ function parseGenericTransactions(
     "costpershare"
   );
   const iFee = colIndex(headers, "fee", "commission", "ibcommission", "fees", "feetax");
+  const iExchange = colIndex(
+    headers,
+    "exchange",
+    "market",
+    "mic",
+    "primaryexchange",
+    "listingexchange"
+  );
+  const iCountry = colIndex(headers, "country", "nation", "region");
 
   const errors: string[] = [];
 
@@ -301,7 +340,7 @@ function parseGenericTransactions(
     return {
       rows: [],
       errors: [
-        "Không map được cột. Cần: date, symbol, type/side, quantity, price. Tùy chọn: fee. Hoặc dùng export Holdings/Transactions từ Snowball.",
+        "Không map được cột. Cần: date, symbol, type/side, quantity, price. Tùy chọn: fee, exchange, country. Hoặc dùng export Holdings/Transactions từ Snowball.",
       ],
       format,
     };
@@ -314,7 +353,10 @@ function parseGenericTransactions(
     if (cols.every((c) => !c)) continue;
 
     const date = parseDate(cols[iDate] ?? "");
-    const symbol = (cols[iSymbol] ?? "").toUpperCase().replace(/\s/g, "");
+    const symbol = resolveSymbol(cols, headers, iSymbol, {
+      exchangeCol: iExchange,
+      countryCol: iCountry,
+    });
     const type = parseType(cols[iType] ?? "");
     const quantity = parseNum(cols[iQty] ?? "0");
     const price = parseNum(cols[iPrice] ?? "0");

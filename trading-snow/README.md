@@ -28,7 +28,8 @@ npm run dev
 
 Hỗ trợ format:
 
-- **Generic**: `date, symbol, type, quantity, price, fee`
+- **Generic**: `date, symbol, type, quantity, price, fee` (+ tùy chọn `exchange`, `country`)
+- **Snowball Holdings**: tự map `Country` / `Exchange` → mã Yahoo (vd. SAN + France → `SAN.PA`)
 - **Interactive Brokers**: `TradeDate, Symbol, Buy/Sell, Quantity, TradePrice, IBCommission`
 - **TradingView**: `Date, Ticker, Side, Qty, Price, Commission`
 

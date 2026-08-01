@@ -1,4 +1,5 @@
 import type { AssetType, Transaction, TransactionType } from "./types";
+import { toYahooSymbol } from "./symbol";
 
 export interface ParsedSmsTrade {
   broker: string;
@@ -40,11 +41,12 @@ function parseStanChartFilled(text: string): ParsedSmsTrade | null {
   if (price <= 0) return null;
 
   const refMatch = text.match(/ref\.?\s*([A-Z0-9]+)/i);
+  const exchangeMatch = text.match(/\bon\s+([A-Z0-9.-]+)\s+at\b/i);
 
   return {
     broker: "StanChart",
     type: side.toLowerCase() === "sell" ? "SELL" : "BUY",
-    symbol: symbol.toUpperCase(),
+    symbol: toYahooSymbol(symbol, exchangeMatch?.[1]),
     quantity,
     price,
     ref: refMatch?.[1],

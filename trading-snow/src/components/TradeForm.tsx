@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { toYahooSymbol } from "@/lib/symbol";
 import type { AssetType, TransactionType } from "@/lib/types";
 
 const types: { value: TransactionType; label: string }[] = [
@@ -24,6 +25,7 @@ export function TradeForm() {
   const { activePortfolioId, addTransaction } = useApp();
   const [type, setType] = useState<TransactionType>("BUY");
   const [symbol, setSymbol] = useState("");
+  const [exchange, setExchange] = useState("");
   const [assetType, setAssetType] = useState<AssetType>("STOCK");
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
@@ -46,7 +48,7 @@ export function TradeForm() {
     addTransaction({
       portfolioId: activePortfolioId,
       type,
-      symbol: isCash ? "CASH" : symbol.toUpperCase(),
+      symbol: isCash ? "CASH" : toYahooSymbol(symbol, exchange || undefined),
       assetType: isCash ? "OTHER" : assetType,
       quantity: q,
       price: p,
@@ -56,6 +58,7 @@ export function TradeForm() {
     });
     setMsg("Đã lưu giao dịch");
     setSymbol("");
+    setExchange("");
     setQuantity("");
     setPrice("");
     setFee("0");
@@ -90,10 +93,22 @@ export function TradeForm() {
               <input
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
-                placeholder="AAPL, MU, BTC..."
+                placeholder="SAN, AAPL, MC..."
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 uppercase"
                 required
               />
+            </label>
+            <label className="block text-sm">
+              <span className="text-gray-500">Sàn / quốc gia (tùy chọn)</span>
+              <input
+                value={exchange}
+                onChange={(e) => setExchange(e.target.value)}
+                placeholder="PA, L, France, NMS..."
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 uppercase"
+              />
+              <span className="mt-1 block text-xs text-gray-400">
+                VD: SAN + PA → SAN.PA (Sanofi Paris)
+              </span>
             </label>
             <label className="block text-sm">
               <span className="text-gray-500">Loại tài sản</span>
