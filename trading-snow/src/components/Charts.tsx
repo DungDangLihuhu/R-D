@@ -38,7 +38,8 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <div className="min-w-0 w-full">
+      <ResponsiveContainer width="100%" height={280}>
       <AreaChart data={chartData}>
         <defs>
           <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
@@ -65,6 +66,7 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
         />
       </AreaChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -78,7 +80,8 @@ export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }
   }
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <div className="min-w-0 w-full">
+      <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
         <XAxis dataKey="month" tick={{ fill: TICK, fontSize: 11 }} />
@@ -98,5 +101,6 @@ export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }
         />
       </BarChart>
     </ResponsiveContainer>
+    </div>
   );
 }

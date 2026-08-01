@@ -159,7 +159,8 @@ export function BenchmarkComparison({
             />
           </div>
 
-          <ResponsiveContainer width="100%" height={300}>
+          <div className="min-w-0 w-full">
+            <ResponsiveContainer width="100%" height={300}>
             <LineChart
               data={comparison.points.map((p) => ({
                 ...p,
@@ -206,6 +207,7 @@ export function BenchmarkComparison({
               />
             </LineChart>
           </ResponsiveContainer>
+          </div>
         </>
       )}
     </div>

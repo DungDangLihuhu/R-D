@@ -8,6 +8,11 @@
   --app-text-muted: #6b7280;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   background-color: var(--app-bg);
