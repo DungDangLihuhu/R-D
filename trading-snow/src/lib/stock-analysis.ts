@@ -34,6 +34,7 @@ export interface InsiderRow {
   transactionCode: string;
   transactionPrice?: number | null;
   amount?: number | null;
+  relationship?: string | null;
 }
 
 export interface NewsRow {
@@ -219,6 +220,38 @@ function capMillions(m: number | null | undefined): string {
   if (usd >= 1e9) return `${(usd / 1e9).toFixed(2)}B`;
   if (usd >= 1e6) return `${(usd / 1e6).toFixed(2)}M`;
   return usd.toFixed(0);
+}
+
+function normalizePersonName(name: string): string {
+  return name.toUpperCase().replace(/[^A-Z]/g, "");
+}
+
+function matchExecutivePosition(
+  name: string,
+  executives: { name: string; position?: string }[]
+): string | undefined {
+  const norm = normalizePersonName(name);
+  if (!norm) return undefined;
+
+  for (const ex of executives) {
+    const exNorm = normalizePersonName(ex.name);
+    if (!exNorm || !ex.position) continue;
+    if (norm === exNorm || norm.includes(exNorm) || exNorm.includes(norm)) {
+      return ex.position;
+    }
+
+    const parts = name.toUpperCase().split(/[\s,.-]+/).filter(Boolean);
+    const exParts = ex.name.toUpperCase().split(/[\s,.-]+/).filter(Boolean);
+    if (parts.length >= 2 && exParts.length >= 2) {
+      const last = parts[parts.length - 1];
+      const exLast = exParts[exParts.length - 1];
+      if (last === exLast && parts[0][0] === exParts[0][0]) {
+        return ex.position;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function clusterLevels(
@@ -557,8 +590,15 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
       transactionDate: string;
       transactionCode: string;
       transactionPrice?: number;
+      relationship?: string;
+      position?: string;
     }[];
   }>("stock/insider-transactions?", upper);
+
+  const executiveRes = await finnhubGet<{
+    executive?: { name: string; position?: string }[];
+  }>("stock/executive?", upper);
+  const executives = executiveRes?.executive ?? [];
 
   const peers = (await finnhubGet<string[]>("stock/peers?", upper)) ?? [];
   const optionFlow = await fetchOptionFlow(upper);
@@ -606,6 +646,11 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
       transactionCode: t.transactionCode,
       transactionPrice: t.transactionPrice ?? null,
       amount,
+      relationship:
+        t.relationship?.trim() ||
+        t.position?.trim() ||
+        matchExecutivePosition(t.name, executives) ||
+        null,
     };
   });
 
