@@ -3,17 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { ExternalLink, Search } from "lucide-react";
+import { StockPriceChart } from "@/components/StockPriceChart";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { useApp } from "@/context/AppContext";
 import {
@@ -22,63 +13,7 @@ import {
   formatPercent,
   formatShares,
 } from "@/lib/format";
-import type { PriceLevels, StockAnalysis } from "@/lib/stock-analysis";
-
-const GRID = "#e2e5ea";
-const TICK = "#6b7280";
-const CHART_COLORS = {
-  price: "#0ea5e9",
-  targetAnalyst: "#8b5cf6",
-  targetFundamental: "#f59e0b",
-  support: "#10b981",
-  resistance: "#ef4444",
-} as const;
-
-function chartYDomain(
-  closes: number[],
-  levels?: PriceLevels
-): [number, number] {
-  const valid = closes.filter((c) => Number.isFinite(c) && c > 0);
-  if (!valid.length) return [0, 100];
-
-  let min = Math.min(...valid);
-  let max = Math.max(...valid);
-  const span = max - min || max * 0.1;
-
-  const includeLevel = (p: number) =>
-    Number.isFinite(p) && p > 0 && p >= min - span * 0.15 && p <= max + span * 0.15;
-
-  if (levels) {
-    const extras: number[] = [];
-    if (levels.targetAnalyst && includeLevel(levels.targetAnalyst.price)) {
-      extras.push(levels.targetAnalyst.price);
-    }
-    if (levels.targetFundamental && includeLevel(levels.targetFundamental.price)) {
-      extras.push(levels.targetFundamental.price);
-    }
-    for (const s of levels.support) {
-      if (includeLevel(s.price)) extras.push(s.price);
-    }
-    for (const r of levels.resistance) {
-      if (includeLevel(r.price)) extras.push(r.price);
-    }
-    if (extras.length) {
-      min = Math.min(min, ...extras);
-      max = Math.max(max, ...extras);
-    }
-  }
-
-  const pad = (max - min) * 0.06 || max * 0.05;
-  return [Math.max(0, min - pad), max + pad];
-}
-
-function formatChartPrice(value: number): string {
-  if (!Number.isFinite(value)) return "";
-  const abs = Math.abs(value);
-  if (abs >= 10_000) return value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
-  if (abs >= 100) return value.toFixed(1);
-  return value.toFixed(2);
-}
+import type { StockAnalysis } from "@/lib/stock-analysis";
 
 interface SearchSuggestion {
   symbol: string;
@@ -191,28 +126,6 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
       .catch(() => setError("Không tải được dữ liệu phân tích"))
       .finally(() => setLoading(false));
   }, [symbol]);
-
-  const chartData = useMemo(
-    () =>
-      (data?.priceHistory ?? []).map((p) => ({
-        label: p.date.slice(5),
-        close: p.close,
-      })),
-    [data?.priceHistory]
-  );
-
-  const yDomain = useMemo(
-    () =>
-      data?.priceLevels
-        ? chartYDomain(
-            chartData.map((d) => d.close),
-            data.priceLevels
-          )
-        : (["auto", "auto"] as const),
-    [chartData, data?.priceLevels]
-  );
-
-  const priceLevels = data?.priceLevels;
 
   const holding = stats.holdings.find((h) => h.symbol === symbol);
 
@@ -417,133 +330,11 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             )}
           </div>
 
-          {chartData.length > 1 && (
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <h3 className="mb-3 font-semibold">Biểu đồ giá (12 tháng)</h3>
-              <div className="min-w-0 w-full h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
-                    <XAxis dataKey="label" tick={{ fill: TICK, fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis
-                      tick={{ fill: TICK, fontSize: 10 }}
-                      domain={yDomain}
-                      width={64}
-                      tickFormatter={formatChartPrice}
-                      allowDecimals
-                      tickCount={6}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#fff",
-                        border: "1px solid #e2e5ea",
-                        borderRadius: 8,
-                      }}
-                      formatter={(v) => [formatMoney(Number(v ?? 0), data.currency), "Giá"]}
-                    />
-                    {priceLevels?.support.map((s) => (
-                      <ReferenceLine
-                        key={`s-${s.label}-${s.price}`}
-                        y={s.price}
-                        stroke={CHART_COLORS.support}
-                        strokeDasharray="6 4"
-                        strokeWidth={1.5}
-                      />
-                    ))}
-                    {priceLevels?.resistance.map((r) => (
-                      <ReferenceLine
-                        key={`r-${r.label}-${r.price}`}
-                        y={r.price}
-                        stroke={CHART_COLORS.resistance}
-                        strokeDasharray="6 4"
-                        strokeWidth={1.5}
-                      />
-                    ))}
-                    {priceLevels?.targetFundamental && (
-                      <ReferenceLine
-                        y={priceLevels.targetFundamental.price}
-                        stroke={CHART_COLORS.targetFundamental}
-                        strokeDasharray="4 4"
-                        strokeWidth={2}
-                      />
-                    )}
-                    {priceLevels?.targetAnalyst && (
-                      <ReferenceLine
-                        y={priceLevels.targetAnalyst.price}
-                        stroke={CHART_COLORS.targetAnalyst}
-                        strokeDasharray="4 4"
-                        strokeWidth={2}
-                      />
-                    )}
-                    <Line type="monotone" dataKey="close" stroke={CHART_COLORS.price} strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {priceLevels && (
-                <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
-                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                    <LegendDot color={CHART_COLORS.price} label="Giá đóng cửa" />
-                    {priceLevels.targetAnalyst && (
-                      <LegendDot color={CHART_COLORS.targetAnalyst} label="Giá mục tiêu (phân tích)" dashed />
-                    )}
-                    {priceLevels.targetFundamental && (
-                      <LegendDot color={CHART_COLORS.targetFundamental} label="Giá trị hợp lý (cơ bản)" dashed />
-                    )}
-                    {priceLevels.support.length > 0 && (
-                      <LegendDot color={CHART_COLORS.support} label="Hỗ trợ" dashed />
-                    )}
-                    {priceLevels.resistance.length > 0 && (
-                      <LegendDot color={CHART_COLORS.resistance} label="Kháng cự" dashed />
-                    )}
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    {priceLevels.targetAnalyst && (
-                      <LevelCard
-                        title="Giá mục tiêu (phân tích)"
-                        price={priceLevels.targetAnalyst.price}
-                        upside={priceLevels.targetAnalyst.upsidePercent}
-                        method={priceLevels.targetAnalyst.method}
-                        currency={data.currency}
-                        color={CHART_COLORS.targetAnalyst}
-                      />
-                    )}
-                    {priceLevels.targetFundamental && (
-                      <LevelCard
-                        title="Giá trị hợp lý (cơ bản)"
-                        price={priceLevels.targetFundamental.price}
-                        upside={priceLevels.targetFundamental.upsidePercent}
-                        method={priceLevels.targetFundamental.method}
-                        currency={data.currency}
-                        color={CHART_COLORS.targetFundamental}
-                      />
-                    )}
-                    {priceLevels.support.map((s) => (
-                      <div
-                        key={s.label}
-                        className="rounded-lg border border-emerald-100 bg-emerald-50/50 px-3 py-2"
-                      >
-                        <p className="text-xs font-medium text-emerald-800">{s.label}</p>
-                        <p className="text-sm font-semibold tabular-nums text-emerald-900">
-                          {formatMoney(s.price, data.currency)}
-                        </p>
-                      </div>
-                    ))}
-                    {priceLevels.resistance.map((r) => (
-                      <div
-                        key={r.label}
-                        className="rounded-lg border border-rose-100 bg-rose-50/50 px-3 py-2"
-                      >
-                        <p className="text-xs font-medium text-rose-800">{r.label}</p>
-                        <p className="text-sm font-semibold tabular-nums text-rose-900">
-                          {formatMoney(r.price, data.currency)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          <StockPriceChart
+            symbol={data.symbol}
+            currency={data.currency}
+            priceLevels={data.priceLevels}
+          />
 
           <div className="grid gap-4 lg:grid-cols-2">
             {data.sections.map((section) => (
@@ -783,63 +574,6 @@ function MetricSection({
           </div>
         ))}
       </dl>
-    </div>
-  );
-}
-
-function LegendDot({
-  color,
-  label,
-  dashed,
-}: {
-  color: string;
-  label: string;
-  dashed?: boolean;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-gray-600">
-      <span
-        className="inline-block h-0.5 w-4"
-        style={{
-          background: dashed
-            ? `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)`
-            : color,
-        }}
-      />
-      {label}
-    </span>
-  );
-}
-
-function LevelCard({
-  title,
-  price,
-  upside,
-  method,
-  currency,
-  color,
-}: {
-  title: string;
-  price: number;
-  upside: number;
-  method: string;
-  currency: string;
-  color: string;
-}) {
-  return (
-    <div className="rounded-lg border px-3 py-2" style={{ borderColor: `${color}40`, background: `${color}10` }}>
-      <p className="text-xs font-medium" style={{ color }}>
-        {title}
-      </p>
-      <p className="text-sm font-semibold tabular-nums">{formatMoney(price, currency)}</p>
-      <p
-        className={`text-xs tabular-nums ${
-          upside >= 0 ? "text-emerald-600" : "text-rose-600"
-        }`}
-      >
-        {formatPercent(upside)} so với giá hiện tại
-      </p>
-      <p className="mt-0.5 text-[10px] text-gray-500">{method}</p>
     </div>
   );
 }
