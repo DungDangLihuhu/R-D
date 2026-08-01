@@ -1,13 +1,236 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Pagination } from "@/components/Pagination";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
-import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
+import type { Holding, MarketQuote } from "@/lib/types";
+import {
+  formatMoney,
+  formatPnlArrow,
+  formatShares,
+} from "@/lib/format";
+
+const AVATAR_COLORS = [
+  "bg-sky-100 text-sky-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700",
+  "bg-violet-100 text-violet-700",
+  "bg-rose-100 text-rose-700",
+  "bg-cyan-100 text-cyan-700",
+];
+
+function avatarColor(symbol: string) {
+  let hash = 0;
+  for (let i = 0; i < symbol.length; i++) {
+    hash = symbol.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function pnlClass(value: number) {
+  if (value > 0) return "text-emerald-600";
+  if (value < 0) return "text-rose-600";
+  return "text-gray-600";
+}
+
+function SymbolAvatar({ symbol }: { symbol: string }) {
+  const label = symbol.replace(/\.[^.]+$/, "").slice(0, 2).toUpperCase();
+  return (
+    <div
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${avatarColor(symbol)}`}
+    >
+      {label}
+    </div>
+  );
+}
+
+function MetricStack({
+  primary,
+  secondary,
+  align = "right",
+  tone,
+}: {
+  primary: string;
+  secondary?: ReactNode;
+  align?: "left" | "right";
+  tone?: number | null;
+}) {
+  const color =
+    tone != null ? pnlClass(tone) : "text-gray-900";
+  const subColor =
+    tone != null ? pnlClass(tone) : "text-gray-500";
+
+  return (
+    <div className={align === "right" ? "text-right" : "text-left"}>
+      <p className={`text-sm font-medium tabular-nums leading-tight ${color}`}>
+        {primary}
+      </p>
+      {secondary != null && secondary !== "" && (
+        <div className={`mt-0.5 text-[11px] tabular-nums leading-tight ${subColor}`}>
+          {secondary}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HoldingRow({
+  holding,
+  quote,
+  editing,
+  priceInput,
+  onEditStart,
+  onPriceInput,
+  onSavePrice,
+}: {
+  holding: Holding;
+  quote?: MarketQuote;
+  editing: boolean;
+  priceInput: string;
+  onEditStart: () => void;
+  onPriceInput: (value: string) => void;
+  onSavePrice: () => void;
+}) {
+  const market = holding.marketPrice ?? holding.avgCost;
+  const value = holding.quantity * market;
+  const unrealized = holding.marketPrice ? value - holding.totalCost : 0;
+  const pct =
+    holding.marketPrice && holding.totalCost > 0
+      ? (unrealized / holding.totalCost) * 100
+      : 0;
+  const dailyChange =
+    quote && holding.marketPrice ? quote.change * holding.quantity : null;
+  const dailyPct = quote?.changePercent ?? null;
+  const displayName = quote?.name ?? holding.symbol;
+
+  const priceSecondary = editing ? (
+    <input
+      autoFocus
+      type="number"
+      step="any"
+      value={priceInput}
+      onChange={(e) => onPriceInput(e.target.value)}
+      onBlur={onSavePrice}
+      onKeyDown={(e) => e.key === "Enter" && onSavePrice()}
+      className="mt-0.5 w-full max-w-[7rem] rounded border border-gray-300 bg-white px-1.5 py-0.5 text-right text-[11px]"
+    />
+  ) : (
+    <button
+      type="button"
+      onClick={onEditStart}
+      className="mt-0.5 text-[11px] tabular-nums text-sky-600 hover:underline"
+    >
+      {formatMoney(market)}/cp
+    </button>
+  );
+
+  return (
+    <div className="border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5">
+      <div className="md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)] md:items-center md:gap-3">
+        <div className="flex min-w-0 items-start justify-between gap-2 md:contents">
+          <div className="flex min-w-0 items-center gap-2.5 md:min-w-0">
+            <SymbolAvatar symbol={holding.symbol} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold leading-tight">
+                {displayName}
+              </p>
+              <p className="truncate text-xs text-gray-500">{holding.symbol}</p>
+            </div>
+          </div>
+
+          <div className="shrink-0 text-right md:hidden">
+            <MetricStack primary={formatMoney(value)} secondary={priceSecondary} />
+          </div>
+        </div>
+
+        <div className="mt-2.5 grid grid-cols-3 gap-x-2 gap-y-2 md:mt-0 md:contents">
+          <div className="md:text-right">
+            <p className="text-[10px] uppercase tracking-wide text-gray-400 md:hidden">
+              Số lượng
+            </p>
+            <p className="text-sm font-medium tabular-nums">
+              {formatShares(holding.quantity)}
+            </p>
+          </div>
+
+          <div className="md:text-right">
+            <p className="text-[10px] uppercase tracking-wide text-gray-400 md:hidden">
+              Giá vốn
+            </p>
+            <MetricStack
+              primary={formatMoney(holding.totalCost)}
+              secondary={`${formatMoney(holding.avgCost)}/cp`}
+            />
+          </div>
+
+          <div className="md:hidden">
+            <p className="text-[10px] uppercase tracking-wide text-gray-400">
+              Lãi/lỗ
+            </p>
+            {holding.marketPrice ? (
+              <MetricStack
+                primary={formatMoney(unrealized)}
+                secondary={formatPnlArrow(pct)}
+                tone={unrealized}
+              />
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </div>
+
+          <div className="hidden md:block md:text-right">
+            <MetricStack
+              primary={formatMoney(value)}
+              secondary={priceSecondary}
+            />
+          </div>
+
+          <div className="hidden md:block md:text-right">
+            {holding.marketPrice ? (
+              <MetricStack
+                primary={formatMoney(unrealized)}
+                secondary={formatPnlArrow(pct)}
+                tone={unrealized}
+              />
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </div>
+
+          <div className="hidden md:block md:text-right">
+            {dailyChange != null && dailyPct != null ? (
+              <MetricStack
+                primary={formatMoney(dailyChange)}
+                secondary={formatPnlArrow(dailyPct)}
+                tone={dailyChange}
+              />
+            ) : (
+              <span className="text-sm text-gray-400">—</span>
+            )}
+          </div>
+        </div>
+
+        {holding.marketPrice && dailyChange != null && dailyPct != null && (
+          <div className="mt-2 flex items-center justify-between border-t border-gray-100 pt-2 text-xs md:hidden">
+            <span className="text-gray-500">Hôm nay</span>
+            <div className="text-right">
+              <span className={`font-medium tabular-nums ${pnlClass(dailyChange)}`}>
+                {formatMoney(dailyChange)}
+              </span>
+              <span className={`ml-2 tabular-nums ${pnlClass(dailyPct)}`}>
+                {formatPnlArrow(dailyPct)}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function HoldingsTable() {
-  const { stats, setMarketPrice } = useApp();
+  const { stats, state, setMarketPrice } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
 
@@ -28,175 +251,40 @@ export function HoldingsTable() {
     setEditing(null);
   };
 
-  const renderRow = (h: (typeof stats.holdings)[number]) => {
-    const market = h.marketPrice ?? h.avgCost;
-    const value = h.quantity * market;
-    const unrealized = h.marketPrice ? value - h.totalCost : 0;
-    const pct =
-      h.marketPrice && h.totalCost > 0 ? (unrealized / h.totalCost) * 100 : 0;
-
-    return { h, market, value, unrealized, pct };
-  };
-
   return (
-    <div className="rounded-xl border border-gray-200">
-      <div className="space-y-3 p-3 sm:hidden">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="hidden border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)] md:gap-3">
+        <span>Vị thế</span>
+        <span className="text-right">Số lượng</span>
+        <span className="text-right">Giá vốn</span>
+        <span className="text-right">Giá trị</span>
+        <span className="text-right">Lãi/lỗ</span>
+        <span className="text-right">Hôm nay</span>
+      </div>
+
+      <div>
         {pageItems.map((h) => {
-          const { market, value, unrealized, pct } = renderRow(h);
+          const market = h.marketPrice ?? h.avgCost;
           return (
-            <div
+            <HoldingRow
               key={h.symbol}
-              className="rounded-lg border border-gray-200 bg-white p-3 text-sm"
-            >
-              <p className="mb-2 font-medium">{h.symbol}</p>
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                <div>
-                  <dt className="text-gray-500">SL</dt>
-                  <dd className="tabular-nums font-medium">
-                    {formatNumber(h.quantity, 4)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Giá vốn TB</dt>
-                  <dd className="tabular-nums font-medium">
-                    {formatMoney(h.avgCost)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Giá TT</dt>
-                  <dd>
-                    {editing === h.symbol ? (
-                      <input
-                        autoFocus
-                        type="number"
-                        step="any"
-                        value={priceInput}
-                        onChange={(e) => setPriceInput(e.target.value)}
-                        onBlur={() => savePrice(h.symbol)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && savePrice(h.symbol)
-                        }
-                        className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-right text-sm"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setEditing(h.symbol);
-                          setPriceInput(String(market));
-                        }}
-                        className="tabular-nums font-medium text-sky-600 hover:underline"
-                      >
-                        {formatMoney(market)}
-                      </button>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Giá trị</dt>
-                  <dd className="tabular-nums font-medium">
-                    {formatMoney(value)}
-                  </dd>
-                </div>
-                <div className="col-span-2">
-                  <dt className="text-gray-500">Lãi/lỗ chưa chốt</dt>
-                  <dd
-                    className={`tabular-nums font-medium ${
-                      unrealized >= 0 ? "text-emerald-600" : "text-rose-600"
-                    }`}
-                  >
-                    {h.marketPrice ? (
-                      <>
-                        {formatMoney(unrealized)} ({formatPercent(pct)})
-                      </>
-                    ) : (
-                      <span className="text-gray-500">—</span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            </div>
+              holding={h}
+              quote={state.marketQuotes?.[h.symbol]}
+              editing={editing === h.symbol}
+              priceInput={priceInput}
+              onEditStart={() => {
+                setEditing(h.symbol);
+                setPriceInput(String(market));
+              }}
+              onPriceInput={setPriceInput}
+              onSavePrice={() => savePrice(h.symbol)}
+            />
           );
         })}
       </div>
 
-      <div className="hidden sm:block">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-500">
-            <tr>
-              <th className="px-4 py-3">Mã</th>
-              <th className="px-4 py-3 text-right">SL</th>
-              <th className="px-4 py-3 text-right">Giá vốn TB</th>
-              <th className="px-4 py-3 text-right">Giá TT</th>
-              <th className="px-4 py-3 text-right">Giá trị</th>
-              <th className="px-4 py-3 text-right">Lãi/lỗ chưa chốt</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageItems.map((h) => {
-              const { market, value, unrealized, pct } = renderRow(h);
-              return (
-                <tr key={h.symbol} className="border-t border-gray-200">
-                  <td className="px-4 py-3 font-medium">{h.symbol}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatNumber(h.quantity, 4)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(h.avgCost)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {editing === h.symbol ? (
-                      <input
-                        autoFocus
-                        type="number"
-                        step="any"
-                        value={priceInput}
-                        onChange={(e) => setPriceInput(e.target.value)}
-                        onBlur={() => savePrice(h.symbol)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && savePrice(h.symbol)
-                        }
-                        className="w-24 rounded border border-gray-300 bg-white px-2 py-1 text-right text-sm"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setEditing(h.symbol);
-                          setPriceInput(String(market));
-                        }}
-                        className="tabular-nums text-sky-600 hover:underline"
-                      >
-                        {formatMoney(market)}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(value)}
-                  </td>
-                  <td
-                    className={`px-4 py-3 text-right tabular-nums ${
-                      unrealized >= 0 ? "text-emerald-600" : "text-rose-600"
-                    }`}
-                  >
-                    {h.marketPrice ? (
-                      <>
-                        {formatMoney(unrealized)}
-                        <span className="ml-1 text-xs">
-                          ({formatPercent(pct)})
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-gray-500">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
       <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
-        Giá từ Yahoo Finance. Bấm giá để sửa thủ công nếu cần.
+        Giá từ Yahoo Finance. Bấm giá/cp để sửa thủ công nếu cần.
       </p>
 
       <Pagination

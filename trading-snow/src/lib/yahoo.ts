@@ -7,10 +7,12 @@ const YAHOO_HEADERS = {
 export interface QuoteResult {
   symbol: string;
   price: number;
+  change: number;
   changePercent: number;
   currency: string;
   yahooSymbol?: string;
   exchangeName?: string;
+  shortName?: string;
 }
 
 export interface DividendEvent {
@@ -68,14 +70,16 @@ async function fetchQuoteOne(
   if (!meta?.regularMarketPrice) return null;
 
   const prev = meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
-  const changePercent =
-    prev > 0 ? ((meta.regularMarketPrice - prev) / prev) * 100 : 0;
+  const change = meta.regularMarketPrice - prev;
+  const changePercent = prev > 0 ? (change / prev) * 100 : 0;
 
   return {
     symbol: requestedSymbol,
     yahooSymbol: meta.symbol ?? yahooSymbol,
     exchangeName: meta.fullExchangeName ?? meta.exchangeName,
+    shortName: meta.shortName ?? meta.longName,
     price: meta.regularMarketPrice,
+    change,
     changePercent,
     currency: meta.currency ?? "USD",
   };
@@ -134,6 +138,7 @@ export async function fetchQuotesFinnhub(
       results.push({
         symbol: sym.toUpperCase(),
         price: q.c,
+        change: q.d ?? 0,
         changePercent: q.dp ?? 0,
         currency: "USD",
       });
