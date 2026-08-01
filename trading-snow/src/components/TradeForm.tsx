@@ -21,7 +21,7 @@ const assetTypes: { value: AssetType; label: string }[] = [
   { value: "OTHER", label: "Khác" },
 ];
 
-export function TradeForm() {
+export function TradeForm({ onSaved }: { onSaved?: () => void }) {
   const { activePortfolioId, addTransaction } = useApp();
   const [type, setType] = useState<TransactionType>("BUY");
   const [symbol, setSymbol] = useState("");
@@ -63,6 +63,7 @@ export function TradeForm() {
     setPrice("");
     setFee("0");
     setNotes("");
+    onSaved?.();
   };
 
   return (

@@ -216,7 +216,6 @@ function HoldingRow({
             <p className="truncate text-sm font-semibold leading-tight">
               {displayName}
             </p>
-            <p className="truncate text-xs text-gray-500">{holding.symbol}</p>
           </div>
         </div>
 
