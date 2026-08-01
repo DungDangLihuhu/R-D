@@ -35,11 +35,9 @@ const TOOLTIP = {
 
 export function BenchmarkComparison({
   equityCurve,
-  tradingEquityCurve,
   transactions,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
-  tradingEquityCurve?: PortfolioStats["tradingEquityCurve"];
   transactions: Transaction[];
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
@@ -47,12 +45,7 @@ export function BenchmarkComparison({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const curve = useMemo(() => {
-    const primary = tradingEquityCurve?.length
-      ? tradingEquityCurve
-      : equityCurve;
-    return ensureEquityCurve(primary);
-  }, [equityCurve, tradingEquityCurve]);
+  const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
   useEffect(() => {
     if (curve.length < 2) {
@@ -113,8 +106,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Vốn mốc = giá trị đầu kỳ (vị thế + lãi/lỗ đã chốt) · S&P mua giữ ·
-            100 = hòa vốn
+            Vốn mốc = NAV đầu kỳ theo đường vốn · S&P mua giữ · 100 = hòa vốn
             {comparison && (
               <>
                 {" "}
