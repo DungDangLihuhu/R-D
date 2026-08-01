@@ -14,6 +14,11 @@ import {
   formatShares,
 } from "@/lib/format";
 import type { StockAnalysis } from "@/lib/stock-analysis";
+import {
+  assessmentBg,
+  assessmentColor,
+  type StockAssessment,
+} from "@/lib/stock-assessment";
 
 interface SearchSuggestion {
   symbol: string;
@@ -267,7 +272,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
       {data && !loading && (
         <>
           <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6">
-            <div className="flex flex-wrap items-start gap-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
               {data.logo ? (
                 <img
                   src={data.logo}
@@ -321,6 +327,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   </a>
                 )}
               </div>
+              </div>
+              <AssessmentPanel assessment={data.assessment} currency={data.currency} />
             </div>
             {data.note && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -543,6 +551,60 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+function AssessmentPanel({
+  assessment,
+  currency,
+}: {
+  assessment: StockAssessment;
+  currency: string;
+}) {
+  return (
+    <div
+      className={`w-full shrink-0 rounded-xl border p-4 lg:w-56 xl:w-64 ${assessmentBg(assessment.rating)}`}
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        Đánh giá tổng hợp
+      </p>
+      <p className={`mt-1 text-2xl font-bold ${assessmentColor(assessment.rating)}`}>
+        {assessment.label}
+      </p>
+      <p className="mt-0.5 text-xs text-gray-500">Điểm {assessment.score}/100</p>
+      <dl className="mt-3 space-y-2 text-sm">
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-gray-600">Nên mua</dt>
+          <dd className="font-semibold tabular-nums text-emerald-700">
+            {formatMoney(assessment.buyPrice, currency)}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-gray-600">Nên bán</dt>
+          <dd className="font-semibold tabular-nums text-rose-700">
+            {formatMoney(assessment.sellPrice, currency)}
+          </dd>
+        </div>
+      </dl>
+      <ul className="mt-3 space-y-1 border-t border-black/5 pt-3 text-[11px] text-gray-600">
+        {assessment.signals.map((s) => (
+          <li key={s.label} className="flex justify-between gap-2">
+            <span className="truncate">{s.label}</span>
+            <span
+              className={`shrink-0 tabular-nums ${
+                s.score > 0.15
+                  ? "text-emerald-600"
+                  : s.score < -0.15
+                    ? "text-rose-600"
+                    : "text-gray-400"
+              }`}
+            >
+              {s.score > 0.15 ? "+" : s.score < -0.15 ? "−" : "○"}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

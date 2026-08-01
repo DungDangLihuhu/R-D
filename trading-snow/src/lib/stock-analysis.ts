@@ -1,6 +1,11 @@
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
 import { fetchPriceHistory, fetchQuoteForSymbol } from "./yahoo";
+import {
+  computeStockAssessment,
+  type OptionFlowSummary,
+  type StockAssessment,
+} from "./stock-assessment";
 
 export interface AnalysisMetric {
   label: string;
@@ -94,6 +99,7 @@ export interface StockAnalysis {
   news: NewsRow[];
   priceHistory: { date: string; close: number }[];
   priceLevels: PriceLevels;
+  assessment: StockAssessment;
   sources: string[];
   note?: string;
 }
@@ -111,6 +117,37 @@ async function finnhubGet<T>(path: string, symbol: string): Promise<T | null> {
     return data;
   }
   return null;
+}
+
+async function fetchOptionFlow(symbol: string): Promise<OptionFlowSummary | null> {
+  const chain = await finnhubGet<{
+    data?: {
+      options?: {
+        CALL?: { volume?: number; openInterest?: number }[];
+        PUT?: { volume?: number; openInterest?: number }[];
+      };
+    }[];
+  }>("stock/option-chain?", symbol);
+
+  if (!chain?.data?.length) return null;
+
+  let callVolume = 0;
+  let putVolume = 0;
+  for (const expiry of chain.data.slice(0, 4)) {
+    for (const c of expiry.options?.CALL ?? []) {
+      callVolume += c.volume ?? c.openInterest ?? 0;
+    }
+    for (const p of expiry.options?.PUT ?? []) {
+      putVolume += p.volume ?? p.openInterest ?? 0;
+    }
+  }
+
+  if (callVolume + putVolume === 0) return null;
+  return {
+    callVolume,
+    putVolume,
+    putCallRatio: callVolume > 0 ? putVolume / callVolume : 0,
+  };
 }
 
 function metric(label: string, value: string | number | null | undefined, suffix = ""): AnalysisMetric {
@@ -524,6 +561,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
   }>("stock/insider-transactions?", upper);
 
   const peers = (await finnhubGet<string[]>("stock/peers?", upper)) ?? [];
+  const optionFlow = await fetchOptionFlow(upper);
 
   const fromNews = new Date();
   fromNews.setDate(fromNews.getDate() - 30);
@@ -552,6 +590,33 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     }
   }
 
+  const insiderTransactions = (insiderRes?.data ?? []).slice(0, 12).map((t) => {
+    const unitPrice =
+      t.transactionPrice && t.transactionPrice > 0
+        ? t.transactionPrice
+        : quote.price > 0
+          ? quote.price
+          : null;
+    const amount = unitPrice != null ? t.change * unitPrice : null;
+    return {
+      name: t.name,
+      date: t.transactionDate,
+      change: t.change,
+      shares: t.share,
+      transactionCode: t.transactionCode,
+      transactionPrice: t.transactionPrice ?? null,
+      amount,
+    };
+  });
+
+  const priceLevels = computePriceLevels(
+    quote.price,
+    m,
+    priceHistory,
+    recommendations,
+    earningsUpcoming
+  );
+
   return {
     symbol: upper,
     name: profile?.name ?? quote.shortName ?? upper,
@@ -576,33 +641,19 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     })),
     earningsUpcoming: earningsUpcoming.slice(0, 4),
     recommendations: recommendations.slice(0, 6),
-    insiderTransactions: (insiderRes?.data ?? []).slice(0, 12).map((t) => {
-      const unitPrice =
-        t.transactionPrice && t.transactionPrice > 0
-          ? t.transactionPrice
-          : quote.price > 0
-            ? quote.price
-            : null;
-      const amount = unitPrice != null ? t.change * unitPrice : null;
-      return {
-        name: t.name,
-        date: t.transactionDate,
-        change: t.change,
-        shares: t.share,
-        transactionCode: t.transactionCode,
-        transactionPrice: t.transactionPrice ?? null,
-        amount,
-      };
-    }),
+    insiderTransactions,
     news,
     priceHistory,
-    priceLevels: computePriceLevels(
-      quote.price,
-      m,
-      priceHistory,
+    priceLevels,
+    assessment: computeStockAssessment({
+      price: quote.price,
+      metrics: m,
+      news,
+      insiderTransactions,
       recommendations,
-      earningsUpcoming
-    ),
+      priceLevels,
+      optionFlow,
+    }),
     sources,
     note,
   };
