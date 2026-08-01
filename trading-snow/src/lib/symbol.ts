@@ -310,18 +310,30 @@ export function encodeYahooSymbol(symbol: string): string {
  */
 export const YAHOO_SYMBOL_ALIASES: Record<string, string[]> = {
   // TotalEnergies OTC & legacy
-  TTFNF: ["TTE.PA", "TOT"],
-  TTF: ["TTE.PA", "TOT"],
+  TTFNF: ["TTE.PA", "TTE", "TOT"],
+  TTF: ["TTE.PA", "TTE", "TOT"],
   FP: ["TTE.PA", "FP.PA"],
   TTE: ["TTE.PA"],
   TOT: ["TTE.PA", "TOT"],
+  "TTE.PA": ["TTE"],
 
-  // Euronext Paris (when imported without .PA suffix)
-  BNP: ["BNP.PA"],
-  GLE: ["GLE.PA"],
+  // US equities & ETFs (portfolio)
+  UPRO: ["UPRO"],
+  SSO: ["SSO"],
+  ABT: ["ABT"],
+  BAC: ["BAC"],
+
+  // Euronext Paris — bare, suffixed, OTC fallback
+  BNP: ["BNP.PA", "BNPQY"],
+  "BNP.PA": ["BNPQY"],
+  GLE: ["GLE.PA", "SCGLY"],
+  "GLE.PA": ["SCGLY"],
   CS: ["CS.PA"],
+  "CS.PA": ["CS.PA"],
   BVI: ["BVI.PA"],
+  "BVI.PA": ["BVI.PA"],
   EDEN: ["EDEN.PA"],
+  "EDEN.PA": ["EDEN.PA"],
   SAN: ["SAN.PA"],
   MC: ["MC.PA"],
   OR: ["OR.PA"],
@@ -345,10 +357,6 @@ export const YAHOO_SYMBOL_ALIASES: Record<string, string[]> = {
   URW: ["URW.PA"],
   STM: ["STM.PA"],
   STMPA: ["STM.PA"],
-
-  // US leveraged ETFs (some brokers use odd tickers)
-  UPRO: ["UPRO"],
-  SSO: ["SSO"],
 };
 
 /** Yahoo symbols to try for quote lookup, in order */
