@@ -32,6 +32,7 @@ interface AppContextValue {
   setActivePortfolioId: (id: string) => void;
   stats: PortfolioStats;
   priceLoading: boolean;
+  quoteUnresolved: string[];
   cloudConfigured: boolean;
   syncRoom: string;
   addPortfolio: (name: string, currency: string) => void;
@@ -54,6 +55,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activePortfolioId, setActivePortfolioId] = useState("default");
   const [hydrated, setHydrated] = useState(false);
   const [priceLoading, setPriceLoading] = useState(false);
+  const [quoteUnresolved, setQuoteUnresolved] = useState<string[]>([]);
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [syncRoom, setSyncRoom] = useState("shared");
 
@@ -165,6 +167,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (list.length === 0) return;
 
     setPriceLoading(true);
+    setQuoteUnresolved([]);
     try {
       const res = await fetch(`/api/quotes?symbols=${list.join(",")}`);
       if (!res.ok) return;
@@ -198,6 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           pricesUpdatedAt: data.updatedAt ?? new Date().toISOString(),
         };
       });
+      setQuoteUnresolved(data.unresolved ?? []);
     } finally {
       setPriceLoading(false);
     }
@@ -308,6 +312,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActivePortfolioId,
         stats,
         priceLoading,
+        quoteUnresolved,
         cloudConfigured,
         syncRoom,
         addPortfolio,
