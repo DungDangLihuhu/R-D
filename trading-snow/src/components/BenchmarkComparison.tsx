@@ -61,7 +61,8 @@ export function BenchmarkComparison({
       return;
     }
 
-    const fetchFrom = extendBenchmarkFrom(window.from);
+    const historyStart = curve[0].date.slice(0, 10);
+    const fetchFrom = extendBenchmarkFrom(historyStart);
 
     setLoading(true);
     setError(null);
