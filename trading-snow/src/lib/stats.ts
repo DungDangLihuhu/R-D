@@ -38,6 +38,7 @@ export function computePortfolioStats(
   let realizedPnl = 0;
 
   const equityPoints: { date: string; equity: number }[] = [];
+  const tradingEquityPoints: { date: string; equity: number }[] = [];
   const monthlyMap = new Map<string, number>();
 
   const addMonthlyPnl = (date: string, pnl: number) => {
@@ -61,6 +62,10 @@ export function computePortfolioStats(
     equityPoints.push({
       date,
       equity: cashBalance + holdingsValueAtPrices(useMarket),
+    });
+    tradingEquityPoints.push({
+      date,
+      equity: holdingsValueAtPrices(useMarket) + realizedPnl,
     });
   };
 
@@ -180,6 +185,14 @@ export function computePortfolioStats(
     lastPoint.equity = portfolioValue;
   }
 
+  const lastTrading = tradingEquityPoints[tradingEquityPoints.length - 1];
+  if (!lastTrading || Math.abs(lastTrading.equity - tradingValue) > 0.01) {
+    tradingEquityPoints.push({ date: now, equity: tradingValue });
+  } else {
+    lastTrading.date = now;
+    lastTrading.equity = tradingValue;
+  }
+
   const monthlyPnl = [...monthlyMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, pnl]) => ({ month, pnl }));
@@ -231,6 +244,7 @@ export function computePortfolioStats(
     closedTrades,
     monthlyPnl,
     equityCurve: equityPoints,
+    tradingEquityCurve: tradingEquityPoints,
     holdingsValue,
     holdingsCost,
     totalFees,

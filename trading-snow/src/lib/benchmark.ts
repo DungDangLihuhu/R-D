@@ -37,18 +37,35 @@ function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Resolve comparison window; clamps to portfolio history */
+/** Pad curve so benchmark always has at least 2 points. */
+export function ensureEquityCurve(
+  equityCurve: { date: string; equity: number }[]
+): { date: string; equity: number }[] {
+  if (equityCurve.length === 0) return [];
+  if (equityCurve.length >= 2) {
+    return [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const only = equityCurve[0];
+  return [
+    { date: only.date, equity: only.equity },
+    { date: new Date().toISOString(), equity: only.equity },
+  ];
+}
+
+/** Resolve comparison window; clamps to portfolio history. */
 export function resolveBenchmarkWindow(
   equityCurve: { date: string; equity: number }[],
   range: BenchmarkRange,
   now = new Date()
 ): { from: string; to: string } | null {
-  if (equityCurve.length < 2) return null;
+  const curve = ensureEquityCurve(equityCurve);
+  if (curve.length < 2) return null;
 
-  const sorted = [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
-  const portfolioStart = sorted[0].date.slice(0, 10);
-  const portfolioEnd = sorted[sorted.length - 1].date.slice(0, 10);
-  const to = portfolioEnd < toDateStr(now) ? portfolioEnd : toDateStr(now);
+  const portfolioStart = curve[0].date.slice(0, 10);
+  const portfolioEnd = curve[curve.length - 1].date.slice(0, 10);
+  const today = toDateStr(now);
+  const to = today > portfolioEnd ? today : portfolioEnd;
 
   let from: string;
   switch (range) {
@@ -71,7 +88,7 @@ export function resolveBenchmarkWindow(
   }
 
   if (from < portfolioStart) from = portfolioStart;
-  if (from >= to) return null;
+  if (from > to) from = portfolioStart;
 
   return { from, to };
 }
@@ -129,10 +146,62 @@ function adjustedEquity(
   return rawEquity - netExternalFlowSince(transactions, periodStart, asOfDate);
 }
 
+function pickBenchmarkSeries(
+  benchmark: HistoryPoint[],
+  startDate: string,
+  endDate: string
+): HistoryPoint[] {
+  let series = benchmark
+    .filter((b) => b.date >= startDate && b.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (series.length >= 2) return series;
+
+  const upToEnd = benchmark
+    .filter((b) => b.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (upToEnd.length >= 2) {
+    const idx = upToEnd.findIndex((b) => b.date >= startDate);
+    const sliceFrom = idx >= 0 ? Math.max(0, idx - 1) : upToEnd.length - 2;
+    return upToEnd.slice(sliceFrom);
+  }
+
+  return benchmark.length >= 2
+    ? benchmark.slice(-2)
+    : benchmark;
+}
+
+function resolvePeriodStart(
+  dates: string[],
+  equityByDate: Map<string, number>,
+  transactions: Transaction[],
+  requestedStart: string
+): { periodStart: string; startEquity: number } {
+  const tryStart = (start: string) => {
+    const raw = equityByDate.get(start) ?? equityByDate.get(dates[0]) ?? 0;
+    const adj = adjustedEquity(raw, transactions, start, start);
+    return { periodStart: start, startEquity: adj, raw };
+  };
+
+  let { periodStart, startEquity, raw } = tryStart(requestedStart);
+
+  if (startEquity > 0) return { periodStart, startEquity };
+
+  for (const d of dates) {
+    const candidate = tryStart(d);
+    if (candidate.startEquity > 0) {
+      return { periodStart: candidate.periodStart, startEquity: candidate.startEquity };
+    }
+  }
+
+  const fallback = Math.max(Math.abs(raw), Math.abs(startEquity), 1);
+  return { periodStart, startEquity: fallback };
+}
+
 /**
  * Compare portfolio vs S&P 500 from period start:
- * - Vốn mốc = NAV danh mục tại ngày đầu kỳ (không cộng nạp/rút sau đó)
- * - Danh mục: NAV điều chỉnh (bỏ ảnh hưởng nạp/rút) — phản ánh lãi/lỗ đã chốt + chưa chốt
+ * - Vốn mốc = giá trị danh mục tại ngày đầu kỳ (điều chỉnh nạp/rút)
  * - S&P: mua giữ từ đầu kỳ với cùng vốn mốc
  * - Cả hai chuẩn hóa = 100 tại ngày đầu kỳ
  */
@@ -142,36 +211,36 @@ export function buildBenchmarkComparison(
   transactions: Transaction[],
   window?: { from: string; to: string }
 ): ComparisonResult | null {
-  if (equityCurve.length < 2 || benchmark.length < 2) return null;
+  const curve = ensureEquityCurve(equityCurve);
+  if (curve.length < 2 || benchmark.length < 1) return null;
 
-  const sortedEquity = [...equityCurve].sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
-
+  const sortedEquity = [...curve].sort((a, b) => a.date.localeCompare(b.date));
   const startDate = window?.from ?? sortedEquity[0].date.slice(0, 10);
   const endDate =
     window?.to ?? sortedEquity[sortedEquity.length - 1].date.slice(0, 10);
 
-  const benchInRange = benchmark.filter(
-    (b) => b.date >= startDate && b.date <= endDate
-  );
-  if (benchInRange.length < 2) return null;
+  const benchInRange = pickBenchmarkSeries(benchmark, startDate, endDate);
+  if (benchInRange.length < 1) return null;
 
   const dates = benchInRange.map((b) => b.date);
   const equityByDate = forwardFillEquity(sortedEquity, dates);
 
-  const periodStart = dates[0];
-  const startBench = benchInRange[0].close;
-  const startEquity = adjustedEquity(
-    equityByDate.get(periodStart) ?? 0,
+  const { periodStart, startEquity } = resolvePeriodStart(
+    dates,
+    equityByDate,
     transactions,
-    periodStart,
-    periodStart
+    dates[0]
   );
 
-  if (startEquity <= 0 || startBench <= 0) return null;
+  const startBenchIdx = benchInRange.findIndex((b) => b.date >= periodStart);
+  const startBench =
+    benchInRange[startBenchIdx >= 0 ? startBenchIdx : 0].close;
+  if (startBench <= 0) return null;
 
-  const points: ComparisonPoint[] = benchInRange.map((b) => {
+  const benchFromStart =
+    startBenchIdx > 0 ? benchInRange.slice(startBenchIdx) : benchInRange;
+
+  const points: ComparisonPoint[] = benchFromStart.map((b) => {
     const raw = equityByDate.get(b.date) ?? startEquity;
     const adj = adjustedEquity(raw, transactions, periodStart, b.date);
 
@@ -181,6 +250,8 @@ export function buildBenchmarkComparison(
       sp500: (b.close / startBench) * 100,
     };
   });
+
+  if (points.length < 1) return null;
 
   const last = points[points.length - 1];
   const portfolioReturn = last.portfolio - 100;
@@ -192,7 +263,14 @@ export function buildBenchmarkComparison(
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
     investedCapital: startEquity,
-    from: startDate,
+    from: periodStart,
     to: endDate,
   };
+}
+
+/** Fetch benchmark from a few days earlier to ensure enough data points. */
+export function extendBenchmarkFrom(from: string, days = 14): string {
+  const d = new Date(from);
+  d.setDate(d.getDate() - days);
+  return toDateStr(d);
 }
