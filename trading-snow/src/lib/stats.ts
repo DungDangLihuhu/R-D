@@ -1,9 +1,15 @@
 import type {
   ClosedTrade,
   Holding,
+  MarketQuote,
   PortfolioStats,
   Transaction,
 } from "./types";
+import {
+  buildIrrCashFlows,
+  computeTotalProfit,
+  computeXirr,
+} from "./portfolio-snowball";
 
 interface PositionState {
   quantity: number;
@@ -13,20 +19,22 @@ interface PositionState {
 export function computePortfolioStats(
   transactions: Transaction[],
   portfolioId: string,
-  marketPrices: Record<string, number> = {}
+  marketPrices: Record<string, number> = {},
+  marketQuotes: Record<string, MarketQuote> = {}
 ): PortfolioStats {
   const sorted = [...transactions]
     .filter((t) => t.portfolioId === portfolioId)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const positions = new Map<string, PositionState>();
-  const holdingsMap = new Map<string, Holding>();
   const closedTrades: ClosedTrade[] = [];
+  const lastPrices = new Map<string, number>();
 
   let cashBalance = 0;
   let totalDeposits = 0;
   let totalWithdrawals = 0;
   let totalDividends = 0;
+  let totalFees = 0;
   let realizedPnl = 0;
 
   const equityPoints: { date: string; equity: number }[] = [];
@@ -37,18 +45,28 @@ export function computePortfolioStats(
     monthlyMap.set(month, (monthlyMap.get(month) ?? 0) + pnl);
   };
 
-  const snapshotEquity = (date: string) => {
-    let holdingsValue = 0;
+  const holdingsValueAtPrices = (useMarket: boolean) => {
+    let value = 0;
     for (const [symbol, pos] of positions) {
       if (pos.quantity <= 0) continue;
-      const price = marketPrices[symbol] ?? pos.totalCost / pos.quantity;
-      holdingsValue += pos.quantity * price;
+      const price = useMarket
+        ? marketPrices[symbol] ?? lastPrices.get(symbol) ?? pos.totalCost / pos.quantity
+        : lastPrices.get(symbol) ?? pos.totalCost / pos.quantity;
+      value += pos.quantity * price;
     }
-    equityPoints.push({ date, equity: cashBalance + holdingsValue });
+    return value;
+  };
+
+  const snapshotEquity = (date: string, useMarket = false) => {
+    equityPoints.push({
+      date,
+      equity: cashBalance + holdingsValueAtPrices(useMarket),
+    });
   };
 
   for (const tx of sorted) {
     const gross = tx.quantity * tx.price;
+    totalFees += tx.fee;
 
     switch (tx.type) {
       case "DEPOSIT":
@@ -71,6 +89,7 @@ export function computePortfolioStats(
         pos.quantity += tx.quantity;
         pos.totalCost += cost;
         positions.set(tx.symbol, pos);
+        lastPrices.set(tx.symbol, tx.price);
         break;
       }
       case "SELL": {
@@ -86,6 +105,7 @@ export function computePortfolioStats(
         pos.quantity = Math.max(0, pos.quantity - tx.quantity);
         pos.totalCost = Math.max(0, pos.totalCost - costBasis);
         positions.set(tx.symbol, pos);
+        lastPrices.set(tx.symbol, tx.price);
 
         closedTrades.push({
           symbol: tx.symbol,
@@ -99,7 +119,7 @@ export function computePortfolioStats(
         break;
       }
     }
-    snapshotEquity(tx.date);
+    snapshotEquity(tx.date, false);
   }
 
   let unrealizedPnl = 0;
@@ -121,7 +141,6 @@ export function computePortfolioStats(
       totalCost: pos.totalCost,
       marketPrice,
     });
-    holdingsMap.set(symbol, holdings[holdings.length - 1]);
   }
 
   holdings.sort((a, b) => b.totalCost - a.totalCost);
@@ -148,9 +167,47 @@ export function computePortfolioStats(
     return s + h.quantity * price;
   }, 0);
 
+  const holdingsCost = holdings.reduce((s, h) => s + h.totalCost, 0);
+  const portfolioValue = cashBalance + holdingsValue;
+
+  const now = new Date().toISOString();
+  const lastPoint = equityPoints[equityPoints.length - 1];
+  if (!lastPoint || Math.abs(lastPoint.equity - portfolioValue) > 0.01) {
+    equityPoints.push({ date: now, equity: portfolioValue });
+  } else {
+    lastPoint.date = now;
+    lastPoint.equity = portfolioValue;
+  }
+
   const monthlyPnl = [...monthlyMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([month, pnl]) => ({ month, pnl }));
+
+  const totalProfit = computeTotalProfit(
+    portfolioValue,
+    totalDeposits,
+    totalWithdrawals
+  );
+  const totalProfitPercent =
+    holdingsCost > 0 ? (totalProfit / holdingsCost) * 100 : 0;
+
+  let dailyHoldingsProfit = 0;
+  for (const h of holdings) {
+    const quote = marketQuotes[h.symbol];
+    if (quote) {
+      dailyHoldingsProfit += h.quantity * quote.change;
+    }
+  }
+  const prevHoldingsValue = holdingsValue - dailyHoldingsProfit;
+  const dailyHoldingsProfitPercent =
+    prevHoldingsValue > 0 ? (dailyHoldingsProfit / prevHoldingsValue) * 100 : 0;
+
+  const profitExDivSales = unrealizedPnl;
+  const profitExDivSalesPercent =
+    holdingsCost > 0 ? (profitExDivSales / holdingsCost) * 100 : 0;
+
+  const irrFlows = buildIrrCashFlows(sorted, portfolioValue);
+  const irr = computeXirr(irrFlows);
 
   return {
     totalDeposits,
@@ -159,7 +216,7 @@ export function computePortfolioStats(
     realizedPnl,
     unrealizedPnl,
     totalPnl: realizedPnl + unrealizedPnl,
-    portfolioValue: cashBalance + holdingsValue,
+    portfolioValue,
     cashBalance,
     winCount,
     lossCount,
@@ -172,5 +229,15 @@ export function computePortfolioStats(
     closedTrades,
     monthlyPnl,
     equityCurve: equityPoints,
+    holdingsValue,
+    holdingsCost,
+    totalFees,
+    totalProfit,
+    totalProfitPercent,
+    dailyHoldingsProfit,
+    dailyHoldingsProfitPercent,
+    profitExDivSales,
+    profitExDivSalesPercent,
+    irr,
   };
 }

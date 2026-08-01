@@ -32,7 +32,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 lg:col-span-2">
-          <h2 className="mb-4 font-semibold">Đường vốn (Equity curve)</h2>
+          <h2 className="mb-4 font-semibold">Đường vốn (giá trị danh mục)</h2>
           <EquityChart data={stats.equityCurve} />
         </div>
         <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">

@@ -68,6 +68,16 @@ export interface PortfolioStats {
   closedTrades: ClosedTrade[];
   monthlyPnl: { month: string; pnl: number }[];
   equityCurve: { date: string; equity: number }[];
+  holdingsValue: number;
+  holdingsCost: number;
+  totalFees: number;
+  totalProfit: number;
+  totalProfitPercent: number;
+  dailyHoldingsProfit: number;
+  dailyHoldingsProfitPercent: number;
+  profitExDivSales: number;
+  profitExDivSalesPercent: number;
+  irr: number | null;
 }
 
 export interface AppState {

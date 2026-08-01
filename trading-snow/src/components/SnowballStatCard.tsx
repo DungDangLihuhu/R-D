@@ -37,7 +37,7 @@ export function SnowballStatCard({
         </span>
         <span className="text-sm text-gray-400">{label}</span>
         {tooltip && (
-          <span title={tooltip} className="text-gray-500">
+          <span title={tooltip} className="cursor-help text-gray-500 whitespace-pre-line">
             <HelpCircle className="h-3.5 w-3.5" />
           </span>
         )}

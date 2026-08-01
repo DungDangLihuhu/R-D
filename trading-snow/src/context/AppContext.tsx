@@ -157,9 +157,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       computePortfolioStats(
         state.transactions,
         activePortfolioId,
-        state.marketPrices
+        state.marketPrices,
+        state.marketQuotes ?? {}
       ),
-    [state.transactions, state.marketPrices, activePortfolioId]
+    [state.transactions, state.marketPrices, state.marketQuotes, activePortfolioId]
   );
 
   const holdingSymbols = useMemo(
