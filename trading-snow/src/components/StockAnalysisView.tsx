@@ -458,6 +458,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                       <th className="pb-2 pr-4">Ngày</th>
                       <th className="pb-2 pr-4">Người</th>
                       <th className="pb-2 pr-4 text-right">Thay đổi CP</th>
+                      <th className="pb-2 pr-4 text-right">Số tiền</th>
                       <th className="pb-2 text-right">Còn lại</th>
                     </tr>
                   </thead>
@@ -473,6 +474,15 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                         >
                           {t.change >= 0 ? "+" : ""}
                           {formatShares(t.change)}
+                        </td>
+                        <td
+                          className={`py-2 pr-4 text-right tabular-nums ${
+                            (t.amount ?? t.change) >= 0 ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {t.amount != null
+                            ? `${t.amount >= 0 ? "+" : ""}${formatMoney(t.amount, data.currency)}`
+                            : "—"}
                         </td>
                         <td className="py-2 text-right tabular-nums">
                           {formatShares(t.shares)}
@@ -557,7 +567,7 @@ function MetricSection({
   metrics,
 }: {
   title: string;
-  metrics: { label: string; value: string }[];
+  metrics: { label: string; value: string; tone?: "positive" | "negative" }[];
 }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -569,7 +579,17 @@ function MetricSection({
             className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-1.5 text-sm"
           >
             <dt className="text-gray-500">{m.label}</dt>
-            <dd className="font-medium tabular-nums text-right">{m.value}</dd>
+            <dd
+              className={`font-medium tabular-nums text-right ${
+                m.tone === "positive"
+                  ? "text-emerald-600"
+                  : m.tone === "negative"
+                    ? "text-rose-600"
+                    : ""
+              }`}
+            >
+              {m.value}
+            </dd>
           </div>
         ))}
       </dl>

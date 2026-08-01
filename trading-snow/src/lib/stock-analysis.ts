@@ -5,6 +5,7 @@ import { fetchPriceHistory, fetchQuoteForSymbol } from "./yahoo";
 export interface AnalysisMetric {
   label: string;
   value: string;
+  tone?: "positive" | "negative";
 }
 
 export interface AnalysisSection {
@@ -26,6 +27,8 @@ export interface InsiderRow {
   change: number;
   shares: number;
   transactionCode: string;
+  transactionPrice?: number | null;
+  amount?: number | null;
 }
 
 export interface NewsRow {
@@ -115,6 +118,51 @@ function metric(label: string, value: string | number | null | undefined, suffix
     return { label, value: "—" };
   }
   return { label, value: `${value}${suffix}` };
+}
+
+function signedMetric(
+  label: string,
+  value: number | null | undefined,
+  format: (v: number) => string
+): AnalysisMetric {
+  const m = metric(label, value != null && Number.isFinite(value) ? format(value) : "—");
+  if (value != null && Number.isFinite(value)) {
+    if (value > 0) m.tone = "positive";
+    else if (value < 0) m.tone = "negative";
+  }
+  return m;
+}
+
+function positiveIfAbove(
+  label: string,
+  value: number | null | undefined,
+  format: (v: number) => string,
+  threshold: number
+): AnalysisMetric {
+  const m = metric(label, value != null && Number.isFinite(value) ? format(value) : "—");
+  if (value != null && Number.isFinite(value)) {
+    if (value >= threshold) m.tone = "positive";
+    else m.tone = "negative";
+  }
+  return m;
+}
+
+function debtMetric(label: string, value: number | null | undefined): AnalysisMetric {
+  const m = metric(label, num(value));
+  if (value != null && Number.isFinite(value)) {
+    if (value <= 0.5) m.tone = "positive";
+    else if (value > 1) m.tone = "negative";
+  }
+  return m;
+}
+
+function volatilityMetric(label: string, value: number | null | undefined): AnalysisMetric {
+  const m = metric(label, pct(value));
+  if (value != null && Number.isFinite(value)) {
+    if (value <= 25) m.tone = "positive";
+    else if (value > 40) m.tone = "negative";
+  }
+  return m;
 }
 
 function pct(v: number | null | undefined): string {
@@ -318,10 +366,10 @@ function buildSections(
         metric("Vốn hóa", capMillions(profile.marketCapitalization ?? m.marketCapitalization)),
         metric("Doanh thu TTM", revenueTtm != null ? capMillions(revenueTtm / 1_000_000) : "—"),
         metric("EPS TTM", num(m.epsTTM)),
-        metric("EPS tăng Y/Y", pct(m.epsGrowthTTMYoy)),
-        metric("Doanh thu tăng Y/Y", pct(m.revenueGrowthTTMYoy)),
+        signedMetric("EPS tăng Y/Y", m.epsGrowthTTMYoy, pct),
+        signedMetric("Doanh thu tăng Y/Y", m.revenueGrowthTTMYoy, pct),
         metric("Cổ tức/năm", num(m.dividendPerShareTTM, 4)),
-        metric("Tỷ suất cổ tức", pct(m.dividendYieldIndicatedAnnual)),
+        positiveIfAbove("Tỷ suất cổ tức", m.dividendYieldIndicatedAnnual, pct, 0),
         metric("Tiền mặt/CP", num(m.cashPerSharePerShareQuarterly)),
         metric("Beta", num(m.beta)),
         metric("Nhân viên (doanh thu/NV)", num(m.revenueEmployeeTTM)),
@@ -338,24 +386,24 @@ function buildSections(
         metric("P/B", num(m.pb)),
         metric("P/FCF TTM", num(m.pfcfShareTTM)),
         metric("EV/EBITDA TTM", num(m.evEbitdaTTM)),
-        metric("Thanh toán hiện hành", num(m.currentRatioQuarterly)),
-        metric("Nợ/VCSH", num(m["totalDebt/totalEquityQuarterly"])),
-        metric("Nợ dài hạn/VCSH", num(m["longTermDebt/equityQuarterly"])),
+        positiveIfAbove("Thanh toán hiện hành", m.currentRatioQuarterly, num, 1),
+        debtMetric("Nợ/VCSH", m["totalDebt/totalEquityQuarterly"]),
+        debtMetric("Nợ dài hạn/VCSH", m["longTermDebt/equityQuarterly"]),
       ],
     },
     {
       id: "profitability",
       title: "Lợi nhuận",
       metrics: [
-        metric("Biên gộp TTM", pct(m.grossMarginTTM)),
-        metric("Biên hoạt động TTM", pct(m.operatingMarginTTM)),
-        metric("Biên ròng TTM", pct(m.netProfitMarginTTM)),
-        metric("ROE TTM", pct(m.roeTTM)),
-        metric("ROE 5Y", pct(m.roe5Y)),
-        metric("EPS Q/Q Y/Y", pct(m.epsGrowthQuarterlyYoy)),
-        metric("Doanh thu Q/Q Y/Y", pct(m.revenueGrowthQuarterlyYoy)),
-        metric("EPS tăng 3Y", pct(m.epsGrowth3Y)),
-        metric("EPS tăng 5Y", pct(m.epsGrowth5Y)),
+        positiveIfAbove("Biên gộp TTM", m.grossMarginTTM, pct, 30),
+        positiveIfAbove("Biên hoạt động TTM", m.operatingMarginTTM, pct, 10),
+        positiveIfAbove("Biên ròng TTM", m.netProfitMarginTTM, pct, 5),
+        positiveIfAbove("ROE TTM", m.roeTTM, pct, 10),
+        positiveIfAbove("ROE 5Y", m.roe5Y, pct, 10),
+        signedMetric("EPS Q/Q Y/Y", m.epsGrowthQuarterlyYoy, pct),
+        signedMetric("Doanh thu Q/Q Y/Y", m.revenueGrowthQuarterlyYoy, pct),
+        signedMetric("EPS tăng 3Y", m.epsGrowth3Y, pct),
+        signedMetric("EPS tăng 5Y", m.epsGrowth5Y, pct),
         metric("Tỷ lệ trả cổ tức", pct((m.payoutRatioTTM ?? 0) * 100)),
       ],
     },
@@ -365,11 +413,11 @@ function buildSections(
       metrics: [
         metric("Cao 52 tuần", num(m["52WeekHigh"])),
         metric("Thấp 52 tuần", num(m["52WeekLow"])),
-        metric("Lợi nhuận 52 tuần", pct(m["52WeekPriceReturnDaily"])),
-        metric("Lợi nhuận 3 tháng", pct(m["13WeekPriceReturnDaily"])),
+        signedMetric("Lợi nhuận 52 tuần", m["52WeekPriceReturnDaily"], pct),
+        signedMetric("Lợi nhuận 3 tháng", m["13WeekPriceReturnDaily"], pct),
         metric("KL TB 10 ngày", num(m["10DayAverageTradingVolume"], 0)),
         metric("KL TB 3 tháng", num(m["3MonthAverageTradingVolume"], 0)),
-        metric("Độ biến động 3 tháng", pct(m["3MonthADReturnStd"])),
+        volatilityMetric("Độ biến động 3 tháng", m["3MonthADReturnStd"]),
       ],
     },
   ];
@@ -471,6 +519,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
       change: number;
       transactionDate: string;
       transactionCode: string;
+      transactionPrice?: number;
     }[];
   }>("stock/insider-transactions?", upper);
 
@@ -527,13 +576,24 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     })),
     earningsUpcoming: earningsUpcoming.slice(0, 4),
     recommendations: recommendations.slice(0, 6),
-    insiderTransactions: (insiderRes?.data ?? []).slice(0, 12).map((t) => ({
-      name: t.name,
-      date: t.transactionDate,
-      change: t.change,
-      shares: t.share,
-      transactionCode: t.transactionCode,
-    })),
+    insiderTransactions: (insiderRes?.data ?? []).slice(0, 12).map((t) => {
+      const unitPrice =
+        t.transactionPrice && t.transactionPrice > 0
+          ? t.transactionPrice
+          : quote.price > 0
+            ? quote.price
+            : null;
+      const amount = unitPrice != null ? t.change * unitPrice : null;
+      return {
+        name: t.name,
+        date: t.transactionDate,
+        change: t.change,
+        shares: t.share,
+        transactionCode: t.transactionCode,
+        transactionPrice: t.transactionPrice ?? null,
+        amount,
+      };
+    }),
     news,
     priceHistory,
     priceLevels: computePriceLevels(
