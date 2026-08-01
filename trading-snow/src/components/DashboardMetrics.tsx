@@ -21,7 +21,6 @@ function formatSignedPercent(value: number): string {
 }
 
 export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
-  const [hideValues, setHideValues] = useState(false);
   const [dividendEvents, setDividendEvents] = useState<DividendEventLike[]>([]);
 
   const symbols = useMemo(
@@ -60,27 +59,6 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
     [stats.holdings, stats.holdingsValue, dividendEvents]
   );
 
-  const valueTooltip = [
-    "Giá trị = vị thế đang giữ (giá TT) + lãi/lỗ đã chốt.",
-    "Vị thế: " + formatMoney(stats.holdingsValue),
-    "Đã chốt: " + formatMoney(stats.realizedPnl),
-  ].join("\n");
-
-  const profitTooltip = [
-    "Lợi nhuận tổng gồm cổ tức, lãi/lỗ bán, phí và lãi/lỗ chưa chốt.",
-    "Không gồm nạp/rút tiền.",
-  ].join("\n");
-
-  const irrTooltip = [
-    "IRR — tỷ suất sinh lời nội bộ hàng năm.",
-    "Tính từ mua, bán, cổ tức, phí và giá trị hiện tại.",
-  ].join("\n");
-
-  const passiveTooltip = [
-    "Cổ tức dự kiến 12 tháng tới (theo lịch sử 12 tháng).",
-    "Tỷ suất % trên giá trị vị thế (không gồm tiền mặt).",
-  ].join("\n");
-
   const hasDailyQuote = stats.holdings.some((h) => h.marketPrice != null);
 
   return (
@@ -91,9 +69,6 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         sub={`${formatMoney(stats.holdingsCost)} đã đầu tư`}
         icon={Wallet}
         iconClassName="bg-sky-100 text-sky-600"
-        tooltip={valueTooltip}
-        hidden={hideValues}
-        onToggleHidden={() => setHideValues((v) => !v)}
       />
       <SnowballStatCard
         label="Lợi nhuận"
@@ -112,8 +87,6 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
           text: formatSignedPercent(stats.totalProfitPercent),
           positive: stats.totalProfitPercent >= 0,
         }}
-        tooltip={profitTooltip}
-        hidden={hideValues}
       />
       <SnowballStatCard
         label="IRR"
@@ -123,8 +96,6 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         sub={`${formatSignedPercent(stats.profitExDivSalesPercent)} vị thế hiện tại`}
         icon={Calendar}
         iconClassName="bg-violet-100 text-violet-600"
-        tooltip={irrTooltip}
-        hidden={hideValues}
       />
       <SnowballStatCard
         label="Thu nhập thụ động"
@@ -132,8 +103,6 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         sub={`${formatMoney(passiveIncome.annualIncome)} / năm`}
         icon={PiggyBank}
         iconClassName="bg-emerald-100 text-emerald-600"
-        tooltip={passiveTooltip}
-        hidden={hideValues}
       />
     </div>
   );
