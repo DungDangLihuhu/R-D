@@ -117,7 +117,7 @@ async function searchYahooSymbol(query: string): Promise<string | null> {
   return equity?.symbol?.toUpperCase() ?? null;
 }
 
-async function fetchQuoteForSymbol(requested: string): Promise<QuoteResult | null> {
+export async function fetchQuoteForSymbol(requested: string): Promise<QuoteResult | null> {
   const candidates = resolveYahooSymbolCandidates(requested);
 
   for (const yahoo of candidates) {
