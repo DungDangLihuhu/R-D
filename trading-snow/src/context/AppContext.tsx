@@ -18,6 +18,7 @@ import {
   loadRemoteState,
   saveRemoteState,
 } from "@/lib/remote-storage";
+import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
 import { defaultState, loadState, saveState } from "@/lib/storage";
 import type {
   AppState,
@@ -169,25 +170,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setPriceLoading(true);
     setQuoteUnresolved([]);
     try {
-      const res = await fetch(`/api/quotes?symbols=${list.join(",")}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const msg = data.error ?? `Không lấy được giá (HTTP ${res.status})`;
-        if (opts?.notify) alert(msg);
-        return;
-      }
-      const quotes: {
+      const mergedPrices: Record<string, number> = {};
+      const mergedQuotes: {
         symbol: string;
         price: number;
         change?: number;
         changePercent?: number;
         shortName?: string;
-      }[] = data.quotes ?? [];
+      }[] = [];
+      let mergedUnresolved: string[] = [];
+      let truncated = false;
+
+      for (let i = 0; i < list.length; i += QUOTE_BATCH_SIZE) {
+        const chunk = list.slice(i, i + QUOTE_BATCH_SIZE);
+        const res = await fetch(`/api/quotes?symbols=${chunk.join(",")}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data.error ?? `Không lấy được giá (HTTP ${res.status})`;
+          if (opts?.notify) alert(msg);
+          return;
+        }
+
+        Object.assign(mergedPrices, data.prices ?? {});
+        mergedQuotes.push(...(data.quotes ?? []));
+        mergedUnresolved = [...mergedUnresolved, ...(data.unresolved ?? [])];
+        if (data.truncated) truncated = true;
+      }
+
+      mergedUnresolved = [...new Set(mergedUnresolved)].filter((s) => !mergedPrices[s]);
+      const updatedAt = new Date().toISOString();
 
       setState((s) => {
-        const marketPrices = { ...s.marketPrices, ...data.prices };
+        const marketPrices = { ...s.marketPrices, ...mergedPrices };
         const marketQuotes = { ...(s.marketQuotes ?? {}) };
-        for (const q of quotes) {
+        for (const q of mergedQuotes) {
           if (q.price > 0) {
             marketPrices[q.symbol] = q.price;
             marketQuotes[q.symbol] = {
@@ -202,25 +218,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...s,
           marketPrices,
           marketQuotes,
-          pricesUpdatedAt: data.updatedAt ?? new Date().toISOString(),
+          pricesUpdatedAt: updatedAt,
         };
       });
-      setQuoteUnresolved(data.unresolved ?? []);
-      if (data.providers?.finnhubHint && !data.providers?.finnhub) {
-        console.warn(data.providers.finnhubHint);
-      }
+      setQuoteUnresolved(mergedUnresolved);
 
       if (opts?.notify) {
-        const updated = Object.keys(data.prices ?? {}).length;
-        const unresolved: string[] = data.unresolved ?? [];
+        const updated = Object.keys(mergedPrices).length;
         if (updated === 0) {
           alert(
             "Không lấy được giá nào. Mở /api/quotes?check=1 để kiểm tra Yahoo/Finnhub trên server.",
           );
-        } else if (unresolved.length > 0) {
-          alert(`Đã cập nhật ${updated}/${list.length} mã.\nChưa có giá: ${unresolved.join(", ")}`);
+        } else if (mergedUnresolved.length > 0) {
+          alert(
+            `Đã cập nhật ${updated}/${list.length} mã.\nChưa có giá: ${mergedUnresolved.join(", ")}${truncated ? "\n(>150 mã — bị cắt bớt)" : ""}`,
+          );
         } else {
-          alert(`Đã cập nhật ${updated} mã.`);
+          alert(`Đã cập nhật ${updated} mã.${truncated ? " (>150 mã — bị cắt bớt)" : ""}`);
         }
       }
     } finally {

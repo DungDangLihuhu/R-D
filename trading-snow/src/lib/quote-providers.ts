@@ -1,6 +1,10 @@
 import { getFinnhubApiKey, getTwelveDataApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import type { QuoteResult } from "./yahoo";
+import { fetchQuotes, type QuoteResult } from "./yahoo";
+
+/** Yahoo/backup providers — process in chunks to avoid timeouts & rate limits */
+export const QUOTE_BATCH_SIZE = 40;
+export const QUOTE_MAX_SYMBOLS = 150;
 
 const SUFFIX_TO_TD_EXCHANGE: Record<string, string> = {
   PA: "XPAR",
@@ -116,4 +120,66 @@ export async function fillMissingQuotes(
   }
 
   return unresolved;
+}
+
+export interface QuotesFetchResult {
+  quotes: QuoteResult[];
+  prices: Record<string, number>;
+  unresolved: string[];
+  requested: number;
+  truncated: boolean;
+}
+
+function normalizeSymbolList(symbols: string[]): string[] {
+  return [
+    ...new Set(
+      symbols
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+        .filter((s) => s !== "CASH")
+    ),
+  ];
+}
+
+/** Fetch quotes for many symbols — auto-batches (40/request, max 150). */
+export async function fetchQuotesForSymbols(
+  symbols: string[]
+): Promise<QuotesFetchResult> {
+  const normalized = normalizeSymbolList(symbols);
+  const requested = normalized.length;
+  const list = normalized.slice(0, QUOTE_MAX_SYMBOLS);
+  const quotes: QuoteResult[] = [];
+  const prices: Record<string, number> = {};
+  const quoteBySymbol = new Map<string, QuoteResult>();
+
+  for (let i = 0; i < list.length; i += QUOTE_BATCH_SIZE) {
+    const chunk = list.slice(i, i + QUOTE_BATCH_SIZE);
+    const chunkQuotes = await fetchQuotes(chunk);
+    for (const q of chunkQuotes) {
+      if (q.price <= 0) continue;
+      quoteBySymbol.set(q.symbol, q);
+      prices[q.symbol] = q.price;
+    }
+
+    const missing = chunk.filter((s) => !prices[s]);
+    const chunkQuotesArr = [...quoteBySymbol.values()];
+    await fillMissingQuotes(missing, prices, chunkQuotesArr);
+    for (const q of chunkQuotesArr) {
+      if (q.price > 0) quoteBySymbol.set(q.symbol, q);
+    }
+  }
+
+  for (const q of quoteBySymbol.values()) {
+    quotes.push(q);
+  }
+
+  const unresolved = list.filter((s) => !prices[s]);
+
+  return {
+    quotes,
+    prices,
+    unresolved,
+    requested,
+    truncated: requested > QUOTE_MAX_SYMBOLS,
+  };
 }
