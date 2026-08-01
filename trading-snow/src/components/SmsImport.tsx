@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MessageSquareText } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import {
@@ -9,11 +9,12 @@ import {
   type ParsedSmsTrade,
 } from "@/lib/sms-import";
 import { formatMoney } from "@/lib/format";
+import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 
 const EXAMPLE = `StanChart: Order filled:  Sell   600  shares of  MSFT   MICROSOFT ORD  on  NMS  at  USD 450.35. Total Filled Qty:  600, O/S Qty:  0, Avg. Filled Price:  450.4015. Ref.  OSCBF7U41696860`;
 
 export function SmsImport() {
-  const { activePortfolioId, addTransaction, setMarketPrice } = useApp();
+  const { state, activePortfolioId, importTransactions, setMarketPrice } = useApp();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<ParsedSmsTrade[] | null>(null);
@@ -25,12 +26,17 @@ export function SmsImport() {
     setErrors(result.errors);
   };
 
-  const confirmImport = () => {
-    if (!preview || preview.length === 0) return;
-
+  const importPreview = useMemo(() => {
+    if (!preview || preview.length === 0) return null;
     const txs = smsTradesToTransactions(preview, activePortfolioId);
-    for (const tx of txs) {
-      addTransaction(tx);
+    return filterDuplicateTransactions(state.transactions, txs);
+  }, [preview, activePortfolioId, state.transactions]);
+
+  const confirmImport = () => {
+    if (!preview || preview.length === 0 || !importPreview) return;
+
+    const { added, skipped } = importTransactions(importPreview.transactions);
+    for (const tx of importPreview.transactions) {
       if (tx.symbol !== "CASH") {
         setMarketPrice(tx.symbol, tx.price);
       }
@@ -40,7 +46,10 @@ export function SmsImport() {
     setErrors([]);
     setText("");
     setOpen(false);
-    alert(`Đã thêm ${txs.length} giao dịch từ SMS`);
+
+    const parts = [`Đã thêm ${added} giao dịch từ SMS`];
+    if (skipped > 0) parts.push(`bỏ qua ${skipped} trùng`);
+    alert(parts.join(", "));
   };
 
   if (!open) {
@@ -111,8 +120,13 @@ export function SmsImport() {
         </div>
       )}
 
-      {preview && preview.length > 0 && (
+      {preview && importPreview && importPreview.transactions.length > 0 && (
         <>
+          {importPreview.skipped > 0 && (
+            <p className="text-sm text-amber-700">
+              {importPreview.skipped} giao dịch trùng sẽ bỏ qua
+            </p>
+          )}
           <div className="overflow-auto rounded-lg border border-gray-200">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-500">
@@ -145,9 +159,15 @@ export function SmsImport() {
             onClick={confirmImport}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
           >
-            Xác nhận thêm {preview.length} giao dịch
+            Xác nhận thêm {importPreview.transactions.length} giao dịch
           </button>
         </>
+      )}
+
+      {preview && importPreview && importPreview.transactions.length === 0 && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Tất cả giao dịch đã tồn tại — không có gì để thêm.
+        </p>
       )}
     </div>
   );
