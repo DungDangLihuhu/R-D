@@ -40,6 +40,137 @@ export interface HistoryPoint {
   close: number;
 }
 
+export interface YahooInsiderTransaction {
+  name: string;
+  date: string;
+  relation?: string;
+  shares: number;
+  value?: number;
+  transactionText?: string;
+}
+
+export interface YahooInsiderData {
+  transactions: YahooInsiderTransaction[];
+  rosterByName: Record<string, string>;
+}
+
+let yahooSessionCache: { cookie: string; crumb: string; at: number } | null = null;
+
+async function getYahooSession(): Promise<{ cookie: string; crumb: string } | null> {
+  if (yahooSessionCache && Date.now() - yahooSessionCache.at < 3_600_000) {
+    return { cookie: yahooSessionCache.cookie, crumb: yahooSessionCache.crumb };
+  }
+
+  const boot = await fetch("https://fc.yahoo.com", { headers: YAHOO_HEADERS });
+  const cookie =
+    typeof boot.headers.getSetCookie === "function"
+      ? boot.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ")
+      : boot.headers.get("set-cookie") ?? "";
+  if (!cookie) return null;
+
+  const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { ...YAHOO_HEADERS, Cookie: cookie },
+  });
+  const crumb = (await crumbRes.text()).trim();
+  if (!crumb || crumb.includes("Invalid")) return null;
+
+  yahooSessionCache = { cookie, crumb, at: Date.now() };
+  return { cookie, crumb };
+}
+
+function yahooPersonKey(name: string): string {
+  return name.toUpperCase().replace(/[^A-Z]/g, "");
+}
+
+function parseYahooRawNumber(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (v && typeof v === "object" && "raw" in v) {
+    const raw = (v as { raw?: number }).raw;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  }
+  return undefined;
+}
+
+function parseYahooRawDate(v: unknown): string | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) {
+    return new Date(v * 1000).toISOString().slice(0, 10);
+  }
+  if (v && typeof v === "object" && "raw" in v) {
+    const raw = (v as { raw?: number }).raw;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return new Date(raw * 1000).toISOString().slice(0, 10);
+    }
+  }
+  return undefined;
+}
+
+export async function fetchYahooInsiderData(symbol: string): Promise<YahooInsiderData | null> {
+  const session = await getYahooSession();
+  if (!session) return null;
+
+  for (const candidate of resolveYahooSymbolCandidates(symbol)) {
+    const yahoo = toYahooSymbol(candidate);
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=insiderTransactions,insiderHolders&crumb=${encodeURIComponent(session.crumb)}`;
+    const res = await fetch(url, {
+      headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) continue;
+
+    const json = await res.json();
+    const result = json?.quoteSummary?.result?.[0];
+    if (!result) continue;
+
+    const rosterByName: Record<string, string> = {};
+    const holders = result?.insiderHolders?.holders ?? [];
+    for (const h of holders) {
+      const name = typeof h.name === "string" ? h.name : "";
+      const relation = typeof h.relation === "string" ? h.relation.trim() : "";
+      if (name && relation) rosterByName[yahooPersonKey(name)] = relation;
+    }
+
+    const transactions: YahooInsiderTransaction[] = [];
+    const rawTx = result?.insiderTransactions?.transactions ?? [];
+    for (const t of rawTx) {
+      const name = typeof t.filerName === "string" ? t.filerName : "";
+      const date = parseYahooRawDate(t.startDate);
+      const shares = parseYahooRawNumber(t.shares) ?? 0;
+      if (!name || !date || shares === 0) continue;
+      const relation =
+        typeof t.filerRelation === "string" ? t.filerRelation.trim() : undefined;
+      if (relation) rosterByName[yahooPersonKey(name)] = relation;
+      transactions.push({
+        name,
+        date,
+        relation,
+        shares,
+        value: parseYahooRawNumber(t.value),
+        transactionText:
+          typeof t.transactionText === "string" ? t.transactionText : undefined,
+      });
+    }
+
+    if (!transactions.length && !Object.keys(rosterByName).length) continue;
+    return { transactions, rosterByName };
+  }
+
+  return null;
+}
+
+export function yahooInsiderShareChange(shares: number, transactionText?: string): number {
+  const text = (transactionText ?? "").toLowerCase();
+  if (text.includes("sale") || text.includes("sell")) return -Math.abs(shares);
+  if (
+    text.includes("purchase") ||
+    text.includes("buy") ||
+    text.includes("acquisition") ||
+    text.includes("grant")
+  ) {
+    return Math.abs(shares);
+  }
+  return shares;
+}
+
 export async function fetchPriceHistory(
   symbol: string,
   from: Date,
