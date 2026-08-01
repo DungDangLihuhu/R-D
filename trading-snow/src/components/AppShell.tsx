@@ -12,6 +12,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { SyncBadge } from "@/components/SyncPanel";
 
 const nav = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
@@ -24,7 +25,7 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { state, activePortfolioId, setActivePortfolioId } = useApp();
+  const { state, activePortfolioId, setActivePortfolioId, cloudConfigured } = useApp();
 
   return (
     <div className="min-h-screen bg-[#eef0f3] text-gray-900">
@@ -45,6 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </option>
             ))}
           </select>
+          <SyncBadge configured={cloudConfigured} />
         </div>
         <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-2">
           {nav.map(({ href, label, icon: Icon }) => {
