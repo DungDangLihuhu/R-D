@@ -232,6 +232,7 @@ export function computePortfolioStats(
     totalPnl: realizedPnl + unrealizedPnl,
     portfolioValue,
     tradingValue,
+    netCapital: tradingValue - realizedPnl,
     cashBalance,
     winCount,
     lossCount,
