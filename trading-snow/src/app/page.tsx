@@ -15,7 +15,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Tổng quan</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-gray-500">
             Theo dõi P&L, win rate và đường vốn — lưu local trên trình duyệt
           </p>
         </div>
@@ -54,18 +54,18 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 lg:col-span-2">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 lg:col-span-2">
           <h2 className="mb-4 font-semibold">Đường vốn (Equity curve)</h2>
           <EquityChart data={stats.equityCurve} />
         </div>
-        <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="font-semibold">Tóm tắt</h2>
           <Row label="Cổ tức" value={formatMoney(stats.totalDividends)} />
           <Row label="Nạp ròng" value={formatMoney(stats.totalDeposits - stats.totalWithdrawals)} />
           <Row
             label="Lãi chưa chốt"
             value={formatMoney(stats.unrealizedPnl)}
-            color={stats.unrealizedPnl >= 0 ? "text-emerald-400" : "text-rose-400"}
+            color={stats.unrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}
           />
           <Row label="Vị thế mở" value={String(stats.holdings.length)} />
         </div>
@@ -77,7 +77,7 @@ export default function DashboardPage() {
 function Row({
   label,
   value,
-  color = "text-zinc-200",
+  color = "text-gray-800",
 }: {
   label: string;
   value: string;
@@ -85,7 +85,7 @@ function Row({
 }) {
   return (
     <div className="flex justify-between text-sm">
-      <span className="text-zinc-500">{label}</span>
+      <span className="text-gray-500">{label}</span>
       <span className={`tabular-nums ${color}`}>{value}</span>
     </div>
   );

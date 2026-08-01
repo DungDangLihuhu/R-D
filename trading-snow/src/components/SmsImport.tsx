@@ -47,7 +47,7 @@ export function SmsImport() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-900"
+        className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
       >
         <MessageSquareText className="h-4 w-4" />
         Import tin nhắn ngân hàng
@@ -56,7 +56,7 @@ export function SmsImport() {
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Import tin nhắn giao dịch</h2>
         <button
@@ -64,13 +64,13 @@ export function SmsImport() {
             setOpen(false);
             setPreview(null);
           }}
-          className="text-sm text-zinc-500 hover:text-zinc-300"
+          className="text-sm text-gray-500 hover:text-gray-700"
         >
           Đóng
         </button>
       </div>
 
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-gray-500">
         Dán SMS từ ngân hàng/broker. Hiện hỗ trợ <strong>StanChart</strong>{" "}
         (Order filled Buy/Sell). Có thể dán nhiều tin, mỗi dòng một tin.
       </p>
@@ -80,7 +80,7 @@ export function SmsImport() {
         onChange={(e) => setText(e.target.value)}
         placeholder={EXAMPLE}
         rows={5}
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600"
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400"
       />
 
       <div className="flex flex-wrap gap-2">
@@ -94,14 +94,14 @@ export function SmsImport() {
         <button
           type="button"
           onClick={() => setText(EXAMPLE)}
-          className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 hover:bg-gray-200"
         >
           Dán ví dụ
         </button>
       </div>
 
       {errors.length > 0 && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <p className="font-medium">Cảnh báo ({errors.length})</p>
           <ul className="mt-1 list-disc pl-4 text-xs">
             {errors.map((e, i) => (
@@ -113,9 +113,9 @@ export function SmsImport() {
 
       {preview && preview.length > 0 && (
         <>
-          <div className="overflow-auto rounded-lg border border-zinc-800">
+          <div className="overflow-auto rounded-lg border border-gray-200">
             <table className="w-full text-xs">
-              <thead className="bg-zinc-900 text-zinc-400">
+              <thead className="bg-gray-50 text-gray-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Broker</th>
                   <th className="px-3 py-2">Loại</th>
@@ -127,7 +127,7 @@ export function SmsImport() {
               </thead>
               <tbody>
                 {preview.map((t, i) => (
-                  <tr key={i} className="border-t border-zinc-800">
+                  <tr key={i} className="border-t border-gray-200">
                     <td className="px-3 py-1.5">{t.broker}</td>
                     <td className="px-3 py-1.5 text-center">{t.type}</td>
                     <td className="px-3 py-1.5">{t.symbol}</td>

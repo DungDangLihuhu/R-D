@@ -34,6 +34,7 @@ interface AppContextValue {
   refreshPrices: (symbols?: string[]) => Promise<void>;
   exportData: () => string;
   importData: (json: string) => boolean;
+  clearAllTransactions: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -161,9 +162,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const clearAllTransactions = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      transactions: [],
+      marketPrices: {},
+      pricesUpdatedAt: null,
+    }));
+  }, []);
+
   if (!hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
+      <div className="flex min-h-screen items-center justify-center bg-[#eef0f3] text-gray-500">
         Đang tải...
       </div>
     );
@@ -186,6 +196,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         refreshPrices,
         exportData,
         importData,
+        clearAllTransactions,
       }}
     >
       {children}

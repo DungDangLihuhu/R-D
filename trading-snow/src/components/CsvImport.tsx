@@ -72,7 +72,7 @@ export function CsvImport() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-900"
+        className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
       >
         <FileSpreadsheet className="h-4 w-4" />
         Import CSV broker
@@ -81,7 +81,7 @@ export function CsvImport() {
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Import CSV từ broker</h2>
         <button
@@ -90,23 +90,23 @@ export function CsvImport() {
             setPreview(null);
             setParseResult(null);
           }}
-          className="text-sm text-zinc-500 hover:text-zinc-300"
+          className="text-sm text-gray-500 hover:text-gray-700"
         >
           Đóng
         </button>
       </div>
 
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-gray-500">
         Snowball: chọn đúng <strong>Holdings</strong> (snapshot vị thế) hoặc{" "}
         <strong>Transactions</strong> (lịch sử). Generic cần cột{" "}
-        <code className="text-sky-400">date, symbol, type/side, quantity, price</code>
+        <code className="text-sky-600">date, symbol, type/side, quantity, price</code>
       </p>
 
       <div className="flex flex-wrap gap-3">
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value as CsvFormat)}
-          className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
         >
           {FORMATS.map((f) => (
             <option key={f.value} value={f.value}>
@@ -130,13 +130,13 @@ export function CsvImport() {
       </div>
 
       {parseResult?.info && (
-        <p className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+        <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
           {parseResult.info}
         </p>
       )}
 
       {preview && (
-        <p className="text-sm text-sky-400">
+        <p className="text-sm text-sky-600">
           Nhận diện format: <strong>{detectedFormat}</strong> · {preview.length}{" "}
           dòng hợp lệ
           {parseResult?.marketPrices &&
@@ -146,7 +146,7 @@ export function CsvImport() {
       )}
 
       {errors.length > 0 && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           <p className="font-medium">Cảnh báo ({errors.length})</p>
           <ul className="mt-1 max-h-24 list-disc overflow-y-auto pl-4 text-xs">
             {errors.slice(0, 10).map((e, i) => (
@@ -158,9 +158,9 @@ export function CsvImport() {
 
       {preview && preview.length > 0 && (
         <>
-          <div className="max-h-48 overflow-auto rounded-lg border border-zinc-800">
+          <div className="max-h-48 overflow-auto rounded-lg border border-gray-200">
             <table className="w-full text-xs">
-              <thead className="bg-zinc-900 text-zinc-400">
+              <thead className="bg-gray-50 text-gray-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Ngày</th>
                   <th className="px-3 py-2 text-left">Mã</th>
@@ -171,7 +171,7 @@ export function CsvImport() {
               </thead>
               <tbody>
                 {preview.slice(0, 15).map((r, i) => (
-                  <tr key={i} className="border-t border-zinc-800">
+                  <tr key={i} className="border-t border-gray-200">
                     <td className="px-3 py-1.5">{formatDate(r.date)}</td>
                     <td className="px-3 py-1.5">{r.symbol}</td>
                     <td className="px-3 py-1.5 text-center">{r.type}</td>

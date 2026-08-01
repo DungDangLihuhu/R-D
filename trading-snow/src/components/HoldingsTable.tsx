@@ -11,7 +11,7 @@ export function HoldingsTable() {
 
   if (stats.holdings.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-zinc-700 p-8 text-center text-zinc-500">
+      <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
         Chưa có vị thế mở. Mua cổ phiếu để thấy danh mục.
       </div>
     );
@@ -24,9 +24,9 @@ export function HoldingsTable() {
   };
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-800">
+    <div className="overflow-x-auto rounded-xl border border-gray-200">
       <table className="w-full text-sm">
-        <thead className="bg-zinc-900 text-left text-zinc-400">
+        <thead className="bg-gray-50 text-left text-gray-500">
           <tr>
             <th className="px-4 py-3">Mã</th>
             <th className="px-4 py-3 text-right">SL</th>
@@ -49,7 +49,7 @@ export function HoldingsTable() {
                 : 0;
 
             return (
-              <tr key={h.symbol} className="border-t border-zinc-800">
+              <tr key={h.symbol} className="border-t border-gray-200">
                 <td className="px-4 py-3 font-medium">{h.symbol}</td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {formatNumber(h.quantity, 4)}
@@ -67,7 +67,7 @@ export function HoldingsTable() {
                       onChange={(e) => setPriceInput(e.target.value)}
                       onBlur={() => savePrice(h.symbol)}
                       onKeyDown={(e) => e.key === "Enter" && savePrice(h.symbol)}
-                      className="w-24 rounded border border-zinc-600 bg-zinc-950 px-2 py-1 text-right text-sm"
+                      className="w-24 rounded border border-gray-300 bg-white px-2 py-1 text-right text-sm"
                     />
                   ) : (
                     <button
@@ -75,7 +75,7 @@ export function HoldingsTable() {
                         setEditing(h.symbol);
                         setPriceInput(String(market));
                       }}
-                      className="tabular-nums text-sky-400 hover:underline"
+                      className="tabular-nums text-sky-600 hover:underline"
                     >
                       {formatMoney(market)}
                     </button>
@@ -86,7 +86,7 @@ export function HoldingsTable() {
                 </td>
                 <td
                   className={`px-4 py-3 text-right tabular-nums ${
-                    unrealized >= 0 ? "text-emerald-400" : "text-rose-400"
+                    unrealized >= 0 ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
                   {h.marketPrice ? (
@@ -95,7 +95,7 @@ export function HoldingsTable() {
                       <span className="ml-1 text-xs">({formatPercent(pct)})</span>
                     </>
                   ) : (
-                    <span className="text-zinc-500">—</span>
+                    <span className="text-gray-500">—</span>
                   )}
                 </td>
               </tr>
@@ -103,7 +103,7 @@ export function HoldingsTable() {
           })}
         </tbody>
       </table>
-      <p className="border-t border-zinc-800 px-4 py-2 text-xs text-zinc-500">
+      <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
         Giá từ Yahoo Finance. Bấm giá để sửa thủ công nếu cần.
       </p>
     </div>

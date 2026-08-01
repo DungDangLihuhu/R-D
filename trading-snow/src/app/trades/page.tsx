@@ -10,7 +10,7 @@ export default function TradesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Giao dịch</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-gray-500">
           Nhập thủ công, import CSV hoặc dán tin nhắn ngân hàng
         </p>
       </div>
