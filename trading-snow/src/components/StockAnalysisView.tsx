@@ -206,9 +206,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                         onClick={() => goToSymbol(s.symbol)}
                       >
                         <SymbolAvatar symbol={s.symbol} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="font-semibold">{s.symbol}</span>
-                          <span className="ml-2 truncate text-gray-500">{s.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-gray-700">
+                          {s.name}
                         </span>
                         {s.source === "portfolio" ? (
                           <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">
