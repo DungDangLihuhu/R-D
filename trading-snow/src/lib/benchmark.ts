@@ -1,5 +1,7 @@
 import type { HistoryPoint } from "./yahoo";
 
+export type BenchmarkRange = "ytd" | "6m" | "1y" | "5y" | "all";
+
 export interface ComparisonPoint {
   date: string;
   portfolio: number;
@@ -11,6 +13,65 @@ export interface ComparisonResult {
   portfolioReturn: number;
   sp500Return: number;
   outperformance: number;
+  from: string;
+  to: string;
+}
+
+export const BENCHMARK_RANGES: { value: BenchmarkRange; label: string }[] = [
+  { value: "ytd", label: "YTD" },
+  { value: "6m", label: "6 tháng" },
+  { value: "1y", label: "1 năm" },
+  { value: "5y", label: "5 năm" },
+  { value: "all", label: "Tất cả" },
+];
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() - months);
+  return d;
+}
+
+function toDateStr(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Resolve comparison window; clamps to portfolio history */
+export function resolveBenchmarkWindow(
+  equityCurve: { date: string; equity: number }[],
+  range: BenchmarkRange,
+  now = new Date()
+): { from: string; to: string } | null {
+  if (equityCurve.length < 2) return null;
+
+  const sorted = [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
+  const portfolioStart = sorted[0].date.slice(0, 10);
+  const portfolioEnd = sorted[sorted.length - 1].date.slice(0, 10);
+  const to = portfolioEnd < toDateStr(now) ? portfolioEnd : toDateStr(now);
+
+  let from: string;
+  switch (range) {
+    case "ytd":
+      from = `${now.getFullYear()}-01-01`;
+      break;
+    case "6m":
+      from = toDateStr(addMonths(now, 6));
+      break;
+    case "1y":
+      from = toDateStr(addMonths(now, 12));
+      break;
+    case "5y":
+      from = toDateStr(addMonths(now, 60));
+      break;
+    case "all":
+    default:
+      from = portfolioStart;
+      break;
+  }
+
+  if (from < portfolioStart) from = portfolioStart;
+  if (from >= to) return null;
+
+  return { from, to };
 }
 
 function forwardFillEquity(
@@ -37,15 +98,18 @@ function forwardFillEquity(
 
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
-  benchmark: HistoryPoint[]
+  benchmark: HistoryPoint[],
+  window?: { from: string; to: string }
 ): ComparisonResult | null {
   if (equityCurve.length < 2 || benchmark.length < 2) return null;
 
   const sortedEquity = [...equityCurve].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
-  const startDate = sortedEquity[0].date.slice(0, 10);
-  const endDate = sortedEquity[sortedEquity.length - 1].date.slice(0, 10);
+
+  const startDate = window?.from ?? sortedEquity[0].date.slice(0, 10);
+  const endDate =
+    window?.to ?? sortedEquity[sortedEquity.length - 1].date.slice(0, 10);
 
   const benchInRange = benchmark.filter(
     (b) => b.date >= startDate && b.date <= endDate
@@ -77,5 +141,7 @@ export function buildBenchmarkComparison(
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
+    from: startDate,
+    to: endDate,
   };
 }
