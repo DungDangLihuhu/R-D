@@ -44,7 +44,7 @@ async function runQuoteCheck() {
     finnhubPaTest,
     twelveData,
     steps: [
-      "1. Key Finnhub lấy tại https://finnhub.io/dashboard (~20 ký tự, KHÔNG dán 2 lần)",
+      "1. Key Finnhub lấy tại https://finnhub.io/dashboard (copy nguyên chuỗi từ dashboard)",
       "2. Vercel env: FINNHUB_API_KEY = key Finnhub (Production + Preview)",
       "3. Redeploy sau khi đổi env",
       "4. US stocks: Yahoo hoặc Finnhub. Cổ phiếu .PA: chỉ Yahoo (Finnhub free không có)",

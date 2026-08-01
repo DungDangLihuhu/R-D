@@ -45,19 +45,6 @@ export function inspectFinnhubKey(key?: string | null) {
     };
   }
 
-  if (trimmed.length > 24) {
-    const half = Math.floor(trimmed.length / 2);
-    const duplicated = trimmed.slice(0, half) === trimmed.slice(half);
-    return {
-      configured: true,
-      valid: false,
-      length: trimmed.length,
-      hint: duplicated
-        ? `Key dán trùng 2 lần (${trimmed.length} ký tự). Chỉ giữ 1 key ~20 ký tự từ finnhub.io/dashboard.`
-        : `Key dài ${trimmed.length} ký tự — Finnhub thường ~20 ký tự. Kiểm tra không dán thừa khi copy.`,
-    };
-  }
-
   return {
     configured: true,
     valid: true,
