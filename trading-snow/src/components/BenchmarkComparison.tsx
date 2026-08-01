@@ -1,0 +1,182 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { StatCard } from "@/components/StatCard";
+import {
+  buildBenchmarkComparison,
+  type ComparisonResult,
+} from "@/lib/benchmark";
+import { formatPercent } from "@/lib/format";
+import type { PortfolioStats } from "@/lib/types";
+
+const GRID = "#e2e5ea";
+const TICK = "#6b7280";
+const TOOLTIP = {
+  background: "#ffffff",
+  border: "1px solid #e2e5ea",
+  borderRadius: "8px",
+  color: "#1a1d21",
+};
+
+export function BenchmarkComparison({
+  equityCurve,
+}: {
+  equityCurve: PortfolioStats["equityCurve"];
+}) {
+  const [comparison, setComparison] = useState<ComparisonResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (equityCurve.length < 2) {
+      setComparison(null);
+      return;
+    }
+
+    const sorted = [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
+    const from = sorted[0].date.slice(0, 10);
+    const to = sorted[sorted.length - 1].date.slice(0, 10);
+    const curve = sorted;
+
+    setLoading(true);
+    setError(null);
+
+    fetch(`/api/benchmark?from=${from}&to=${to}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          setError(data.error);
+          setComparison(null);
+          return;
+        }
+        const result = buildBenchmarkComparison(curve, data.points ?? []);
+        if (!result) {
+          setError("Không đủ dữ liệu để so sánh");
+          setComparison(null);
+          return;
+        }
+        setComparison(result);
+      })
+      .catch(() => setError("Không tải được dữ liệu S&P 500"))
+      .finally(() => setLoading(false));
+  }, [
+    equityCurve.length,
+    equityCurve[0]?.date,
+    equityCurve[equityCurve.length - 1]?.date,
+  ]);
+
+  if (equityCurve.length < 2) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="mb-2 font-semibold">So sánh với S&P 500</h2>
+        <p className="text-sm text-gray-500">
+          Cần ít nhất 2 điểm trên đường vốn để so sánh benchmark
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div>
+        <h2 className="font-semibold">So sánh với S&P 500</h2>
+        <p className="text-xs text-gray-500">
+          Chuẩn hóa = 100 tại ngày đầu · nguồn Yahoo Finance (^GSPC / SPY)
+        </p>
+      </div>
+
+      {loading && (
+        <p className="text-sm text-gray-500">Đang tải dữ liệu S&P 500...</p>
+      )}
+
+      {error && !loading && (
+        <p className="text-sm text-rose-600">{error}</p>
+      )}
+
+      {comparison && !loading && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <StatCard
+              label="Lợi nhuận danh mục"
+              value={formatPercent(comparison.portfolioReturn)}
+              trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
+            />
+            <StatCard
+              label="S&P 500"
+              value={formatPercent(comparison.sp500Return)}
+              trend={comparison.sp500Return >= 0 ? "up" : "down"}
+            />
+            <StatCard
+              label="Vượt / thua benchmark"
+              value={formatPercent(comparison.outperformance)}
+              trend={comparison.outperformance >= 0 ? "up" : "down"}
+              sub={
+                comparison.outperformance >= 0
+                  ? "Đánh bại thị trường"
+                  : "Kém thị trường"
+              }
+            />
+          </div>
+
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart
+              data={comparison.points.map((p) => ({
+                ...p,
+                label: p.date.slice(5),
+              }))}
+            >
+              <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: TICK, fontSize: 11 }}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fill: TICK, fontSize: 11 }}
+                tickFormatter={(v) => `${Number(v).toFixed(0)}`}
+                domain={["auto", "auto"]}
+              />
+              <Tooltip
+                contentStyle={TOOLTIP}
+                formatter={(v, name) => [
+                  `${Number(v ?? 0).toFixed(2)}`,
+                  name === "portfolio" ? "Danh mục" : "S&P 500",
+                ]}
+                labelFormatter={(l) => `Ngày: ${l}`}
+              />
+              <Legend
+                formatter={(value) =>
+                  value === "portfolio" ? "Danh mục" : "S&P 500"
+                }
+              />
+              <Line
+                type="monotone"
+                dataKey="portfolio"
+                stroke="#0ea5e9"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="sp500"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </>
+      )}
+    </div>
+  );
+}

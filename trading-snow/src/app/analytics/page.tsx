@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BenchmarkComparison } from "@/components/BenchmarkComparison";
 import { EquityChart, MonthlyPnlChart } from "@/components/Charts";
 import { ClosedTradesTable } from "@/components/ClosedTradesTable";
 import { StatCard } from "@/components/StatCard";
@@ -15,7 +16,7 @@ export default function AnalyticsPage() {
       <div>
         <h1 className="text-2xl font-bold">Thống kê</h1>
         <p className="text-sm text-gray-500">
-          P&L theo tháng, lệnh đã chốt, metrics trading
+          P&L theo tháng, so sánh S&P 500, lệnh đã chốt
         </p>
       </div>
 
@@ -48,6 +49,8 @@ export default function AnalyticsPage() {
           <EquityChart data={stats.equityCurve} />
         </div>
       </div>
+
+      <BenchmarkComparison equityCurve={stats.equityCurve} />
 
       {stats.closedTrades.length > 0 && (
         <div>
