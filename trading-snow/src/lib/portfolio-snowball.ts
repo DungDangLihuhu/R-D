@@ -14,14 +14,18 @@ export function computeTotalProfit(
   return portfolioValue + totalWithdrawals - totalDeposits;
 }
 
+/**
+ * Snowball IRR cash flows: purchases, sales, dividends (net fees), terminal NAV.
+ * Deposits/withdrawals only when there are no buy/sell trades.
+ */
 export function buildIrrCashFlows(
   transactions: Transaction[],
-  portfolioValue: number,
+  terminalValue: number,
   asOf = new Date()
 ): CashFlow[] {
   const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-  const hasExternal = sorted.some(
-    (t) => t.type === "DEPOSIT" || t.type === "WITHDRAW"
+  const hasTrades = sorted.some(
+    (t) => t.type === "BUY" || t.type === "SELL"
   );
 
   const flows: CashFlow[] = [];
@@ -30,32 +34,49 @@ export function buildIrrCashFlows(
     const gross = tx.quantity * tx.price;
     const date = new Date(tx.date);
 
-    if (hasExternal) {
-      if (tx.type === "DEPOSIT") flows.push({ date, amount: -gross });
-      if (tx.type === "WITHDRAW") flows.push({ date, amount: gross });
+    if (hasTrades) {
+      switch (tx.type) {
+        case "BUY":
+          flows.push({ date, amount: -(gross + tx.fee) });
+          break;
+        case "SELL":
+          flows.push({ date, amount: gross - tx.fee });
+          break;
+        case "DIVIDEND":
+          flows.push({ date, amount: gross - tx.fee });
+          break;
+      }
     } else {
-      if (tx.type === "BUY") flows.push({ date, amount: -(gross + tx.fee) });
-      if (tx.type === "SELL") flows.push({ date, amount: gross - tx.fee });
-    }
-
-    if (tx.type === "DIVIDEND") {
-      flows.push({ date, amount: gross - tx.fee });
+      switch (tx.type) {
+        case "DEPOSIT":
+          flows.push({ date, amount: -gross });
+          break;
+        case "WITHDRAW":
+          flows.push({ date, amount: gross });
+          break;
+        case "DIVIDEND":
+          flows.push({ date, amount: gross - tx.fee });
+          break;
+      }
     }
   }
 
-  flows.push({ date: asOf, amount: portfolioValue });
+  if (terminalValue > 0) {
+    flows.push({ date: asOf, amount: terminalValue });
+  }
+
   return flows;
 }
 
-/** XIRR via Newton-Raphson; returns annual rate in percent or null. */
-export function computeXirr(flows: CashFlow[], guess = 0.1): number | null {
-  if (flows.length < 2) return null;
-
+function npvAt(flows: CashFlow[], rate: number): number {
   const t0 = flows[0].date.getTime();
   const years = (d: Date) => (d.getTime() - t0) / (365.25 * 24 * 3600 * 1000);
+  return flows.reduce((sum, f) => sum + f.amount / (1 + rate) ** years(f.date), 0);
+}
 
-  const npv = (rate: number) =>
-    flows.reduce((sum, f) => sum + f.amount / (1 + rate) ** years(f.date), 0);
+function newtonXirr(flows: CashFlow[], guess: number): number | null {
+  const t0 = flows[0].date.getTime();
+  const years = (d: Date) => (d.getTime() - t0) / (365.25 * 24 * 3600 * 1000);
 
   const dnpv = (rate: number) =>
     flows.reduce((sum, f) => {
@@ -65,17 +86,86 @@ export function computeXirr(flows: CashFlow[], guess = 0.1): number | null {
     }, 0);
 
   let rate = guess;
-  for (let i = 0; i < 100; i++) {
-    const value = npv(rate);
+  for (let i = 0; i < 50; i++) {
+    const value = npvAt(flows, rate);
     if (Math.abs(value) < 1e-7) return rate * 100;
     const deriv = dnpv(rate);
-    if (deriv === 0 || !Number.isFinite(deriv)) break;
+    if (deriv === 0 || !Number.isFinite(deriv)) return null;
     const next = rate - value / deriv;
-    if (!Number.isFinite(next) || next <= -0.999) break;
+    if (!Number.isFinite(next) || next <= -0.999 || next > 100) return null;
+    if (Math.abs(next - rate) < 1e-10) return next * 100;
     rate = next;
   }
-
   return null;
+}
+
+function bisectionXirr(flows: CashFlow[]): number | null {
+  let lo = -0.99;
+  let hi = 10;
+  let fLo = npvAt(flows, lo);
+  let fHi = npvAt(flows, hi);
+
+  if (fLo * fHi > 0) {
+    hi = 100;
+    fHi = npvAt(flows, hi);
+    if (fLo * fHi > 0) return null;
+  }
+
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    const fMid = npvAt(flows, mid);
+    if (Math.abs(fMid) < 1e-7) return mid * 100;
+    if (fLo * fMid < 0) {
+      hi = mid;
+      fHi = fMid;
+    } else {
+      lo = mid;
+      fLo = fMid;
+    }
+  }
+
+  return ((lo + hi) / 2) * 100;
+}
+
+function computeXirr(flows: CashFlow[]): number | null {
+  if (flows.length < 2) return null;
+
+  const outflows = flows.filter((f) => f.amount < 0);
+  const inflows = flows.filter((f) => f.amount > 0);
+  if (outflows.length === 0 || inflows.length === 0) return null;
+
+  const guesses = [0.1, 0.01, 0.15, -0.05, 0.25, -0.15, 0.5];
+  for (const g of guesses) {
+    const result = newtonXirr(flows, g);
+    if (result != null && Number.isFinite(result)) return result;
+  }
+
+  return bisectionXirr(flows);
+}
+
+/** Simple annualized return when XIRR does not converge. */
+export function computeSimpleAnnualizedReturn(
+  flows: CashFlow[]
+): number | null {
+  if (flows.length < 2) return null;
+
+  const invested = flows
+    .filter((f) => f.amount < 0)
+    .reduce((s, f) => s + Math.abs(f.amount), 0);
+  const terminal = flows[flows.length - 1];
+  if (invested <= 0 || terminal.amount <= 0) return null;
+
+  const years =
+    (terminal.date.getTime() - flows[0].date.getTime()) /
+    (365.25 * 24 * 3600 * 1000);
+  if (years < 1 / 365) return null;
+
+  return (Math.pow(terminal.amount / invested, 1 / years) - 1) * 100;
+}
+
+/** XIRR with fallback — annual rate in percent (Snowball-style). */
+export function computePortfolioIrr(flows: CashFlow[]): number | null {
+  return computeXirr(flows) ?? computeSimpleAnnualizedReturn(flows);
 }
 
 export interface DividendEventLike {

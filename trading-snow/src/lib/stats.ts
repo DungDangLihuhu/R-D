@@ -7,8 +7,8 @@ import type {
 } from "./types";
 import {
   buildIrrCashFlows,
+  computePortfolioIrr,
   computeTotalProfit,
-  computeXirr,
 } from "./portfolio-snowball";
 
 interface PositionState {
@@ -220,8 +220,8 @@ export function computePortfolioStats(
   const profitExDivSalesPercent =
     holdingsCost > 0 ? (profitExDivSales / holdingsCost) * 100 : 0;
 
-  const irrFlows = buildIrrCashFlows(sorted, portfolioValue);
-  const irr = computeXirr(irrFlows);
+  const irrFlows = buildIrrCashFlows(sorted, tradingValue);
+  const irr = computePortfolioIrr(irrFlows);
 
   return {
     totalDeposits,
