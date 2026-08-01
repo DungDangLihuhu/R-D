@@ -1,9 +1,9 @@
 "use client";
 
+import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { EquityChart } from "@/components/Charts";
 import { DataTools } from "@/components/DataTools";
 import { PriceRefresh } from "@/components/PriceRefresh";
-import { StatCard } from "@/components/StatCard";
 import { SyncPanel } from "@/components/SyncPanel";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
@@ -28,33 +28,7 @@ export default function DashboardPage() {
 
       <SyncPanel />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Giá trị danh mục"
-          value={formatMoney(stats.portfolioValue)}
-          sub={`Tiền mặt: ${formatMoney(stats.cashBalance)}`}
-        />
-        <StatCard
-          label="Tổng P&L"
-          value={formatMoney(stats.totalPnl)}
-          trend={stats.totalPnl >= 0 ? "up" : "down"}
-          sub={`Đã chốt: ${formatMoney(stats.realizedPnl)}`}
-        />
-        <StatCard
-          label="Win rate"
-          value={`${stats.winRate.toFixed(1)}%`}
-          sub={`${stats.winCount}W / ${stats.lossCount}L · ${stats.totalTrades} lệnh`}
-        />
-        <StatCard
-          label="Profit factor"
-          value={
-            stats.profitFactor === Infinity
-              ? "∞"
-              : stats.profitFactor.toFixed(2)
-          }
-          sub={`Avg win ${formatMoney(stats.avgWin)} · loss ${formatMoney(stats.avgLoss)}`}
-        />
-      </div>
+      <DashboardMetrics stats={stats} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 lg:col-span-2">
@@ -63,6 +37,15 @@ export default function DashboardPage() {
         </div>
         <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="font-semibold">Tóm tắt</h2>
+          <Row label="Win rate" value={`${stats.winRate.toFixed(1)}%`} />
+          <Row
+            label="Profit factor"
+            value={
+              stats.profitFactor === Infinity
+                ? "∞"
+                : stats.profitFactor.toFixed(2)
+            }
+          />
           <Row label="Cổ tức" value={formatMoney(stats.totalDividends)} />
           <Row label="Nạp ròng" value={formatMoney(stats.totalDeposits - stats.totalWithdrawals)} />
           <Row
