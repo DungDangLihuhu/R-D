@@ -13,10 +13,13 @@ import {
 } from "recharts";
 import { StatCard } from "@/components/StatCard";
 import {
+  BENCHMARK_RANGES,
   buildBenchmarkComparison,
+  resolveBenchmarkWindow,
+  type BenchmarkRange,
   type ComparisonResult,
 } from "@/lib/benchmark";
-import { formatPercent } from "@/lib/format";
+import { formatDate, formatPercent } from "@/lib/format";
 import type { PortfolioStats } from "@/lib/types";
 
 const GRID = "#e2e5ea";
@@ -33,6 +36,7 @@ export function BenchmarkComparison({
 }: {
   equityCurve: PortfolioStats["equityCurve"];
 }) {
+  const [range, setRange] = useState<BenchmarkRange>("all");
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +48,17 @@ export function BenchmarkComparison({
     }
 
     const sorted = [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
-    const from = sorted[0].date.slice(0, 10);
-    const to = sorted[sorted.length - 1].date.slice(0, 10);
-    const curve = sorted;
+    const window = resolveBenchmarkWindow(sorted, range);
+    if (!window) {
+      setComparison(null);
+      setError("Không đủ dữ liệu cho khung thời gian này");
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
-    fetch(`/api/benchmark?from=${from}&to=${to}`)
+    fetch(`/api/benchmark?from=${window.from}&to=${window.to}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) {
@@ -59,7 +66,7 @@ export function BenchmarkComparison({
           setComparison(null);
           return;
         }
-        const result = buildBenchmarkComparison(curve, data.points ?? []);
+        const result = buildBenchmarkComparison(sorted, data.points ?? [], window);
         if (!result) {
           setError("Không đủ dữ liệu để so sánh");
           setComparison(null);
@@ -70,9 +77,8 @@ export function BenchmarkComparison({
       .catch(() => setError("Không tải được dữ liệu S&P 500"))
       .finally(() => setLoading(false));
   }, [
-    equityCurve.length,
-    equityCurve[0]?.date,
-    equityCurve[equityCurve.length - 1]?.date,
+    equityCurve,
+    range,
   ]);
 
   if (equityCurve.length < 2) {
@@ -88,11 +94,36 @@ export function BenchmarkComparison({
 
   return (
     <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
-      <div>
-        <h2 className="font-semibold">So sánh với S&P 500</h2>
-        <p className="text-xs text-gray-500">
-          Chuẩn hóa = 100 tại ngày đầu · nguồn Yahoo Finance (^GSPC / SPY)
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-semibold">So sánh với S&P 500</h2>
+          <p className="text-xs text-gray-500">
+            Chuẩn hóa = 100 tại ngày đầu · nguồn Yahoo Finance (^GSPC / SPY)
+            {comparison && (
+              <>
+                {" "}
+                · {formatDate(comparison.from)} – {formatDate(comparison.to)}
+              </>
+            )}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {BENCHMARK_RANGES.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setRange(item.value)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                range === item.value
+                  ? "bg-sky-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading && (
