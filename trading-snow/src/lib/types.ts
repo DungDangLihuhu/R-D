@@ -56,6 +56,8 @@ export interface PortfolioStats {
   unrealizedPnl: number;
   totalPnl: number;
   portfolioValue: number;
+  /** Giá trị vị thế hiện tại + lãi/lỗ đã chốt */
+  tradingValue: number;
   cashBalance: number;
   winCount: number;
   lossCount: number;

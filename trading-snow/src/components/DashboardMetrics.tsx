@@ -61,9 +61,9 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
   );
 
   const valueTooltip = [
-    "Giá trị danh mục hiện tại.",
+    "Giá trị = vị thế đang giữ (giá TT) + lãi/lỗ đã chốt.",
     "Vị thế: " + formatMoney(stats.holdingsValue),
-    "Tiền mặt: " + formatMoney(stats.cashBalance),
+    "Đã chốt: " + formatMoney(stats.realizedPnl),
   ].join("\n");
 
   const profitTooltip = [
@@ -87,7 +87,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <SnowballStatCard
         label="Giá trị"
-        value={formatMoney(stats.portfolioValue)}
+        value={formatMoney(stats.tradingValue)}
         sub={`${formatMoney(stats.holdingsCost)} đã đầu tư`}
         icon={Wallet}
         iconClassName="bg-sky-100 text-sky-600"
