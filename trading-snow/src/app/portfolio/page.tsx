@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/format";
 
 export default function PortfolioPage() {
   const { stats } = useApp();
+  const missingPrices = stats.holdings.filter((h) => !h.marketPrice).length;
 
   return (
     <div className="space-y-6">
@@ -19,6 +20,16 @@ export default function PortfolioPage() {
         </div>
         <PriceRefresh />
       </div>
+      {missingPrices > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {missingPrices} mã chưa có giá thị trường (đang hiển thị giá vốn). Bấm{" "}
+          <strong>Refresh</strong> hoặc{" "}
+          <a href="/api/quotes?check=1" target="_blank" rel="noreferrer" className="underline">
+            kiểm tra API
+          </a>
+          . Cổ phiếu .PA cần Yahoo — Finnhub free không hỗ trợ.
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         <Mini label="Giá trị CP" value={formatMoney(
           stats.holdings.reduce(

@@ -16,7 +16,7 @@ export function PriceRefresh({ compact }: { compact?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button
-        onClick={() => refreshPrices()}
+        onClick={() => refreshPrices(undefined, { notify: true })}
         disabled={priceLoading}
         className={`flex items-center gap-2 rounded-lg border border-gray-200 text-sm hover:bg-gray-50 disabled:opacity-50 ${
           compact ? "px-2 py-1" : "px-3 py-2"

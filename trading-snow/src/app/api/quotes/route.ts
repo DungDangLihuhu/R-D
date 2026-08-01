@@ -1,36 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import { inspectFinnhubKey, inspectTwelveDataKey } from "@/lib/quote-config";
+import {
+  getFinnhubApiKey,
+  getTwelveDataApiKey,
+  inspectFinnhubKey,
+  inspectTwelveDataKey,
+  testFinnhubKey,
+} from "@/lib/quote-config";
 import { fillMissingQuotes } from "@/lib/quote-providers";
 import { fetchQuoteFinnhubOne, fetchQuotes } from "@/lib/yahoo";
 
 async function runQuoteCheck() {
-  const finnhub = inspectFinnhubKey(process.env.FINNHUB_API_KEY);
-  const twelveData = inspectTwelveDataKey(process.env.TWELVE_DATA_API_KEY);
+  const finnhubKey = getFinnhubApiKey();
+  const finnhub = inspectFinnhubKey(finnhubKey);
+  const twelveData = inspectTwelveDataKey();
 
-  const yahooTest = await fetchQuotes(["AAPL", "BNP.PA"]);
+  const yahooTest = await fetchQuotes(["AAPL", "BNP.PA", "UPRO"]);
   const yahooOk = yahooTest.length > 0;
 
   let finnhubTest: { ok: boolean; price?: number; error?: string } | null = null;
-  if (finnhub.configured && finnhub.valid) {
-    const q = await fetchQuoteFinnhubOne("AAPL", process.env.FINNHUB_API_KEY!);
-    finnhubTest = q
-      ? { ok: true, price: q.price }
-      : { ok: false, error: "Finnhub không trả giá AAPL — kiểm tra key hoặc quota" };
+  let finnhubPaTest: { ok: boolean; error?: string } | null = null;
+
+  if (finnhubKey && finnhub.valid) {
+    finnhubTest = await testFinnhubKey(finnhubKey);
+    const pa = await fetchQuoteFinnhubOne("BNP.PA", finnhubKey);
+    finnhubPaTest = pa
+      ? { ok: true }
+      : {
+          ok: false,
+          error:
+            "Finnhub free không hỗ trợ .PA — dùng Yahoo (đã tích hợp sẵn, không cần key).",
+        };
   } else if (finnhub.configured) {
     finnhubTest = { ok: false, error: finnhub.hint };
   }
 
   return {
-    yahoo: { ok: yahooOk, samples: yahooTest.map((q) => q.symbol) },
+    yahoo: {
+      ok: yahooOk,
+      samples: yahooTest.map((q) => ({ symbol: q.symbol, price: q.price, source: q.source })),
+    },
     finnhub,
     finnhubTest,
+    finnhubPaTest,
     twelveData,
     steps: [
-      "1. Key Finnhub lấy tại https://finnhub.io/dashboard (KHÔNG dùng Stripe sk_live_…)",
+      "1. Key Finnhub lấy tại https://finnhub.io/dashboard (~20 ký tự, KHÔNG dán 2 lần)",
       "2. Vercel env: FINNHUB_API_KEY = key Finnhub (Production + Preview)",
       "3. Redeploy sau khi đổi env",
-      "4. Bấm Refresh giá trên Danh mục",
-      "5. Yahoo lấy được US + .PA; Finnhub free chủ yếu US realtime",
+      "4. US stocks: Yahoo hoặc Finnhub. Cổ phiếu .PA: chỉ Yahoo (Finnhub free không có)",
+      "5. Bấm Refresh giá trên Danh mục",
     ],
   };
 }
@@ -61,7 +79,7 @@ export async function GET(req: NextRequest) {
     const missing = list.filter((s) => !prices[s]);
     const unresolved = await fillMissingQuotes(missing, prices, quotes);
 
-    const finnhub = inspectFinnhubKey(process.env.FINNHUB_API_KEY);
+    const finnhub = inspectFinnhubKey();
 
     return NextResponse.json({
       quotes,
@@ -72,7 +90,7 @@ export async function GET(req: NextRequest) {
         yahoo: true,
         finnhub: finnhub.configured && finnhub.valid,
         finnhubHint: finnhub.hint,
-        twelveData: Boolean(process.env.TWELVE_DATA_API_KEY),
+        twelveData: Boolean(getTwelveDataApiKey()),
       },
     });
   } catch (e) {

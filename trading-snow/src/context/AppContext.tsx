@@ -41,7 +41,7 @@ interface AppContextValue {
   deleteTransaction: (id: string) => void;
   setMarketPrice: (symbol: string, price: number) => void;
   setMarketPrices: (prices: Record<string, number>) => void;
-  refreshPrices: (symbols?: string[]) => Promise<void>;
+  refreshPrices: (symbols?: string[], opts?: { notify?: boolean }) => Promise<void>;
   exportData: () => string;
   importData: (json: string) => boolean;
   clearAllTransactions: () => void;
@@ -162,7 +162,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [stats.holdings]
   );
 
-  const refreshPrices = useCallback(async (symbols?: string[]) => {
+  const refreshPrices = useCallback(async (symbols?: string[], opts?: { notify?: boolean }) => {
     const list = symbols ?? holdingSymbols;
     if (list.length === 0) return;
 
@@ -172,7 +172,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/quotes?symbols=${list.join(",")}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error ?? `Không lấy được giá (HTTP ${res.status})`);
+        const msg = data.error ?? `Không lấy được giá (HTTP ${res.status})`;
+        if (opts?.notify) alert(msg);
         return;
       }
       const quotes: {
@@ -208,6 +209,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (data.providers?.finnhubHint && !data.providers?.finnhub) {
         console.warn(data.providers.finnhubHint);
       }
+
+      if (opts?.notify) {
+        const updated = Object.keys(data.prices ?? {}).length;
+        const unresolved: string[] = data.unresolved ?? [];
+        if (updated === 0) {
+          alert(
+            "Không lấy được giá nào. Mở /api/quotes?check=1 để kiểm tra Yahoo/Finnhub trên server.",
+          );
+        } else if (unresolved.length > 0) {
+          alert(`Đã cập nhật ${updated}/${list.length} mã.\nChưa có giá: ${unresolved.join(", ")}`);
+        } else {
+          alert(`Đã cập nhật ${updated} mã.`);
+        }
+      }
     } finally {
       setPriceLoading(false);
     }
@@ -215,11 +230,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated || holdingSymbols.length === 0) return;
+    const missingPrices = stats.holdings.some((h) => !h.marketPrice);
     const stale =
       !state.pricesUpdatedAt ||
       Date.now() - new Date(state.pricesUpdatedAt).getTime() > 5 * 60 * 1000;
-    if (stale) refreshPrices(holdingSymbols);
-  }, [hydrated, holdingSymbols.join(","), refreshPrices, state.pricesUpdatedAt]);
+    if (stale || missingPrices) refreshPrices(holdingSymbols);
+  }, [
+    hydrated,
+    holdingSymbols.join(","),
+    refreshPrices,
+    state.pricesUpdatedAt,
+    stats.holdings.map((h) => (h.marketPrice ? "1" : "0")).join(""),
+  ]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
