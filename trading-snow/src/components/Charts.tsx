@@ -55,7 +55,7 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
         />
         <Tooltip
           contentStyle={TOOLTIP}
-          formatter={(v) => [formatMoney(Number(v ?? 0)), "Giá trị"]}
+          formatter={(v) => [formatMoney(Number(v ?? 0)), "Lợi nhuận ròng"]}
         />
         <Area
           type="monotone"
