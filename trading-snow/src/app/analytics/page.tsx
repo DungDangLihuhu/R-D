@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { BenchmarkComparison } from "@/components/BenchmarkComparison";
 import { EquityChart, MonthlyPnlChart } from "@/components/Charts";
-import { ClosedTradesTable } from "@/components/ClosedTradesTable";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
@@ -16,7 +14,7 @@ export default function AnalyticsPage() {
       <div>
         <h1 className="text-2xl font-bold">Thống kê</h1>
         <p className="text-sm text-gray-500">
-          P&L theo tháng, so sánh S&P 500, lệnh đã chốt
+          P&L theo tháng, so sánh S&P 500
         </p>
       </div>
 
@@ -40,32 +38,17 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="mb-4 font-semibold">P&L theo tháng</h2>
           <MonthlyPnlChart data={stats.monthlyPnl} />
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
           <h2 className="mb-4 font-semibold">Equity curve</h2>
           <EquityChart data={stats.equityCurve} />
         </div>
       </div>
 
       <BenchmarkComparison equityCurve={stats.equityCurve} />
-
-      {stats.closedTrades.length > 0 && (
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Lệnh đã chốt (10 gần nhất)</h2>
-            <Link
-              href="/closed"
-              className="text-sm text-sky-600 hover:text-sky-300"
-            >
-              Xem tất cả →
-            </Link>
-          </div>
-          <ClosedTradesTable trades={stats.closedTrades.slice(-10)} showFooter={false} />
-        </div>
-      )}
     </div>
   );
 }

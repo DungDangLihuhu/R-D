@@ -11,10 +11,12 @@ import {
   subMonths,
 } from "date-fns";
 import { vi } from "date-fns/locale";
+import { Pagination } from "@/components/Pagination";
+import { PriceRefresh } from "@/components/PriceRefresh";
 import { useApp } from "@/context/AppContext";
+import { usePagination } from "@/hooks/usePagination";
 import type { DividendCalendarItem } from "@/lib/types";
 import { formatDate, formatMoney } from "@/lib/format";
-import { PriceRefresh } from "@/components/PriceRefresh";
 
 export function DividendCalendar() {
   const { state, activePortfolioId, stats } = useApp();
@@ -89,6 +91,9 @@ export function DividendCalendar() {
     return !isBefore(dt, monthStart) && !isAfter(dt, monthEnd);
   });
 
+  const { page, setPage, totalPages, pageItems, pageSize, total } =
+    usePagination(inMonth, [format(month, "yyyy-MM")]);
+
   const yearTotal = recorded.reduce((s, d) => s + (d.total ?? 0), 0);
   const upcomingTotal = yahooEvents.reduce((s, d) => s + (d.total ?? 0), 0);
 
@@ -136,47 +141,102 @@ export function DividendCalendar() {
           Không có cổ tức trong tháng này
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-500">
-              <tr>
-                <th className="px-4 py-3">Ngày</th>
-                <th className="px-4 py-3">Mã</th>
-                <th className="px-4 py-3 text-right">$/cp</th>
-                <th className="px-4 py-3 text-right">SL giữ</th>
-                <th className="px-4 py-3 text-right">Tổng</th>
-                <th className="px-4 py-3">Nguồn</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inMonth.map((d, i) => (
-                <tr key={i} className="border-t border-gray-200">
-                  <td className="px-4 py-3">{formatDate(d.date)}</td>
-                  <td className="px-4 py-3 font-medium">{d.symbol}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(d.amount)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {d.quantity?.toFixed(2) ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-emerald-600">
-                    {d.total ? formatMoney(d.total) : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs ${
-                        d.source === "recorded"
-                          ? "bg-emerald-500/15 text-emerald-600"
-                          : "bg-sky-500/15 text-sky-600"
-                      }`}
-                    >
-                      {d.source === "recorded" ? "Đã nhận" : "Dự kiến"}
-                    </span>
-                  </td>
+        <div className="rounded-xl border border-gray-200">
+          <div className="space-y-3 p-3 sm:hidden">
+            {pageItems.map((d, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-gray-200 bg-white p-3 text-sm"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="font-medium">{d.symbol}</p>
+                  <span
+                    className={`rounded px-2 py-0.5 text-xs ${
+                      d.source === "recorded"
+                        ? "bg-emerald-500/15 text-emerald-600"
+                        : "bg-sky-500/15 text-sky-600"
+                    }`}
+                  >
+                    {d.source === "recorded" ? "Đã nhận" : "Dự kiến"}
+                  </span>
+                </div>
+                <p className="mb-2 text-xs text-gray-500">
+                  {formatDate(d.date)}
+                </p>
+                <dl className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <dt className="text-gray-500">$/cp</dt>
+                    <dd className="tabular-nums font-medium">
+                      {formatMoney(d.amount)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">SL giữ</dt>
+                    <dd className="tabular-nums font-medium">
+                      {d.quantity?.toFixed(2) ?? "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Tổng</dt>
+                    <dd className="tabular-nums font-medium text-emerald-600">
+                      {d.total ? formatMoney(d.total) : "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden sm:block">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Ngày</th>
+                  <th className="px-4 py-3">Mã</th>
+                  <th className="px-4 py-3 text-right">$/cp</th>
+                  <th className="px-4 py-3 text-right">SL giữ</th>
+                  <th className="px-4 py-3 text-right">Tổng</th>
+                  <th className="px-4 py-3">Nguồn</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pageItems.map((d, i) => (
+                  <tr key={i} className="border-t border-gray-200">
+                    <td className="px-4 py-3">{formatDate(d.date)}</td>
+                    <td className="px-4 py-3 font-medium">{d.symbol}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatMoney(d.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {d.quantity?.toFixed(2) ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-600">
+                      {d.total ? formatMoney(d.total) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded px-2 py-0.5 text-xs ${
+                          d.source === "recorded"
+                            ? "bg-emerald-500/15 text-emerald-600"
+                            : "bg-sky-500/15 text-sky-600"
+                        }`}
+                      >
+                        {d.source === "recorded" ? "Đã nhận" : "Dự kiến"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </div>
