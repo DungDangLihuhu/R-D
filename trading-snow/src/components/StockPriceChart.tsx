@@ -5,13 +5,15 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
-  Customized,
   Line,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  usePlotArea,
+  useXAxisScale,
+  useYAxisScale,
 } from "recharts";
 import { formatMoney } from "@/lib/format";
 import type { ChartStyle, ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
@@ -87,33 +89,30 @@ function formatChartPrice(value: number): string {
   return value.toFixed(2);
 }
 
-type CandleLayerChartProps = {
-  xAxisMap?: Record<string, { scale: (v: string) => number; bandwidth?: () => number }>;
-  yAxisMap?: Record<string, { scale: (v: number) => number }>;
-};
+function Candlesticks({ data }: { data: OhlcPoint[] }) {
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+  const plotArea = usePlotArea();
 
-function CandlesticksLayer(props: CandleLayerChartProps & { data?: OhlcPoint[] }) {
-  const xAxis = props.xAxisMap ? Object.values(props.xAxisMap)[0] : undefined;
-  const yAxis = props.yAxisMap ? Object.values(props.yAxisMap)[0] : undefined;
-  const data = props.data ?? [];
-  if (!xAxis?.scale || !yAxis?.scale || !data.length) return null;
+  if (!xScale || !yScale || !data.length) return null;
 
-  const band = xAxis.bandwidth?.() ?? 8;
+  const bodyWidth = Math.max(((plotArea?.width ?? 300) / data.length) * 0.65, 2);
 
   return (
-    <g>
+    <g className="recharts-candlesticks">
       {data.map((point) => {
-        const x = xAxis.scale(point.label);
-        if (x == null) return null;
+        const xCenter = xScale(point.date, { position: "middle" });
+        if (xCenter == null) return null;
+
         const { open, high, low, close } = point;
         const isUp = close >= open;
         const color = isUp ? CHART_COLORS.candleUp : CHART_COLORS.candleDown;
-        const xCenter = x + band / 2;
-        const bodyWidth = Math.max(band * 0.65, 2);
-        const yHigh = yAxis.scale(high);
-        const yLow = yAxis.scale(low);
-        const yOpen = yAxis.scale(open);
-        const yClose = yAxis.scale(close);
+        const yHigh = yScale(high);
+        const yLow = yScale(low);
+        const yOpen = yScale(open);
+        const yClose = yScale(close);
+        if (yHigh == null || yLow == null || yOpen == null || yClose == null) return null;
+
         const bodyTop = Math.min(yOpen, yClose);
         const bodyHeight = Math.max(Math.abs(yClose - yOpen), 1);
 
@@ -290,10 +289,14 @@ export function StockPriceChart({
               <ComposedChart data={points} barCategoryGap="20%">
                 <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
                 <XAxis
-                  dataKey="label"
+                  dataKey="date"
                   tick={{ fill: TICK, fontSize: 10 }}
                   interval="preserveStartEnd"
                   minTickGap={24}
+                  tickFormatter={(value) => {
+                    const p = points.find((pt) => pt.date === value);
+                    return p?.label ?? String(value).slice(0, 10);
+                  }}
                 />
                 <YAxis
                   tick={{ fill: TICK, fontSize: 10 }}
@@ -343,11 +346,7 @@ export function StockPriceChart({
                 {chartStyle === "candle" ? (
                   <>
                     <Bar dataKey="close" fill="transparent" isAnimationActive={false} />
-                    <Customized
-                      component={(chartProps: CandleLayerChartProps) => (
-                        <CandlesticksLayer {...chartProps} data={points} />
-                      )}
-                    />
+                    <Candlesticks data={points} />
                   </>
                 ) : (
                   <Line
