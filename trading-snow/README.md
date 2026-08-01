@@ -41,6 +41,41 @@ Type: `buy/sell/dividend` hoặc `mua/bán`
 |-------|--------|
 | `GET /api/quotes?symbols=AAPL,MU` | Giá realtime Yahoo |
 | `GET /api/dividends?symbols=AAPL,MU` | Lịch cổ tức Yahoo |
+| `GET/PUT /api/data?room=shared` | Đồng bộ portfolio (Upstash Redis) |
+
+## Đồng bộ đa thiết bị (cloud)
+
+Mặc định dữ liệu lưu **localStorage** (mỗi máy riêng). Để mọi người xem cùng portfolio:
+
+### Bước 1 — Tạo Upstash Redis (free)
+
+1. [console.upstash.com](https://console.upstash.com) → Create database → Region gần Vercel
+2. Copy **UPSTASH_REDIS_REST_URL** và **UPSTASH_REDIS_REST_TOKEN**
+
+### Bước 2 — Thêm vào Vercel
+
+Project → Settings → Environment Variables:
+
+```
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
+NEXT_PUBLIC_SYNC_ROOM=ten-gia-dinh    # tùy chọn, mã phòng mặc định
+```
+
+Redeploy.
+
+### Bước 3 — Dùng
+
+- Header hiện badge **cloud + mã phòng** khi đã bật
+- Trang **Tổng quan** → panel **Đồng bộ đám mây** → đổi mã phòng nếu cần
+- Mọi thiết bị dùng **cùng mã phòng** → cùng giao dịch/danh mục
+- Tự lưu cloud sau ~1s khi sửa; poll mỗi 20s
+
+### Bảo mật (tùy chọn)
+
+Set `SYNC_WRITE_KEY` trên server. User nhập key trong trình duyệt (chưa có UI — dùng localStorage key `trading-snow-write-key` hoặc bỏ qua nếu chỉ gia đình).
+
+**Lưu ý:** Không có đăng nhập — ai biết mã phòng có thể xem/sửa. Đặt mã phòng khó đoán.
 
 ## Deploy online — gợi ý
 
@@ -66,8 +101,8 @@ Hoặc: [vercel.com](https://vercel.com) → Import repo → Root Directory: `tr
 
 ### Lưu ý khi deploy
 
-- Dữ liệu vẫn lưu **localStorage trên trình duyệt** — mỗi user/máy riêng
-- Muốn sync đa thiết bị → cần thêm backend (Supabase, Firebase, Postgres)
+- Không cấu hình Upstash → chỉ lưu localStorage trên từng máy
+- Có Upstash → đồng bộ cloud theo mã phòng (xem mục trên)
 - Yahoo Finance API không chính thức — có thể rate-limit; production nên cache (đã set `revalidate`)
 
 ## Cấu trúc

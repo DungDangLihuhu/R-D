@@ -6,11 +6,18 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { v4 as uuid } from "uuid";
 import { computePortfolioStats } from "@/lib/stats";
+import {
+  checkCloudConfigured,
+  getSyncRoomId,
+  loadRemoteState,
+  saveRemoteState,
+} from "@/lib/remote-storage";
 import { defaultState, loadState, saveState } from "@/lib/storage";
 import type {
   AppState,
@@ -25,6 +32,8 @@ interface AppContextValue {
   setActivePortfolioId: (id: string) => void;
   stats: PortfolioStats;
   priceLoading: boolean;
+  cloudConfigured: boolean;
+  syncRoom: string;
   addPortfolio: (name: string, currency: string) => void;
   addTransaction: (tx: Omit<Transaction, "id">) => void;
   importTransactions: (txs: Omit<Transaction, "id">[]) => void;
@@ -44,17 +53,96 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activePortfolioId, setActivePortfolioId] = useState("default");
   const [hydrated, setHydrated] = useState(false);
   const [priceLoading, setPriceLoading] = useState(false);
+  const [cloudConfigured, setCloudConfigured] = useState(false);
+  const [syncRoom, setSyncRoom] = useState("shared");
+
+  const lastRemoteUpdatedAt = useRef<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPolling = useRef(false);
 
   useEffect(() => {
-    const loaded = loadState();
-    setState(loaded);
-    setActivePortfolioId(loaded.portfolios[0]?.id ?? "default");
-    setHydrated(true);
+    let cancelled = false;
+
+    async function init() {
+      const configured = await checkCloudConfigured();
+      if (cancelled) return;
+
+      const room = getSyncRoomId();
+      setSyncRoom(room);
+      setCloudConfigured(configured);
+
+      const local = loadState();
+
+      if (!configured) {
+        setState(local);
+        setActivePortfolioId(local.portfolios[0]?.id ?? "default");
+        setHydrated(true);
+        return;
+      }
+
+      const remote = await loadRemoteState(room);
+      if (cancelled) return;
+
+      if (remote) {
+        lastRemoteUpdatedAt.current = remote.updatedAt;
+        setState(remote.state);
+        saveState(remote.state);
+        setActivePortfolioId(remote.state.portfolios[0]?.id ?? "default");
+      } else {
+        setState(local);
+        setActivePortfolioId(local.portfolios[0]?.id ?? "default");
+        if (local.transactions.length > 0 || local.portfolios.length > 1) {
+          const ts = await saveRemoteState(room, local);
+          if (ts) lastRemoteUpdatedAt.current = ts;
+        }
+      }
+
+      setHydrated(true);
+    }
+
+    init();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (hydrated) saveState(state);
-  }, [state, hydrated]);
+    if (!hydrated) return;
+    saveState(state);
+
+    if (!cloudConfigured) return;
+
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      const ts = await saveRemoteState(syncRoom, state);
+      if (ts) lastRemoteUpdatedAt.current = ts;
+    }, 800);
+
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [state, hydrated, cloudConfigured, syncRoom]);
+
+  useEffect(() => {
+    if (!hydrated || !cloudConfigured) return;
+
+    const poll = async () => {
+      if (isPolling.current) return;
+      isPolling.current = true;
+      try {
+        const remote = await loadRemoteState(syncRoom);
+        if (!remote || remote.updatedAt === lastRemoteUpdatedAt.current) return;
+        lastRemoteUpdatedAt.current = remote.updatedAt;
+        setState(remote.state);
+        saveState(remote.state);
+      } finally {
+        isPolling.current = false;
+      }
+    };
+
+    const id = setInterval(poll, 20_000);
+    return () => clearInterval(id);
+  }, [hydrated, cloudConfigured, syncRoom]);
 
   const stats = useMemo(
     () =>
@@ -187,6 +275,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setActivePortfolioId,
         stats,
         priceLoading,
+        cloudConfigured,
+        syncRoom,
         addPortfolio,
         addTransaction,
         importTransactions,

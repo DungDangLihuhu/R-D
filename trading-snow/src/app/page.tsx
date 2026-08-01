@@ -4,6 +4,7 @@ import { EquityChart } from "@/components/Charts";
 import { DataTools } from "@/components/DataTools";
 import { PriceRefresh } from "@/components/PriceRefresh";
 import { StatCard } from "@/components/StatCard";
+import { SyncPanel } from "@/components/SyncPanel";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
 
@@ -16,7 +17,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Tổng quan</h1>
           <p className="text-sm text-gray-500">
-            Theo dõi P&L, win rate và đường vốn — lưu local trên trình duyệt
+            Theo dõi P&L, win rate và đường vốn — đồng bộ cloud khi bật Upstash
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -24,6 +25,8 @@ export default function DashboardPage() {
           <DataTools />
         </div>
       </div>
+
+      <SyncPanel />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
