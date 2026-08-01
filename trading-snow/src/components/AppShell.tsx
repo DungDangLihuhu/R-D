@@ -19,7 +19,7 @@ const nav = [
   { href: "/trades", label: "Giao dịch", icon: Wallet },
   { href: "/portfolio", label: "Danh mục", icon: LineChart },
   { href: "/closed", label: "Lệnh đóng", icon: History },
-  { href: "/dividends", label: "Cổ tức", icon: CalendarDays },
+  { href: "/events", label: "Sự kiện", icon: CalendarDays },
   { href: "/analytics", label: "Thống kê", icon: BarChart3 },
 ];
 
@@ -52,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="mx-auto grid max-w-6xl grid-cols-3 gap-1 px-4 pb-2 sm:flex sm:flex-wrap">
           {nav.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
+            const active = pathname === href || (href === "/events" && pathname === "/dividends");
             return (
               <Link
                 key={href}

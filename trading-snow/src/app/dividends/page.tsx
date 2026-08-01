@@ -1,7 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { DividendCalendar } from "@/components/DividendCalendar";
-
-export default function DividendsPage() {
-  return <DividendCalendar />;
+export default function DividendsRedirectPage() {
+  redirect("/events");
 }

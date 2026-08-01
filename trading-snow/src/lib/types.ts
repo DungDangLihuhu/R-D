@@ -82,7 +82,26 @@ export interface DividendCalendarItem {
   symbol: string;
   date: string;
   amount: number;
-  source: "recorded" | "yahoo";
+  source: "recorded" | "yahoo" | "estimated";
   quantity?: number;
   total?: number;
+}
+
+export type EventCategory =
+  | "dividend"
+  | "earnings"
+  | "news"
+  | "macro"
+  | "holiday";
+
+export interface CalendarEvent {
+  id: string;
+  date: string;
+  title: string;
+  category: EventCategory;
+  symbol?: string;
+  subtitle?: string;
+  impact?: "high" | "medium" | "low";
+  url?: string;
+  amount?: number;
 }
