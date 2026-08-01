@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { useApp } from "@/context/AppContext";
 import {
@@ -32,11 +32,16 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   const [data, setData] = useState<StockAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(symbol);
 
   const holdings = useMemo(
     () => [...new Set(stats.holdings.map((h) => h.symbol))],
     [stats.holdings]
   );
+
+  useEffect(() => {
+    setSearchQuery(symbol);
+  }, [symbol]);
 
   useEffect(() => {
     if (!symbol) return;
@@ -76,26 +81,56 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             Chỉ số cơ bản · báo cáo · tin tức · giao dịch nội bộ (Yahoo + Finnhub)
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={symbol}
-            onChange={(e) => router.push(`/stock/${encodeURIComponent(e.target.value)}`)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[20rem]">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const next = searchQuery.trim().toUpperCase();
+              if (next) router.push(`/stock/${encodeURIComponent(next)}`);
+            }}
           >
-            {holdings.length === 0 && <option value="">—</option>}
-            {holdings.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+                placeholder="Nhập mã (AAPL, NVDA, BNP.PA…)"
+                className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm"
+              />
+            </div>
+            <button
+              type="submit"
+              className="shrink-0 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
+            >
+              Xem
+            </button>
+          </form>
+          {holdings.length > 0 && (
+            <select
+              value={holdings.includes(symbol) ? symbol : ""}
+              onChange={(e) => {
+                if (e.target.value) {
+                  router.push(`/stock/${encodeURIComponent(e.target.value)}`);
+                }
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
+            >
+              <option value="">Mã trong danh mục…</option>
+              {holdings.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
-      {holdings.length === 0 && (
+      {holdings.length === 0 && !symbol && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chưa có mã trong danh mục. Thêm giao dịch hoặc nhập mã US (vd AAPL, NVDA) qua URL{" "}
-          <code className="rounded bg-amber-100 px-1">/stock/NVDA</code>
+          Nhập mã ở thanh tìm kiếm phía trên (vd AAPL, NVDA).
         </div>
       )}
 

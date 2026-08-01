@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { Pagination } from "@/components/Pagination";
@@ -108,12 +109,15 @@ function HoldingRow({
     <div className="border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5">
       <div className="md:hidden">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href={`/stock/${encodeURIComponent(holding.symbol)}`}
+            className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
+          >
             <SymbolAvatar symbol={holding.symbol} />
-            <p className="truncate text-sm font-semibold leading-tight">
+            <p className="truncate text-sm font-semibold leading-tight text-sky-800">
               {displayName}
             </p>
-          </div>
+          </Link>
           <p className="shrink-0 text-sm font-semibold tabular-nums">
             {formatShares(holding.quantity)}
           </p>
@@ -171,14 +175,17 @@ function HoldingRow({
       </div>
 
       <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)] md:items-center md:gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
+        <Link
+          href={`/stock/${encodeURIComponent(holding.symbol)}`}
+          className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
+        >
           <SymbolAvatar symbol={holding.symbol} />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold leading-tight">
+            <p className="truncate text-sm font-semibold leading-tight text-sky-800">
               {displayName}
             </p>
           </div>
-        </div>
+        </Link>
 
         <p className="text-right text-sm font-medium tabular-nums">
           {formatShares(holding.quantity)}
@@ -270,7 +277,7 @@ export function HoldingsTable() {
       </div>
 
       <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
-        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Bấm giá/cp sửa thủ công.
+        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Bấm tên mã → Phân tích. Bấm giá/cp sửa thủ công.
       </p>
 
       <Pagination
