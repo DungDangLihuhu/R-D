@@ -44,6 +44,7 @@ interface AppContextValue {
   exportData: () => string;
   importData: (json: string) => boolean;
   clearAllTransactions: () => void;
+  clearPortfolioTransactions: (portfolioId: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -284,6 +285,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const clearPortfolioTransactions = useCallback((portfolioId: string) => {
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.filter((t) => t.portfolioId !== portfolioId),
+    }));
+  }, []);
+
   if (!hydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#eef0f3] text-gray-500">
@@ -312,6 +320,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         exportData,
         importData,
         clearAllTransactions,
+        clearPortfolioTransactions,
       }}
     >
       {children}
