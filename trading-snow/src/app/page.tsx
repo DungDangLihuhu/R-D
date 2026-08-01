@@ -17,7 +17,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Tổng quan</h1>
           <p className="text-sm text-gray-500">
-            Theo dõi P&L, win rate và đường vốn — đồng bộ cloud khi bật Upstash
+            Theo dõi P&L, win rate và lợi nhuận ròng — đồng bộ cloud khi bật Upstash
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -32,7 +32,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 lg:col-span-2">
-          <h2 className="mb-4 font-semibold">Đường vốn (giá trị danh mục)</h2>
+          <h2 className="mb-4 font-semibold">Lợi nhuận ròng (giá trị danh mục)</h2>
           <EquityChart data={stats.equityCurve} />
         </div>
         <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">

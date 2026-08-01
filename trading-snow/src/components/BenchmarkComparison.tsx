@@ -106,7 +106,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Vốn mốc = NAV đầu kỳ theo đường vốn · S&P mua giữ · 100 = hòa vốn
+            Vốn mốc = NAV đầu kỳ theo lợi nhuận ròng · S&P mua giữ · 100 = hòa vốn
             {comparison && (
               <>
                 {" "}
