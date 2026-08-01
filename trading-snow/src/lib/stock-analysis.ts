@@ -1,6 +1,7 @@
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, yahooInsiderShareChange } from "./yahoo";
+import type { YahooInsiderData } from "./yahoo";
 import {
   computeStockAssessment,
   type OptionFlowSummary,
@@ -252,6 +253,99 @@ function matchExecutivePosition(
   }
 
   return undefined;
+}
+
+function lookupYahooRelationship(
+  name: string,
+  date: string,
+  yahoo: YahooInsiderData | null
+): string | undefined {
+  if (!yahoo) return undefined;
+  const key = normalizePersonName(name);
+  const day = date.slice(0, 10);
+
+  for (const t of yahoo.transactions) {
+    if (t.date.slice(0, 10) !== day) continue;
+    const tKey = normalizePersonName(t.name);
+    if (tKey === key || tKey.includes(key) || key.includes(tKey)) {
+      if (t.relation) return t.relation;
+    }
+  }
+
+  for (const t of yahoo.transactions) {
+    const tKey = normalizePersonName(t.name);
+    if ((tKey === key || tKey.includes(key) || key.includes(tKey)) && t.relation) {
+      return t.relation;
+    }
+  }
+
+  return yahoo.rosterByName[key];
+}
+
+function buildInsiderRows(
+  finnhubData: {
+    name: string;
+    share: number;
+    change: number;
+    transactionDate: string;
+    transactionCode: string;
+    transactionPrice?: number;
+    relationship?: string;
+    position?: string;
+  }[],
+  yahooInsider: YahooInsiderData | null,
+  executives: { name: string; position?: string }[],
+  quotePrice: number
+): InsiderRow[] {
+  if (finnhubData.length > 0) {
+    return finnhubData.slice(0, 12).map((t) => {
+      const unitPrice =
+        t.transactionPrice && t.transactionPrice > 0
+          ? t.transactionPrice
+          : quotePrice > 0
+            ? quotePrice
+            : null;
+      const amount = unitPrice != null ? t.change * unitPrice : null;
+      return {
+        name: t.name,
+        date: t.transactionDate,
+        change: t.change,
+        shares: t.share,
+        transactionCode: t.transactionCode,
+        transactionPrice: t.transactionPrice ?? null,
+        amount,
+        relationship:
+          t.relationship?.trim() ||
+          t.position?.trim() ||
+          lookupYahooRelationship(t.name, t.transactionDate, yahooInsider) ||
+          matchExecutivePosition(t.name, executives) ||
+          null,
+      };
+    });
+  }
+
+  if (!yahooInsider?.transactions.length) return [];
+
+  return yahooInsider.transactions.slice(0, 12).map((t) => {
+    const change = yahooInsiderShareChange(t.shares, t.transactionText);
+    const unitPrice =
+      t.value && t.shares ? Math.abs(t.value / t.shares) : quotePrice > 0 ? quotePrice : null;
+    const amount =
+      t.value ?? (unitPrice != null ? change * unitPrice : null);
+    return {
+      name: t.name,
+      date: t.date,
+      change,
+      shares: 0,
+      transactionCode: change < 0 ? "S" : "P",
+      transactionPrice: unitPrice,
+      amount,
+      relationship:
+        t.relation?.trim() ||
+        yahooInsider.rosterByName[normalizePersonName(t.name)] ||
+        null,
+    };
+  });
 }
 
 function clusterLevels(
@@ -582,22 +676,24 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
   const recommendations =
     (await finnhubGet<RecommendationRow[]>("stock/recommendation?", upper)) ?? [];
 
-  const insiderRes = await finnhubGet<{
-    data?: {
-      name: string;
-      share: number;
-      change: number;
-      transactionDate: string;
-      transactionCode: string;
-      transactionPrice?: number;
-      relationship?: string;
-      position?: string;
-    }[];
-  }>("stock/insider-transactions?", upper);
-
-  const executiveRes = await finnhubGet<{
-    executive?: { name: string; position?: string }[];
-  }>("stock/executive?", upper);
+  const [insiderRes, executiveRes, yahooInsider] = await Promise.all([
+    finnhubGet<{
+      data?: {
+        name: string;
+        share: number;
+        change: number;
+        transactionDate: string;
+        transactionCode: string;
+        transactionPrice?: number;
+        relationship?: string;
+        position?: string;
+      }[];
+    }>("stock/insider-transactions?", upper),
+    finnhubGet<{
+      executive?: { name: string; position?: string }[];
+    }>("stock/executive?", upper),
+    fetchYahooInsiderData(upper),
+  ]);
   const executives = executiveRes?.executive ?? [];
 
   const peers = (await finnhubGet<string[]>("stock/peers?", upper)) ?? [];
@@ -630,29 +726,12 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     }
   }
 
-  const insiderTransactions = (insiderRes?.data ?? []).slice(0, 12).map((t) => {
-    const unitPrice =
-      t.transactionPrice && t.transactionPrice > 0
-        ? t.transactionPrice
-        : quote.price > 0
-          ? quote.price
-          : null;
-    const amount = unitPrice != null ? t.change * unitPrice : null;
-    return {
-      name: t.name,
-      date: t.transactionDate,
-      change: t.change,
-      shares: t.share,
-      transactionCode: t.transactionCode,
-      transactionPrice: t.transactionPrice ?? null,
-      amount,
-      relationship:
-        t.relationship?.trim() ||
-        t.position?.trim() ||
-        matchExecutivePosition(t.name, executives) ||
-        null,
-    };
-  });
+  const insiderTransactions = buildInsiderRows(
+    insiderRes?.data ?? [],
+    yahooInsider,
+    executives,
+    quote.price
+  );
 
   const priceLevels = computePriceLevels(
     quote.price,
