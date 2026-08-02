@@ -305,10 +305,9 @@ function hasTradeTransactions(transactions: Transaction[]): boolean {
 }
 
 /**
- * Lãi ròng / tổng vốn cost hiện tại (giá vốn CP đang giữ):
- * - BUY/nạp: tăng cost · SELL: trừ cost basis · % = lãi / cost
- *
- * S&P: % tăng chỉ số thuần từ đầu kỳ.
+ * Danh mục: % lãi = lãi ròng × 100 / cost CP tại từng thời điểm
+ * lãi ròng = NAV − cost (giá vốn đang giữ)
+ * Chart chuẩn hóa 100 tại đầu kỳ để so với S&P.
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
@@ -361,7 +360,8 @@ export function buildBenchmarkComparison(
   const openingCost =
     opening.holdingsCost > 0 ? opening.holdingsCost : startEquity;
   const openingNav = startEquity;
-  const openingProfit = openingNav - openingCost;
+  const startProfitPct =
+    openingCost > 0 ? ((openingNav - openingCost) / openingCost) * 100 : 0;
 
   const portfolioState = replayThrough(
     sortedTx,
@@ -392,10 +392,10 @@ export function buildBenchmarkComparison(
 
     const nav = equityByDate.get(b.date) ?? openingNav;
     const currentCost = holdingsCost(portfolioState);
-    const netProfit = nav - currentCost - openingProfit;
-    const totalCost = currentCost > 0 ? currentCost : openingCost;
-    const portfolio =
-      totalCost > 0 ? 100 + (netProfit / totalCost) * 100 : 100;
+    const cost = currentCost > 0 ? currentCost : openingCost;
+    const netProfit = nav - currentCost;
+    const profitPct = cost > 0 ? (netProfit / cost) * 100 : 0;
+    const portfolio = 100 + (profitPct - startProfitPct);
 
     return {
       date: b.date,
