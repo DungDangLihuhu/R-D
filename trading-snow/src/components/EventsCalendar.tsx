@@ -230,7 +230,7 @@ export function EventsCalendar() {
           {loading
             ? "Đang tải sự kiện..."
             : tab === "holiday"
-              ? "Không có nghỉ lễ NYSE/Nasdaq trong tháng này — thử tháng 1, 7, 11 hoặc 12"
+              ? "Không có nghỉ lễ NYSE/Nasdaq trong tháng này"
               : "Không có sự kiện trong tháng này cho bộ lọc đã chọn"}
         </div>
       ) : (

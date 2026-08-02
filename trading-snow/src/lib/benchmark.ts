@@ -192,36 +192,46 @@ function resolvePeriodStart(
   return null;
 }
 
-/** Match S&P 500 to external cash flows only (not BUY/SELL). */
-function applyExternalSp500Flow(
-  spyShares: number,
+/** Match S&P cash flows and track net capital invested (nạp − rút). */
+function applyMatchedSp500Flow(
+  state: { spyShares: number; invested: number },
   tx: Transaction,
   spyPrice: number
-): number {
-  if (spyPrice <= 0) return spyShares;
+): void {
+  if (spyPrice <= 0) return;
 
   const gross = tx.quantity * tx.price;
 
   switch (tx.type) {
     case "DEPOSIT":
-      return spyShares + gross / spyPrice;
+      state.invested += gross;
+      state.spyShares += gross / spyPrice;
+      break;
     case "WITHDRAW": {
-      const maxSell = spyShares * spyPrice;
-      const amount = Math.min(gross, maxSell);
-      return spyShares - amount / spyPrice;
+      state.invested = Math.max(0, state.invested - gross);
+      const maxSell = state.spyShares * spyPrice;
+      const sell = Math.min(gross, maxSell);
+      state.spyShares -= sell / spyPrice;
+      break;
     }
     case "DIVIDEND": {
       const amount = gross - tx.fee;
-      return amount > 0 ? spyShares + amount / spyPrice : spyShares;
+      if (amount > 0) state.spyShares += amount / spyPrice;
+      break;
     }
-    default:
-      return spyShares;
   }
 }
 
+function indexedReturn(value: number, invested: number): number {
+  if (invested <= 0) return 100;
+  return (value / invested) * 100;
+}
+
 /**
- * Compare portfolio NAV vs S&P 500 with matched external flows.
- * Window is always limited to actual trade history (inception → today).
+ * Compare portfolio vs S&P 500 with matched capital:
+ * - Same money in = opening NAV + nạp − rút trong kỳ
+ * - S&P: mua giữ, mỗi lần nạp mua thêm, rút bán, cổ tức tái đầu tư
+ * - Chart: 100 = hòa vốn trên tổng tiền đã bỏ vào tại thời điểm đó
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
@@ -261,7 +271,10 @@ export function buildBenchmarkComparison(
   const startBench = benchFromStart[0].close;
   if (startBench <= 0) return null;
 
-  let spyShares = startEquity / startBench;
+  const flowState = {
+    spyShares: startEquity / startBench,
+    invested: startEquity,
+  };
   const sortedTx = [...transactions].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
@@ -274,18 +287,19 @@ export function buildBenchmarkComparison(
 
       if (txDate > periodStart) {
         const spyPrice = lookupBenchmarkPrice(benchmark, txDate);
-        spyShares = applyExternalSp500Flow(spyShares, sortedTx[txIdx], spyPrice);
+        applyMatchedSp500Flow(flowState, sortedTx[txIdx], spyPrice);
       }
       txIdx++;
     }
 
     const nav = equityByDate.get(b.date) ?? startEquity;
-    const spyValue = spyShares * b.close;
+    const spyValue = flowState.spyShares * b.close;
+    const invested = flowState.invested;
 
     return {
       date: b.date,
-      portfolio: (nav / startEquity) * 100,
-      sp500: (spyValue / startEquity) * 100,
+      portfolio: indexedReturn(nav, invested),
+      sp500: indexedReturn(spyValue, invested),
     };
   });
 
@@ -300,7 +314,7 @@ export function buildBenchmarkComparison(
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
-    investedCapital: startEquity,
+    investedCapital: flowState.invested,
     from: comparisonFrom,
     to: endDate,
     clampedToHistory,
