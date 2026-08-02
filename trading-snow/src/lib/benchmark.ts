@@ -56,22 +56,35 @@ export function ensureEquityCurve(
 }
 
 function portfolioInceptionDate(
-  equityCurve: { date: string; equity: number }[]
+  equityCurve: { date: string; equity: number }[],
+  transactions: Transaction[] = []
 ): string {
   const sorted = ensureEquityCurve(equityCurve);
-  return sorted[0]?.date.slice(0, 10) ?? "";
+  const fromCurve = sorted[0]?.date.slice(0, 10) ?? "";
+
+  if (transactions.length === 0) return fromCurve;
+
+  const firstTx = [...transactions].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  )[0];
+  const fromTx = firstTx?.date.slice(0, 10) ?? "";
+
+  if (!fromCurve) return fromTx;
+  if (!fromTx) return fromCurve;
+  return fromTx < fromCurve ? fromTx : fromCurve;
 }
 
 /** Resolve comparison window; always clamps `from` to first trade date. */
 export function resolveBenchmarkWindow(
   equityCurve: { date: string; equity: number }[],
   range: BenchmarkRange,
-  now = new Date()
+  now = new Date(),
+  transactions: Transaction[] = []
 ): { from: string; to: string; clampedToHistory: boolean } | null {
   const curve = ensureEquityCurve(equityCurve);
   if (curve.length < 2) return null;
 
-  const portfolioStart = portfolioInceptionDate(curve);
+  const portfolioStart = portfolioInceptionDate(curve, transactions);
   const portfolioEnd = curve[curve.length - 1].date.slice(0, 10);
   const today = toDateStr(now);
   const to = today > portfolioEnd ? today : portfolioEnd;
@@ -220,9 +233,10 @@ export function buildBenchmarkComparison(
   if (curve.length < 2 || benchmark.length < 1) return null;
 
   const sortedEquity = [...curve].sort((a, b) => a.date.localeCompare(b.date));
-  const portfolioStart = portfolioInceptionDate(curve);
+  const portfolioStart = portfolioInceptionDate(curve, transactions);
   const requestedStart = window?.from ?? portfolioStart;
-  const startDate = requestedStart < portfolioStart ? portfolioStart : requestedStart;
+  const startDate =
+    requestedStart < portfolioStart ? portfolioStart : requestedStart;
   const endDate =
     window?.to ?? sortedEquity[sortedEquity.length - 1].date.slice(0, 10);
   const clampedToHistory =
@@ -238,6 +252,8 @@ export function buildBenchmarkComparison(
   if (!period) return null;
 
   const { periodStart, startEquity } = period;
+  const comparisonFrom =
+    periodStart < portfolioStart ? portfolioStart : periodStart;
   const startBenchIdx = benchInRange.findIndex((b) => b.date >= periodStart);
   if (startBenchIdx < 0) return null;
 
@@ -285,7 +301,7 @@ export function buildBenchmarkComparison(
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
     investedCapital: startEquity,
-    from: periodStart,
+    from: comparisonFrom,
     to: endDate,
     clampedToHistory,
   };

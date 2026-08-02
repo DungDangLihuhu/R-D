@@ -179,27 +179,45 @@ async function fetchForexFactoryWeek(url: string): Promise<FfEvent[]> {
   }
 }
 
-async function fetchMacroEvents(from: string, to: string): Promise<CalendarEvent[]> {
-  const feeds = [
-    "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
-    "https://nfs.faireconomy.media/ff_calendar_nextweek.json",
-  ];
-  const raw: FfEvent[] = [];
-  for (const feed of feeds) {
-    raw.push(...(await fetchForexFactoryWeek(feed)));
-  }
+function addDaysIso(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr.slice(0, 10)}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
-  const fromMs = new Date(from).getTime();
-  const toMs = new Date(to).getTime();
+function capMacroWindow(from: string, to: string, maxDays = 31): { from: string; to: string } {
+  const fromD = from.slice(0, 10);
+  const toD = to.slice(0, 10);
+  const maxTo = addDaysIso(fromD, maxDays);
+  return { from: fromD, to: toD <= maxTo ? toD : maxTo };
+}
 
+function isUsMacroCountry(country: string): boolean {
+  const c = country.trim().toUpperCase();
+  return c === "US" || c === "USA" || c === "USD" || c === "UNITED STATES";
+}
+
+function isHighImpact(impact: string): boolean {
+  return impact.trim().toLowerCase() === "high";
+}
+
+function matchesMacroKeywords(title: string): boolean {
+  const titleLower = title.toLowerCase();
+  return MACRO_KEYWORDS.some((k) => titleLower.includes(k));
+}
+
+function mapFfEvents(
+  raw: FfEvent[],
+  fromMs: number,
+  toMs: number,
+  seen: Set<string>
+): CalendarEvent[] {
   const events: CalendarEvent[] = [];
-  const seen = new Set<string>();
 
   for (const e of raw) {
-    if (e.country !== "USD") continue;
-    if (e.impact !== "High") continue;
-    const titleLower = e.title.toLowerCase();
-    if (!MACRO_KEYWORDS.some((k) => titleLower.includes(k))) continue;
+    if (!isUsMacroCountry(e.country)) continue;
+    if (!isHighImpact(e.impact)) continue;
+    if (!matchesMacroKeywords(e.title)) continue;
 
     const dt = new Date(e.date);
     if (dt.getTime() < fromMs || dt.getTime() > toMs) continue;
@@ -213,7 +231,10 @@ async function fetchMacroEvents(from: string, to: string): Promise<CalendarEvent
       date: dt.toISOString(),
       title: e.title,
       category: "macro",
-      subtitle: [e.forecast ? `Dự báo ${e.forecast}` : null, e.previous ? `Trước ${e.previous}` : null]
+      subtitle: [
+        e.forecast ? `Dự báo ${e.forecast}` : null,
+        e.previous ? `Trước ${e.previous}` : null,
+      ]
         .filter(Boolean)
         .join(" · "),
       impact: "high",
@@ -221,6 +242,97 @@ async function fetchMacroEvents(from: string, to: string): Promise<CalendarEvent
   }
 
   return events;
+}
+
+async function fetchMacroFromFinnhub(
+  from: string,
+  to: string
+): Promise<CalendarEvent[]> {
+  const key = finnhubKey();
+  if (!key) return [];
+
+  const fromD = from.slice(0, 10);
+  const toD = to.slice(0, 10);
+  const res = await fetch(
+    `https://finnhub.io/api/v1/calendar/economic?from=${fromD}&to=${toD}&token=${key}`,
+    { next: { revalidate: 3600 } }
+  );
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as {
+    economicCalendar?: {
+      event?: string;
+      country?: string;
+      impact?: string;
+      time?: string;
+      estimate?: number | null;
+      prev?: number | null;
+      actual?: number | null;
+      unit?: string;
+    }[];
+  };
+
+  const fromMs = new Date(fromD).getTime();
+  const toMs = new Date(`${toD}T23:59:59.999Z`).getTime();
+  const seen = new Set<string>();
+  const events: CalendarEvent[] = [];
+
+  for (const e of data.economicCalendar ?? []) {
+    if (!e.event || !e.time) continue;
+    if (!isUsMacroCountry(e.country ?? "")) continue;
+    if (!isHighImpact(e.impact ?? "")) continue;
+    if (!matchesMacroKeywords(e.event)) continue;
+
+    const dt = new Date(e.time.includes("T") ? e.time : `${e.time.replace(" ", "T")}Z`);
+    if (Number.isNaN(dt.getTime())) continue;
+    if (dt.getTime() < fromMs || dt.getTime() > toMs) continue;
+
+    const id = `macro-fh-${e.time}-${e.event}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const fmt = (v: number | null | undefined) =>
+      v == null ? null : `${v}${e.unit ? ` ${e.unit}` : ""}`;
+
+    events.push({
+      id,
+      date: dt.toISOString(),
+      title: e.event,
+      category: "macro",
+      subtitle: [
+        fmt(e.estimate) ? `Dự báo ${fmt(e.estimate)}` : null,
+        fmt(e.prev) ? `Trước ${fmt(e.prev)}` : null,
+        fmt(e.actual) ? `Thực tế ${fmt(e.actual)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      impact: "high",
+    });
+  }
+
+  return events;
+}
+
+async function fetchMacroEvents(from: string, to: string): Promise<CalendarEvent[]> {
+  const window = capMacroWindow(from, to, 31);
+  const fromMs = new Date(window.from).getTime();
+  const toMs = new Date(`${window.to}T23:59:59.999Z`).getTime();
+  const seen = new Set<string>();
+
+  const fromFinnhub = await fetchMacroFromFinnhub(window.from, window.to);
+  for (const e of fromFinnhub) seen.add(e.id);
+
+  if (fromFinnhub.length > 0) return fromFinnhub;
+
+  const feeds = [
+    "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
+  ];
+  const raw: FfEvent[] = [];
+  for (const feed of feeds) {
+    raw.push(...(await fetchForexFactoryWeek(feed)));
+  }
+
+  return mapFfEvents(raw, fromMs, toMs, seen);
 }
 
 function holidaysToEvents(holidays: { date: string; name: string; tradingHour?: string }[]): CalendarEvent[] {
@@ -316,9 +428,12 @@ export async function fetchDividendEvents(
 export async function fetchPortfolioEvents(
   symbols: string[],
   from: string,
-  to: string
+  to: string,
+  options?: { macroFrom?: string; macroTo?: string }
 ): Promise<CalendarEvent[]> {
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter((s) => s !== "CASH"))];
+  const macroFrom = options?.macroFrom ?? from;
+  const macroTo = options?.macroTo ?? to;
 
   const [dividends, earnings, news, macro, holidays] = await Promise.all([
     fetchDividendEvents(unique, from, to),
@@ -326,7 +441,7 @@ export async function fetchPortfolioEvents(
       (r) => r.flat()
     ),
     Promise.all(unique.slice(0, 15).map((s) => fetchNewsForSymbol(s))).then((r) => r.flat()),
-    fetchMacroEvents(from, to),
+    fetchMacroEvents(macroFrom, macroTo),
     fetchUsMarketHolidays(from, to),
   ]);
 
