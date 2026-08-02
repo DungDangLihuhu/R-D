@@ -3,7 +3,6 @@ import {
   checkWriteKey,
   getCloudConfigStatus,
   getRedis,
-  isCloudConfigured,
   normalizeRoomId,
   redisKey,
   validateAppState,

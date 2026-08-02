@@ -212,13 +212,26 @@ function parseSnowballHoldings(
     });
   }
 
+  const totalCost = rows.reduce((sum, r) => sum + r.quantity * r.price, 0);
+  if (totalCost > 0) {
+    rows.unshift({
+      date: importDate,
+      symbol: "CASH",
+      type: "DEPOSIT",
+      quantity: totalCost,
+      price: 1,
+      fee: 0,
+      notes: "Snowball Holdings — nạp tự động theo tổng giá vốn",
+    });
+  }
+
   return {
     rows,
     errors,
     format: "snowball_holdings",
     marketPrices,
     info:
-      "File Holdings Snowball — mã quốc tế hóa theo Country/Exchange (vd. SAN + France → SAN.PA). Để import lịch sử giao dịch, xuất Transactions từ Snowball.",
+      "File Holdings Snowball — mã quốc tế hóa theo Country/Exchange (vd. SAN + France → SAN.PA). Tự thêm nạp tiền = tổng giá vốn. Để import lịch sử giao dịch, xuất Transactions từ Snowball.",
   };
 }
 

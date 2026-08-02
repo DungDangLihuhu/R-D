@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Cloud, CloudOff, RefreshCw } from "lucide-react";
 import {
   checkCloudConfigured,
@@ -12,15 +12,16 @@ import {
 
 export function SyncPanel() {
   const [configured, setConfigured] = useState<boolean | null>(null);
-  const [room, setRoom] = useState("");
-  const [draft, setDraft] = useState("");
+  const [room, setRoom] = useState(() =>
+    typeof window !== "undefined" ? getSyncRoomId() : ""
+  );
+  const [draft, setDraft] = useState(() =>
+    typeof window !== "undefined" ? getSyncRoomId() : ""
+  );
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
     checkCloudConfigured().then(setConfigured);
-    const r = getSyncRoomId();
-    setRoom(r);
-    setDraft(r);
   }, []);
 
   const applyRoom = async () => {

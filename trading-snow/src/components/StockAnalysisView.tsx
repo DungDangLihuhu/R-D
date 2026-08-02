@@ -34,22 +34,24 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(symbol);
+  const [syncedSymbol, setSyncedSymbol] = useState(symbol);
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  if (symbol !== syncedSymbol) {
+    setSyncedSymbol(symbol);
+    setSearchQuery(symbol);
+    setShowSuggestions(false);
+    setActiveIndex(-1);
+  }
+
   const holdings = useMemo(
     () => [...new Set(stats.holdings.map((h) => h.symbol))],
     [stats.holdings]
   );
-
-  useEffect(() => {
-    setSearchQuery(symbol);
-    setShowSuggestions(false);
-    setActiveIndex(-1);
-  }, [symbol]);
 
   useEffect(() => {
     const onPointerDown = (e: MouseEvent) => {
@@ -64,18 +66,14 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
   useEffect(() => {
     const q = searchQuery.trim();
-    if (!showSuggestions || q.length < 1) {
-      setSuggestions([]);
-      setSearchLoading(false);
-      return;
-    }
+    if (!showSuggestions || q.length < 1) return;
 
     const portfolioMatches: SearchSuggestion[] = holdings
       .filter((s) => s.includes(q.toUpperCase()))
       .map((s) => ({ symbol: s, name: "Trong danh mục", source: "portfolio" as const }));
 
     let controller: AbortController | null = null;
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       setSearchLoading(true);
       controller = new AbortController();
       fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
@@ -101,10 +99,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     }, 250);
 
     return () => {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
       controller?.abort();
     };
   }, [searchQuery, showSuggestions, holdings]);
+
+  const visibleSuggestions =
+    showSuggestions && searchQuery.trim().length >= 1 ? suggestions : [];
 
   const goToSymbol = (next: string) => {
     const sym = next.trim().toUpperCase();
@@ -116,11 +117,20 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
   useEffect(() => {
     if (!symbol) return;
-    setLoading(true);
-    setError(null);
+
+    let cancelled = false;
+    const startFetch = () => {
+      if (!cancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    };
+    const tid = globalThis.setTimeout(startFetch, 0);
+
     fetch(`/api/stock/${encodeURIComponent(symbol)}`)
       .then((r) => r.json())
       .then((json) => {
+        if (cancelled) return;
         if (json.error) {
           setError(json.error);
           setData(null);
@@ -128,8 +138,17 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
         }
         setData(json);
       })
-      .catch(() => setError("Không tải được dữ liệu phân tích"))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setError("Không tải được dữ liệu phân tích");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(tid);
+    };
   }, [symbol]);
 
   const holding = stats.holdings.find((h) => h.symbol === symbol);
@@ -148,8 +167,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             className="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (activeIndex >= 0 && suggestions[activeIndex]) {
-                goToSymbol(suggestions[activeIndex].symbol);
+              if (activeIndex >= 0 && visibleSuggestions[activeIndex]) {
+                goToSymbol(visibleSuggestions[activeIndex].symbol);
                 return;
               }
               goToSymbol(searchQuery);
@@ -168,14 +187,14 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   if (searchQuery.trim()) setShowSuggestions(true);
                 }}
                 onKeyDown={(e) => {
-                  if (!showSuggestions || !suggestions.length) return;
+                  if (!showSuggestions || !visibleSuggestions.length) return;
                   if (e.key === "ArrowDown") {
                     e.preventDefault();
-                    setActiveIndex((i) => (i + 1) % suggestions.length);
+                    setActiveIndex((i) => (i + 1) % visibleSuggestions.length);
                   } else if (e.key === "ArrowUp") {
                     e.preventDefault();
                     setActiveIndex((i) =>
-                      i <= 0 ? suggestions.length - 1 : i - 1
+                      i <= 0 ? visibleSuggestions.length - 1 : i - 1
                     );
                   } else if (e.key === "Escape") {
                     setShowSuggestions(false);
@@ -186,7 +205,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm"
                 autoComplete="off"
                 role="combobox"
-                aria-expanded={showSuggestions && suggestions.length > 0}
+                aria-expanded={showSuggestions && visibleSuggestions.length > 0}
                 aria-autocomplete="list"
               />
               {showSuggestions && searchQuery.trim() && (
@@ -194,13 +213,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
                   role="listbox"
                 >
-                  {searchLoading && suggestions.length === 0 && (
+                  {searchLoading && visibleSuggestions.length === 0 && (
                     <li className="px-3 py-2 text-sm text-gray-500">Đang tìm…</li>
                   )}
-                  {!searchLoading && suggestions.length === 0 && (
+                  {!searchLoading && visibleSuggestions.length === 0 && (
                     <li className="px-3 py-2 text-sm text-gray-500">Không có gợi ý</li>
                   )}
-                  {suggestions.map((s, i) => (
+                  {visibleSuggestions.map((s, i) => (
                     <li key={s.symbol} role="option" aria-selected={i === activeIndex}>
                       <button
                         type="button"

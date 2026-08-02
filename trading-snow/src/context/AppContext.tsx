@@ -252,8 +252,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const stale =
       !state.pricesUpdatedAt ||
       Date.now() - new Date(state.pricesUpdatedAt).getTime() > 5 * 60 * 1000;
-    if (stale) refreshPrices(holdingSymbols);
-  }, [hydrated, holdingSymbols.join(","), refreshPrices, state.pricesUpdatedAt]);
+    if (!stale) return;
+
+    const symbols = [...holdingSymbols];
+    const tid = globalThis.setTimeout(() => {
+      void refreshPrices(symbols);
+    }, 0);
+
+    return () => globalThis.clearTimeout(tid);
+  }, [hydrated, holdingSymbols, refreshPrices, state.pricesUpdatedAt]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
