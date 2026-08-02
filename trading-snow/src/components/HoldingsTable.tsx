@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { Pagination } from "@/components/Pagination";
 import { useApp } from "@/context/AppContext";
@@ -60,17 +61,21 @@ function HoldingRow({
   quote,
   editing,
   priceInput,
+  hidden,
   onEditStart,
   onPriceInput,
   onSavePrice,
+  onToggleHidden,
 }: {
   holding: Holding;
   quote?: MarketQuote;
   editing: boolean;
   priceInput: string;
+  hidden: boolean;
   onEditStart: () => void;
   onPriceInput: (value: string) => void;
   onSavePrice: () => void;
+  onToggleHidden: () => void;
 }) {
   const market = holding.marketPrice ?? holding.avgCost;
   const value = holding.quantity * market;
@@ -105,22 +110,49 @@ function HoldingRow({
     </button>
   );
 
+  const hideBtn = (
+    <button
+      type="button"
+      onClick={onToggleHidden}
+      title={hidden ? "Hiện lại trong chỉ số" : "Tạm ẩn khỏi chỉ số"}
+      className={`rounded-lg p-1.5 transition-colors ${
+        hidden
+          ? "text-amber-600 hover:bg-amber-50"
+          : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+      }`}
+    >
+      {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+    </button>
+  );
+
   return (
-    <div className="border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5">
+    <div
+      className={`border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5 ${
+        hidden ? "bg-gray-50/80 opacity-70" : ""
+      }`}
+    >
       <div className="md:hidden">
         <div className="flex items-center justify-between gap-2">
           <Link
             href={`/stock/${encodeURIComponent(holding.symbol)}`}
-            className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
           >
             <SymbolAvatar symbol={holding.symbol} />
-            <p className="truncate text-sm font-semibold leading-tight text-sky-800">
-              {displayName}
-            </p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold leading-tight text-sky-800">
+                {displayName}
+              </p>
+              {hidden && (
+                <p className="text-[10px] font-medium text-amber-600">Đang ẩn</p>
+              )}
+            </div>
           </Link>
-          <p className="shrink-0 text-sm font-semibold tabular-nums">
-            {formatShares(holding.quantity)}
-          </p>
+          <div className="flex shrink-0 items-center gap-1">
+            <p className="text-sm font-semibold tabular-nums">
+              {formatShares(holding.quantity)}
+            </p>
+            {hideBtn}
+          </div>
         </div>
 
         <div className="my-2.5 border-t border-gray-100" />
@@ -174,7 +206,7 @@ function HoldingRow({
         )}
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)] md:items-center md:gap-3">
+      <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:items-center md:gap-3">
         <Link
           href={`/stock/${encodeURIComponent(holding.symbol)}`}
           className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
@@ -184,6 +216,9 @@ function HoldingRow({
             <p className="truncate text-sm font-semibold leading-tight text-sky-800">
               {displayName}
             </p>
+            {hidden && (
+              <p className="text-[10px] font-medium text-amber-600">Đang ẩn</p>
+            )}
           </div>
         </Link>
 
@@ -217,20 +252,34 @@ function HoldingRow({
         ) : (
           <span className="text-right text-sm text-gray-400">—</span>
         )}
+
+        <div className="flex justify-end">{hideBtn}</div>
       </div>
     </div>
   );
 }
 
 export function HoldingsTable() {
-  const { stats, state, setMarketPrice } = useApp();
+  const { stats, state, setMarketPrice, isSymbolHidden, toggleHiddenSymbol } =
+    useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
 
-  const { page, setPage, totalPages, pageItems, pageSize, total } =
-    usePagination(stats.holdings);
+  const holdings = useMemo(() => {
+    return [...stats.allHoldings].sort((a, b) => {
+      const ah = isSymbolHidden(a.symbol) ? 1 : 0;
+      const bh = isSymbolHidden(b.symbol) ? 1 : 0;
+      if (ah !== bh) return ah - bh;
+      return b.totalCost - a.totalCost;
+    });
+  }, [stats.allHoldings, isSymbolHidden]);
 
-  if (stats.holdings.length === 0) {
+  const hiddenCount = holdings.filter((h) => isSymbolHidden(h.symbol)).length;
+
+  const { page, setPage, totalPages, pageItems, pageSize, total } =
+    usePagination(holdings);
+
+  if (holdings.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
         Chưa có vị thế mở. Mua cổ phiếu để thấy danh mục.
@@ -246,22 +295,31 @@ export function HoldingsTable() {
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-      <div className="hidden border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)] md:gap-3">
+      {hiddenCount > 0 && (
+        <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          {hiddenCount} mã đang ẩn — không tính vào chỉ số trên các trang khác.
+        </div>
+      )}
+
+      <div className="hidden border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:gap-3">
         <span>Vị thế</span>
         <span className="text-right">Số lượng</span>
         <span className="text-right">Giá vốn</span>
         <span className="text-right">Giá trị</span>
         <span className="text-right">Lãi/lỗ</span>
         <span className="text-right">Hôm nay</span>
+        <span className="sr-only">Ẩn/hiện</span>
       </div>
 
       <div>
         {pageItems.map((h) => {
           const market = h.marketPrice ?? h.avgCost;
+          const hidden = isSymbolHidden(h.symbol);
           return (
             <HoldingRow
               key={h.symbol}
               holding={h}
+              hidden={hidden}
               quote={state.marketQuotes?.[h.symbol]}
               editing={editing === h.symbol}
               priceInput={priceInput}
@@ -271,13 +329,14 @@ export function HoldingsTable() {
               }}
               onPriceInput={setPriceInput}
               onSavePrice={() => savePrice(h.symbol)}
+              onToggleHidden={() => toggleHiddenSymbol(h.symbol)}
             />
           );
         })}
       </div>
 
       <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
-        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Bấm tên mã → Phân tích. Bấm giá/cp sửa thủ công.
+        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Bấm tên mã → Phân tích. Bấm giá/cp sửa thủ công. Icon mắt = tạm ẩn mã khỏi chỉ số.
       </p>
 
       <Pagination

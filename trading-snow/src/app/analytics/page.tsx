@@ -4,13 +4,16 @@ import { BenchmarkComparison } from "@/components/BenchmarkComparison";
 import { EquityChart, MonthlyPnlChart } from "@/components/Charts";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
+import { filterHiddenTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
 
 export default function AnalyticsPage() {
-  const { stats, state, activePortfolioId } = useApp();
-  const transactions = state.transactions.filter(
-    (t) => t.portfolioId === activePortfolioId
-  );
+  const { stats, state, activePortfolioId, hiddenSymbols } = useApp();
+  const transactions = filterHiddenTransactions(
+    state.transactions,
+    activePortfolioId,
+    hiddenSymbols
+  ).filter((t) => t.portfolioId === activePortfolioId);
 
   return (
     <div className="space-y-6">

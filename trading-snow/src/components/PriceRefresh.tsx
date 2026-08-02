@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/format";
 export function PriceRefresh({ compact }: { compact?: boolean }) {
   const { state, stats, priceLoading, quoteUnresolved, refreshPrices } = useApp();
 
-  if (stats.holdings.length === 0) return null;
+  if (stats.allHoldings.length === 0) return null;
 
   const updated = state.pricesUpdatedAt
     ? formatDate(state.pricesUpdatedAt)

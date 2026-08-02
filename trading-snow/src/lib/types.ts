@@ -69,6 +69,8 @@ export interface PortfolioStats {
   profitFactor: number;
   totalTrades: number;
   holdings: Holding[];
+  /** Tất cả vị thế (kể cả mã đang ẩn) — chỉ dùng hiển thị danh mục */
+  allHoldings: Holding[];
   closedTrades: ClosedTrade[];
   monthlyPnl: { month: string; pnl: number }[];
   equityCurve: { date: string; equity: number }[];
@@ -92,6 +94,8 @@ export interface AppState {
   marketPrices: Record<string, number>;
   marketQuotes?: Record<string, MarketQuote>;
   pricesUpdatedAt?: string | null;
+  /** portfolioId → danh sách mã tạm ẩn khỏi chỉ số */
+  hiddenSymbols?: Record<string, string[]>;
 }
 
 export interface DividendCalendarItem {
