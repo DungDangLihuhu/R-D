@@ -278,7 +278,27 @@ function snapshotPortfolioAt(
   };
 }
 
-/** Vốn mới bỏ thêm trong kỳ (sau periodStart, đến date). */
+/** Vốn cost bổ sung trong kỳ (BUY/nạp − rút; SELL không giảm cost đã bỏ). */
+function costAddedInPeriod(
+  tx: Transaction,
+  skipSnowballDeposit: boolean
+): number {
+  if (skipSnowballDeposit && isSnowballAutoDeposit(tx)) return 0;
+
+  const gross = tx.quantity * tx.price;
+  switch (tx.type) {
+    case "BUY":
+      return gross + tx.fee;
+    case "DEPOSIT":
+      return gross;
+    case "WITHDRAW":
+      return -gross;
+    default:
+      return 0;
+  }
+}
+
+/** Dòng vốn ròng trong kỳ — tách lãi thật khỏi tiền bỏ thêm/rút/bán. */
 function netCapitalFlowInPeriod(
   tx: Transaction,
   skipSnowballDeposit: boolean
@@ -305,9 +325,9 @@ function hasTradeTransactions(transactions: Transaction[]): boolean {
 }
 
 /**
- * Lãi ròng danh mục trên vốn cost đầu kỳ (cố định):
- * profit(t) = NAV(t) − NAV đầu kỳ − vốn mới bỏ thêm trong kỳ
- * % = profit / cost đầu kỳ × 100, chart mốc 100 = đầu kỳ
+ * Lãi ròng / tổng vốn cost (đầu kỳ + cost bổ sung trong kỳ):
+ * profit = NAV − NAV đầu kỳ − vốn ròng mới trong kỳ
+ * % = profit / (cost đầu kỳ + cost bổ sung) — bỏ thêm 1tr thì % lãi giảm
  *
  * S&P: % tăng chỉ số thuần từ đầu kỳ.
  */
@@ -371,6 +391,7 @@ export function buildBenchmarkComparison(
   }
 
   let cumulativeFlow = 0;
+  let cumulativeCostAdded = 0;
 
   const dailyPoints: ComparisonPoint[] = benchFromStart.map((b) => {
     while (txIdx < sortedTx.length) {
@@ -381,14 +402,19 @@ export function buildBenchmarkComparison(
           sortedTx[txIdx],
           skipSnowballDeposit
         );
+        cumulativeCostAdded += costAddedInPeriod(
+          sortedTx[txIdx],
+          skipSnowballDeposit
+        );
       }
       txIdx++;
     }
 
     const nav = equityByDate.get(b.date) ?? openingNav;
     const netProfit = nav - openingNav - cumulativeFlow;
+    const totalCost = Math.max(0, openingCost + cumulativeCostAdded);
     const portfolio =
-      openingCost > 0 ? 100 + (netProfit / openingCost) * 100 : 100;
+      totalCost > 0 ? 100 + (netProfit / totalCost) * 100 : 100;
 
     return {
       date: b.date,
@@ -409,7 +435,7 @@ export function buildBenchmarkComparison(
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
-    investedCapital: openingCost,
+    investedCapital: openingCost + cumulativeCostAdded,
     from: comparisonFrom,
     to: endDate,
     clampedToHistory,

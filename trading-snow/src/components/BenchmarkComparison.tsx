@@ -118,7 +118,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Danh mục: % lãi ròng / vốn cost đầu kỳ (không cộng vốn mới trong kỳ) · S&P: % chỉ số · 100 = đầu kỳ
+            Danh mục: lãi ròng / tổng vốn cost (đầu kỳ + bổ sung trong kỳ) · S&P: % chỉ số · 100 = đầu kỳ
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -127,7 +127,7 @@ export function BenchmarkComparison({
                 {" "}
                 · {formatDate(comparison.from)} – {formatDate(comparison.to)}
                 {" "}
-                · Vốn cost đầu kỳ: {formatMoney(comparison.investedCapital)}
+                · Tổng vốn cost: {formatMoney(comparison.investedCapital)}
               </>
             )}
           </p>
@@ -163,7 +163,7 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Lãi/lỗ danh mục (trên vốn cost đầu kỳ)"
+              label="Lãi/lỗ danh mục (lãi / tổng cost)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
