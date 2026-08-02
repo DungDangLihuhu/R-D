@@ -1,5 +1,6 @@
 import { getFinnhubApiKey } from "./quote-config";
 import type { CalendarEvent } from "./types";
+import { getUsMarketHolidays } from "./us-market-holidays";
 import { fetchDividends, type DividendEvent } from "./yahoo";
 
 const MACRO_KEYWORDS = [
@@ -222,7 +223,24 @@ async function fetchMacroEvents(from: string, to: string): Promise<CalendarEvent
   return events;
 }
 
-async function fetchUsMarketHolidays(from: string, to: string): Promise<CalendarEvent[]> {
+function holidaysToEvents(holidays: { date: string; name: string; tradingHour?: string }[]): CalendarEvent[] {
+  return holidays.map((h) => ({
+    id: `holiday-${h.date}-${h.name}`,
+    date: `${h.date}T13:00:00.000Z`,
+    title: h.name,
+    category: "holiday" as const,
+    subtitle: h.tradingHour
+      ? `Giờ giao dịch: ${h.tradingHour}`
+      : "Đóng cửa toàn phiên",
+    impact: "high" as const,
+    symbol: "US",
+  }));
+}
+
+async function fetchUsMarketHolidaysFromFinnhub(
+  from: string,
+  to: string
+): Promise<CalendarEvent[]> {
   const key = finnhubKey();
   if (!key) return [];
 
@@ -239,19 +257,22 @@ async function fetchUsMarketHolidays(from: string, to: string): Promise<Calendar
   const fromD = from.slice(0, 10);
   const toD = to.slice(0, 10);
 
-  return (data.data ?? [])
-    .filter((h) => h.atDate >= fromD && h.atDate <= toD)
-    .map((h) => ({
-      id: `holiday-${h.atDate}-${h.eventName}`,
-      date: `${h.atDate}T13:00:00.000Z`,
-      title: h.eventName,
-      category: "holiday" as const,
-      subtitle: h.tradingHour
-        ? `Giờ giao dịch: ${h.tradingHour}`
-        : "Đóng cửa toàn phiên",
-      impact: "high" as const,
-      symbol: "US",
-    }));
+  return holidaysToEvents(
+    (data.data ?? [])
+      .filter((h) => h.atDate >= fromD && h.atDate <= toD)
+      .map((h) => ({
+        date: h.atDate,
+        name: h.eventName,
+        tradingHour: h.tradingHour,
+      }))
+  );
+}
+
+async function fetchUsMarketHolidays(from: string, to: string): Promise<CalendarEvent[]> {
+  const fromFinnhub = await fetchUsMarketHolidaysFromFinnhub(from, to);
+  if (fromFinnhub.length > 0) return fromFinnhub;
+
+  return holidaysToEvents(getUsMarketHolidays(from, to));
 }
 
 export async function fetchDividendEvents(
