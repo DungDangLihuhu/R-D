@@ -80,8 +80,6 @@ export function EventsCalendar() {
   const symbolKey = symbols.join(",");
 
   useEffect(() => {
-    if (symbols.length === 0) return;
-
     let cancelled = false;
     const startFetch = () => {
       if (!cancelled) {
@@ -91,9 +89,10 @@ export function EventsCalendar() {
     };
     const tid = globalThis.setTimeout(startFetch, 0);
 
-    fetch(
-      `/api/events?symbols=${symbolKey}&from=${fetchFrom}&to=${fetchTo}`
-    )
+    const params = new URLSearchParams({ from: fetchFrom, to: fetchTo });
+    if (symbolKey) params.set("symbols", symbolKey);
+
+    fetch(`/api/events?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
@@ -115,12 +114,9 @@ export function EventsCalendar() {
       cancelled = true;
       globalThis.clearTimeout(tid);
     };
-  }, [symbolKey, fetchFrom, fetchTo, symbols.length]);
+  }, [symbolKey, fetchFrom, fetchTo]);
 
-  const effectiveApiEvents = useMemo(
-    () => (symbols.length > 0 ? apiEvents : []),
-    [symbols.length, apiEvents]
-  );
+  const effectiveApiEvents = apiEvents;
 
   const all = useMemo(() => {
     const ids = new Set<string>();
@@ -170,9 +166,10 @@ export function EventsCalendar() {
       </div>
 
       {symbols.length === 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chưa có mã trong danh mục — thêm giao dịch để xem lịch sự kiện theo
-          holdings.
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          Chưa có mã trong danh mục — vẫn hiển thị{" "}
+          <strong>nghỉ lễ Mỹ</strong> và <strong>vĩ mô USD</strong>. Thêm giao
+          dịch để xem cổ tức, báo cáo và tin theo holdings.
         </div>
       )}
 
@@ -225,7 +222,9 @@ export function EventsCalendar() {
         <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
           {loading
             ? "Đang tải sự kiện..."
-            : "Không có sự kiện trong tháng này cho bộ lọc đã chọn"}
+            : tab === "holiday"
+              ? "Không có nghỉ lễ NYSE/Nasdaq trong tháng này — thử tháng 1, 7, 11 hoặc 12"
+              : "Không có sự kiện trong tháng này cho bộ lọc đã chọn"}
         </div>
       ) : (
         <div className="rounded-xl border border-gray-200">

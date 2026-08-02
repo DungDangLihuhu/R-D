@@ -11,7 +11,20 @@ export async function GET(req: NextRequest) {
     new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
 
   if (!symbols) {
-    return NextResponse.json({ error: "symbols required" }, { status: 400 });
+    const events = await fetchPortfolioEvents([], from, to);
+    return NextResponse.json({
+      events,
+      from,
+      to,
+      updatedAt: new Date().toISOString(),
+      sources: {
+        dividends: "Yahoo Finance + ước tính",
+        earnings: "Finnhub",
+        news: "Finnhub",
+        macro: "Forex Factory (USD, impact cao)",
+        holidays: "Finnhub US exchange hoặc lịch NYSE/Nasdaq tính sẵn",
+      },
+    });
   }
 
   const list = symbols
@@ -31,7 +44,7 @@ export async function GET(req: NextRequest) {
         earnings: "Finnhub",
         news: "Finnhub",
         macro: "Forex Factory (USD, impact cao)",
-        holidays: "Finnhub US exchange",
+        holidays: "Finnhub US exchange hoặc lịch NYSE/Nasdaq tính sẵn",
       },
     });
   } catch (e) {
