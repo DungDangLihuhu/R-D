@@ -113,7 +113,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Cùng số tiền bỏ vào · S&P mua giữ (nạp mua thêm, rút bán) · 100 = hòa vốn
+            Cùng vốn bỏ vào (mua + nạp − rút) · S&P mua giữ theo từng lần bỏ vốn · 100 = hòa vốn
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
