@@ -17,6 +17,8 @@ export interface ComparisonResult {
   investedCapital: number;
   from: string;
   to: string;
+  /** True when selected range starts before first trade (e.g. 5Y but only 2Y history). */
+  clampedToHistory: boolean;
 }
 
 export const BENCHMARK_RANGES: { value: BenchmarkRange; label: string }[] = [
@@ -53,54 +55,68 @@ export function ensureEquityCurve(
   ];
 }
 
-/** Resolve comparison window; clamps to portfolio history. */
+function portfolioInceptionDate(
+  equityCurve: { date: string; equity: number }[]
+): string {
+  const sorted = ensureEquityCurve(equityCurve);
+  return sorted[0]?.date.slice(0, 10) ?? "";
+}
+
+/** Resolve comparison window; always clamps `from` to first trade date. */
 export function resolveBenchmarkWindow(
   equityCurve: { date: string; equity: number }[],
   range: BenchmarkRange,
   now = new Date()
-): { from: string; to: string } | null {
+): { from: string; to: string; clampedToHistory: boolean } | null {
   const curve = ensureEquityCurve(equityCurve);
   if (curve.length < 2) return null;
 
-  const portfolioStart = curve[0].date.slice(0, 10);
+  const portfolioStart = portfolioInceptionDate(curve);
   const portfolioEnd = curve[curve.length - 1].date.slice(0, 10);
   const today = toDateStr(now);
   const to = today > portfolioEnd ? today : portfolioEnd;
 
-  let from: string;
+  let requestedFrom: string;
   switch (range) {
     case "ytd":
-      from = `${now.getFullYear()}-01-01`;
+      requestedFrom = `${now.getFullYear()}-01-01`;
       break;
     case "6m":
-      from = toDateStr(addMonths(now, 6));
+      requestedFrom = toDateStr(addMonths(now, 6));
       break;
     case "1y":
-      from = toDateStr(addMonths(now, 12));
+      requestedFrom = toDateStr(addMonths(now, 12));
       break;
     case "5y":
-      from = toDateStr(addMonths(now, 60));
+      requestedFrom = toDateStr(addMonths(now, 60));
       break;
     case "all":
     default:
-      from = portfolioStart;
+      requestedFrom = portfolioStart;
       break;
   }
 
-  if (from < portfolioStart) from = portfolioStart;
+  const clampedToHistory = requestedFrom < portfolioStart;
+  let from = clampedToHistory ? portfolioStart : requestedFrom;
   if (from > to) from = portfolioStart;
 
-  return { from, to };
+  return { from, to, clampedToHistory };
 }
 
+/**
+ * Forward-fill NAV on benchmark dates.
+ * Dates before the first trade stay at 0 — avoids showing portfolio value pre-inception.
+ */
 function forwardFillEquity(
   equityCurve: { date: string; equity: number }[],
   dates: string[]
 ): Map<string, number> {
   const sorted = [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
   const map = new Map<string, number>();
-  let idx = 0;
-  let current = sorted[0]?.equity ?? 0;
+  if (sorted.length === 0) return map;
+
+  let idx = -1;
+  let current = 0;
 
   for (const date of dates) {
     while (
@@ -115,35 +131,13 @@ function forwardFillEquity(
   return map;
 }
 
-/** Net nạp − rút sau ngày bắt đầu mốc (BUY/SELL không tính). */
-function netExternalFlowSince(
-  transactions: Transaction[],
-  periodStart: string,
-  untilDate: string
-): number {
-  let net = 0;
-  const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
-
-  for (const tx of sorted) {
-    const d = tx.date.slice(0, 10);
-    if (d <= periodStart) continue;
-    if (d > untilDate) break;
-
-    const gross = tx.quantity * tx.price;
-    if (tx.type === "DEPOSIT") net += gross;
-    else if (tx.type === "WITHDRAW") net -= gross;
+function lookupBenchmarkPrice(benchmark: HistoryPoint[], date: string): number {
+  let price = 0;
+  for (const point of benchmark) {
+    if (point.date > date) break;
+    price = point.close;
   }
-
-  return net;
-}
-
-function adjustedEquity(
-  rawEquity: number,
-  transactions: Transaction[],
-  periodStart: string,
-  asOfDate: string
-): number {
-  return rawEquity - netExternalFlowSince(transactions, periodStart, asOfDate);
+  return price;
 }
 
 function pickBenchmarkSeries(
@@ -163,61 +157,76 @@ function pickBenchmarkSeries(
 
   if (upToEnd.length >= 2) {
     const idx = upToEnd.findIndex((b) => b.date >= startDate);
-    const sliceFrom = idx >= 0 ? Math.max(0, idx - 1) : upToEnd.length - 2;
-    return upToEnd.slice(sliceFrom);
+    if (idx >= 0) return upToEnd.slice(idx);
+    return upToEnd.slice(-2);
   }
 
-  return benchmark.length >= 2
-    ? benchmark.slice(-2)
-    : benchmark;
+  return benchmark.length >= 2 ? benchmark.slice(-2) : benchmark;
 }
 
 function resolvePeriodStart(
   dates: string[],
   equityByDate: Map<string, number>,
-  transactions: Transaction[],
   requestedStart: string
-): { periodStart: string; startEquity: number } {
-  const tryStart = (start: string) => {
-    const raw = equityByDate.get(start) ?? equityByDate.get(dates[0]) ?? 0;
-    const adj = adjustedEquity(raw, transactions, start, start);
-    return { periodStart: start, startEquity: adj, raw };
-  };
+): { periodStart: string; startEquity: number } | null {
+  const candidates = dates.filter((d) => d >= requestedStart);
 
-  const { periodStart, startEquity, raw } = tryStart(requestedStart);
-
-  if (startEquity > 0) return { periodStart, startEquity };
-
-  for (const d of dates) {
-    const candidate = tryStart(d);
-    if (candidate.startEquity > 0) {
-      return { periodStart: candidate.periodStart, startEquity: candidate.startEquity };
-    }
+  for (const d of candidates) {
+    const equity = equityByDate.get(d) ?? 0;
+    if (equity > 0) return { periodStart: d, startEquity: equity };
   }
 
-  const fallback = Math.max(Math.abs(raw), Math.abs(startEquity), 1);
-  return { periodStart, startEquity: fallback };
+  return null;
+}
+
+/** Match S&P 500 to external cash flows only (not BUY/SELL). */
+function applyExternalSp500Flow(
+  spyShares: number,
+  tx: Transaction,
+  spyPrice: number
+): number {
+  if (spyPrice <= 0) return spyShares;
+
+  const gross = tx.quantity * tx.price;
+
+  switch (tx.type) {
+    case "DEPOSIT":
+      return spyShares + gross / spyPrice;
+    case "WITHDRAW": {
+      const maxSell = spyShares * spyPrice;
+      const amount = Math.min(gross, maxSell);
+      return spyShares - amount / spyPrice;
+    }
+    case "DIVIDEND": {
+      const amount = gross - tx.fee;
+      return amount > 0 ? spyShares + amount / spyPrice : spyShares;
+    }
+    default:
+      return spyShares;
+  }
 }
 
 /**
- * Compare portfolio vs S&P 500 from period start:
- * - Vốn mốc = giá trị danh mục tại ngày đầu kỳ (điều chỉnh nạp/rút)
- * - S&P: mua giữ từ đầu kỳ với cùng vốn mốc
- * - Cả hai chuẩn hóa = 100 tại ngày đầu kỳ
+ * Compare portfolio NAV vs S&P 500 with matched external flows.
+ * Window is always limited to actual trade history (inception → today).
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
   benchmark: HistoryPoint[],
   transactions: Transaction[],
-  window?: { from: string; to: string }
+  window?: { from: string; to: string; clampedToHistory?: boolean }
 ): ComparisonResult | null {
   const curve = ensureEquityCurve(equityCurve);
   if (curve.length < 2 || benchmark.length < 1) return null;
 
   const sortedEquity = [...curve].sort((a, b) => a.date.localeCompare(b.date));
-  const startDate = window?.from ?? sortedEquity[0].date.slice(0, 10);
+  const portfolioStart = portfolioInceptionDate(curve);
+  const requestedStart = window?.from ?? portfolioStart;
+  const startDate = requestedStart < portfolioStart ? portfolioStart : requestedStart;
   const endDate =
     window?.to ?? sortedEquity[sortedEquity.length - 1].date.slice(0, 10);
+  const clampedToHistory =
+    window?.clampedToHistory ?? requestedStart < portfolioStart;
 
   const benchInRange = pickBenchmarkSeries(benchmark, startDate, endDate);
   if (benchInRange.length < 1) return null;
@@ -225,29 +234,42 @@ export function buildBenchmarkComparison(
   const dates = benchInRange.map((b) => b.date);
   const equityByDate = forwardFillEquity(sortedEquity, dates);
 
-  const { periodStart, startEquity } = resolvePeriodStart(
-    dates,
-    equityByDate,
-    transactions,
-    dates[0]
-  );
+  const period = resolvePeriodStart(dates, equityByDate, startDate);
+  if (!period) return null;
 
+  const { periodStart, startEquity } = period;
   const startBenchIdx = benchInRange.findIndex((b) => b.date >= periodStart);
-  const startBench =
-    benchInRange[startBenchIdx >= 0 ? startBenchIdx : 0].close;
+  if (startBenchIdx < 0) return null;
+
+  const benchFromStart = benchInRange.slice(startBenchIdx);
+  const startBench = benchFromStart[0].close;
   if (startBench <= 0) return null;
 
-  const benchFromStart =
-    startBenchIdx > 0 ? benchInRange.slice(startBenchIdx) : benchInRange;
+  let spyShares = startEquity / startBench;
+  const sortedTx = [...transactions].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  let txIdx = 0;
 
   const points: ComparisonPoint[] = benchFromStart.map((b) => {
-    const raw = equityByDate.get(b.date) ?? startEquity;
-    const adj = adjustedEquity(raw, transactions, periodStart, b.date);
+    while (txIdx < sortedTx.length) {
+      const txDate = sortedTx[txIdx].date.slice(0, 10);
+      if (txDate > b.date) break;
+
+      if (txDate > periodStart) {
+        const spyPrice = lookupBenchmarkPrice(benchmark, txDate);
+        spyShares = applyExternalSp500Flow(spyShares, sortedTx[txIdx], spyPrice);
+      }
+      txIdx++;
+    }
+
+    const nav = equityByDate.get(b.date) ?? startEquity;
+    const spyValue = spyShares * b.close;
 
     return {
       date: b.date,
-      portfolio: (adj / startEquity) * 100,
-      sp500: (b.close / startBench) * 100,
+      portfolio: (nav / startEquity) * 100,
+      sp500: (spyValue / startEquity) * 100,
     };
   });
 
@@ -265,6 +287,7 @@ export function buildBenchmarkComparison(
     investedCapital: startEquity,
     from: periodStart,
     to: endDate,
+    clampedToHistory,
   };
 }
 

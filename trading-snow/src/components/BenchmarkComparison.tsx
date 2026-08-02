@@ -53,8 +53,7 @@ export function BenchmarkComparison({
     const benchmarkWindow = resolveBenchmarkWindow(curve, range);
     if (!benchmarkWindow) return;
 
-    const historyStart = curve[0].date.slice(0, 10);
-    const fetchFrom = extendBenchmarkFrom(historyStart);
+    const fetchFrom = extendBenchmarkFrom(benchmarkWindow.from);
 
     let cancelled = false;
     const startFetch = () => {
@@ -114,7 +113,10 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Vốn mốc = NAV đầu kỳ theo lợi nhuận ròng · S&P mua giữ · 100 = hòa vốn
+            Vốn mốc = NAV đầu kỳ · S&P theo nạp/rút/cổ tức · 100 = hòa vốn
+            {comparison?.clampedToHistory && (
+              <> · Khoảng chọn dài hơn lịch sử giao dịch — tính từ ngày trade đầu</>
+            )}
             {comparison && (
               <>
                 {" "}
@@ -161,7 +163,7 @@ export function BenchmarkComparison({
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="Lãi/lỗ S&P 500 (mua giữ)"
+              label="Lãi/lỗ S&P 500 (theo dòng tiền)"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
