@@ -192,85 +192,33 @@ function resolvePeriodStart(
   return null;
 }
 
-type CapitalFlowState = { spyShares: number; invested: number };
+type Sp500State = { spyShares: number; startValue: number };
 
-function hasTradeTransactions(transactions: Transaction[]): boolean {
-  return transactions.some((t) => t.type === "BUY" || t.type === "SELL");
+/** Snowball Holdings import adds DEPOSIT + BUY — skip DEPOSIT for S&P mirror. */
+function isSnowballAutoDeposit(tx: Transaction): boolean {
+  return (
+    tx.type === "DEPOSIT" &&
+    tx.symbol === "CASH" &&
+    (tx.notes?.includes("Snowball Holdings") ?? false)
+  );
 }
 
-/** Replay capital flows up to and including `throughDate`. */
-function replayCapitalFlows(
-  state: CapitalFlowState,
-  transactions: Transaction[],
-  benchmark: HistoryPoint[],
-  throughDate: string,
-  tradeMode: boolean
-): void {
-  for (const tx of transactions) {
-    const txDate = tx.date.slice(0, 10);
-    if (txDate > throughDate) break;
-    const spyPrice = lookupBenchmarkPrice(benchmark, txDate);
-    applyMatchedCapitalFlow(state, tx, spyPrice, tradeMode);
-  }
-}
-
-/**
- * Mirror portfolio cash flows into S&P and track gross capital deployed.
- * Trade mode: BUY = vốn bỏ vào; SELL chỉ bán SPY (không giảm vốn); WITHDRAW giảm vốn.
- * Deposit mode: DEPOSIT/WITHDRAW như nạp/rút.
- */
-function applyMatchedCapitalFlow(
-  state: CapitalFlowState,
+/** Mirror external cash flows into S&P (nạp/rút/cổ tức). BUY/SELL = tái phân bổ nội bộ. */
+function applyExternalSp500Flow(
+  state: Sp500State,
   tx: Transaction,
-  spyPrice: number,
-  tradeMode: boolean
+  spyPrice: number
 ): void {
   if (spyPrice <= 0) return;
+  if (isSnowballAutoDeposit(tx)) return;
 
   const gross = tx.quantity * tx.price;
 
-  if (tradeMode) {
-    switch (tx.type) {
-      case "BUY": {
-        const cost = gross + tx.fee;
-        state.invested += cost;
-        state.spyShares += cost / spyPrice;
-        break;
-      }
-      case "SELL": {
-        const proceeds = gross - tx.fee;
-        const maxSell = state.spyShares * spyPrice;
-        const sell = Math.min(proceeds, maxSell);
-        state.spyShares -= sell / spyPrice;
-        break;
-      }
-      case "WITHDRAW": {
-        state.invested = Math.max(0, state.invested - gross);
-        const maxSell = state.spyShares * spyPrice;
-        const sell = Math.min(gross, maxSell);
-        state.spyShares -= sell / spyPrice;
-        break;
-      }
-      case "DEPOSIT":
-        state.invested += gross;
-        state.spyShares += gross / spyPrice;
-        break;
-      case "DIVIDEND": {
-        const amount = gross - tx.fee;
-        if (amount > 0) state.spyShares += amount / spyPrice;
-        break;
-      }
-    }
-    return;
-  }
-
   switch (tx.type) {
     case "DEPOSIT":
-      state.invested += gross;
       state.spyShares += gross / spyPrice;
       break;
     case "WITHDRAW": {
-      state.invested = Math.max(0, state.invested - gross);
       const maxSell = state.spyShares * spyPrice;
       const sell = Math.min(gross, maxSell);
       state.spyShares -= sell / spyPrice;
@@ -284,16 +232,16 @@ function applyMatchedCapitalFlow(
   }
 }
 
-function indexedReturn(value: number, invested: number): number {
-  if (invested <= 0) return 100;
-  return (value / invested) * 100;
+function indexToStart(value: number, startValue: number): number {
+  if (startValue <= 0) return 100;
+  return (value / startValue) * 100;
 }
 
 /**
- * Compare portfolio vs S&P 500 with matched capital:
- * - Vốn bỏ vào = tổng BUY (+ nạp) − rút; SELL không giảm vốn (chỉ tái phân bổ)
- * - S&P: mua giữ theo từng lần bỏ vốn, cổ tức tái đầu tư
- * - Chart: 100 = hòa vốn trên tổng tiền đã bỏ vào tại thời điểm đó
+ * Compare portfolio vs S&P 500:
+ * - Both lines start at 100 on first day with NAV > 0 (cùng vốn đầu kỳ)
+ * - S&P: mua giữ từ NAV đầu kỳ, mirror thêm nạp/rút/cổ tức
+ * - BUY/SELL không mirror — tránh đếm trùng turnover
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
@@ -331,26 +279,16 @@ export function buildBenchmarkComparison(
 
   const benchFromStart = benchInRange.slice(startBenchIdx);
   const startBench = benchFromStart[0].close;
-  if (startBench <= 0) return null;
+  if (startBench <= 0 || startEquity <= 0) return null;
 
   const sortedTx = [...transactions].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
-  const tradeMode = hasTradeTransactions(sortedTx);
 
-  const flowState: CapitalFlowState = { spyShares: 0, invested: 0 };
-  replayCapitalFlows(
-    flowState,
-    sortedTx,
-    benchmark,
-    periodStart,
-    tradeMode
-  );
-
-  if (flowState.invested <= 0 && startEquity > 0) {
-    flowState.invested = startEquity;
-    flowState.spyShares = startEquity / startBench;
-  }
+  const spState: Sp500State = {
+    spyShares: startEquity / startBench,
+    startValue: startEquity,
+  };
 
   let txIdx = 0;
   while (txIdx < sortedTx.length) {
@@ -365,18 +303,17 @@ export function buildBenchmarkComparison(
       if (txDate > b.date) break;
 
       const spyPrice = lookupBenchmarkPrice(benchmark, txDate);
-      applyMatchedCapitalFlow(flowState, sortedTx[txIdx], spyPrice, tradeMode);
+      applyExternalSp500Flow(spState, sortedTx[txIdx], spyPrice);
       txIdx++;
     }
 
     const nav = equityByDate.get(b.date) ?? startEquity;
-    const spyValue = flowState.spyShares * b.close;
-    const invested = flowState.invested;
+    const spyValue = spState.spyShares * b.close;
 
     return {
       date: b.date,
-      portfolio: indexedReturn(nav, invested),
-      sp500: indexedReturn(spyValue, invested),
+      portfolio: indexToStart(nav, startEquity),
+      sp500: indexToStart(spyValue, startEquity),
     };
   });
 
@@ -391,7 +328,7 @@ export function buildBenchmarkComparison(
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
-    investedCapital: flowState.invested,
+    investedCapital: startEquity,
     from: comparisonFrom,
     to: endDate,
     clampedToHistory,
