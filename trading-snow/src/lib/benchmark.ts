@@ -184,92 +184,18 @@ function resolvePeriodStart(
   return null;
 }
 
-function indexFromStart(value: number, startValue: number): number {
-  if (startValue <= 0) return 100;
-  return (value / startValue) * 100;
+function periodReturn(endValue: number, startValue: number): number {
+  if (startValue <= 0) return 0;
+  return ((endValue / startValue) - 1) * 100;
 }
 
-interface PositionState {
-  quantity: number;
-  totalCost: number;
-}
-
-interface PortfolioReplayer {
-  positions: Map<string, PositionState>;
-  lastPrices: Map<string, number>;
-  realizedPnl: number;
-}
-
-function createReplayer(): PortfolioReplayer {
-  return {
-    positions: new Map(),
-    lastPrices: new Map(),
-    realizedPnl: 0,
-  };
-}
-
-function holdingsCost(state: PortfolioReplayer): number {
-  let cost = 0;
-  for (const pos of state.positions.values()) cost += pos.totalCost;
-  return cost;
-}
-
-function applyTransaction(
-  state: PortfolioReplayer,
-  tx: Transaction,
-  skipSnowballDeposit: boolean
-): void {
-  if (skipSnowballDeposit && isSnowballAutoDeposit(tx)) return;
-
-  const gross = tx.quantity * tx.price;
-
-  switch (tx.type) {
-    case "BUY": {
-      const cost = gross + tx.fee;
-      const pos = state.positions.get(tx.symbol) ?? { quantity: 0, totalCost: 0 };
-      pos.quantity += tx.quantity;
-      pos.totalCost += cost;
-      state.positions.set(tx.symbol, pos);
-      state.lastPrices.set(tx.symbol, tx.price);
-      break;
-    }
-    case "SELL": {
-      const pos = state.positions.get(tx.symbol) ?? { quantity: 0, totalCost: 0 };
-      const avgCost = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
-      const costBasis = avgCost * tx.quantity;
-      const proceeds = gross - tx.fee;
-      state.realizedPnl += proceeds - costBasis;
-      pos.quantity = Math.max(0, pos.quantity - tx.quantity);
-      pos.totalCost = Math.max(0, pos.totalCost - costBasis);
-      state.positions.set(tx.symbol, pos);
-      state.lastPrices.set(tx.symbol, tx.price);
-      break;
-    }
-    case "DIVIDEND":
-      state.realizedPnl += gross - tx.fee;
-      break;
-    case "DEPOSIT":
-    case "WITHDRAW":
-      break;
+function lookupBenchmarkPrice(benchmark: HistoryPoint[], date: string): number {
+  let price = 0;
+  for (const point of benchmark) {
+    if (point.date > date) break;
+    price = point.close;
   }
-}
-
-function replayThrough(
-  transactions: Transaction[],
-  throughDate: string,
-  skipSnowballDeposit: boolean
-): PortfolioReplayer {
-  const state = createReplayer();
-  for (const tx of transactions) {
-    if (tx.date.slice(0, 10) > throughDate) break;
-    applyTransaction(state, tx, skipSnowballDeposit);
-  }
-  return state;
-}
-
-interface PortfolioSnapshot {
-  holdingsCost: number;
-  tradingValue: number;
+  return price;
 }
 
 function isSnowballAutoDeposit(tx: Transaction): boolean {
@@ -280,34 +206,78 @@ function isSnowballAutoDeposit(tx: Transaction): boolean {
   );
 }
 
-/** @deprecated use replayThrough */
-function snapshotPortfolioAt(
-  transactions: Transaction[],
-  throughDate: string,
-  skipSnowballDeposit: boolean
-): PortfolioSnapshot {
-  const state = replayThrough(transactions, throughDate, skipSnowballDeposit);
-  let holdingsValue = 0;
-  for (const [symbol, pos] of state.positions) {
-    if (pos.quantity <= 0) continue;
-    const price =
-      state.lastPrices.get(symbol) ?? pos.totalCost / pos.quantity;
-    holdingsValue += pos.quantity * price;
-  }
-  return {
-    holdingsCost: holdingsCost(state),
-    tradingValue: holdingsValue + state.realizedPnl,
-  };
-}
-
 function hasTradeTransactions(transactions: Transaction[]): boolean {
   return transactions.some((t) => t.type === "BUY" || t.type === "SELL");
 }
 
+interface SpyMirrorState {
+  spyShares: number;
+  investedCapital: number;
+}
+
+function createSpyMirror(): SpyMirrorState {
+  return { spyShares: 0, investedCapital: 0 };
+}
+
 /**
- * Danh mục: % lãi = lãi ròng × 100 / cost CP tại từng thời điểm
- * lãi ròng = NAV − cost (giá vốn đang giữ)
- * Chart chuẩn hóa 100 tại đầu kỳ để so với S&P.
+ * Mirror portfolio cash flows into SPY (Snowball-style):
+ * BUY/DEPOSIT → buy SPY; SELL/WITHDRAW → sell SPY; dividends reinvested.
+ */
+function applySpyMirrorFlow(
+  state: SpyMirrorState,
+  tx: Transaction,
+  spyPrice: number,
+  hasTrades: boolean,
+  skipSnowballDeposit: boolean
+): void {
+  if (spyPrice <= 0) return;
+  if (skipSnowballDeposit && isSnowballAutoDeposit(tx)) return;
+
+  const gross = tx.quantity * tx.price;
+
+  if (hasTrades) {
+    switch (tx.type) {
+      case "BUY": {
+        const cost = gross + tx.fee;
+        state.investedCapital += cost;
+        state.spyShares += cost / spyPrice;
+        break;
+      }
+      case "SELL": {
+        const proceeds = gross - tx.fee;
+        state.spyShares = Math.max(0, state.spyShares - proceeds / spyPrice);
+        break;
+      }
+      case "DIVIDEND": {
+        const amount = gross - tx.fee;
+        if (amount > 0) state.spyShares += amount / spyPrice;
+        break;
+      }
+    }
+  } else {
+    switch (tx.type) {
+      case "DEPOSIT":
+        state.investedCapital += gross;
+        state.spyShares += gross / spyPrice;
+        break;
+      case "WITHDRAW": {
+        const amount = Math.min(gross, state.spyShares * spyPrice);
+        state.investedCapital = Math.max(0, state.investedCapital - gross);
+        state.spyShares = Math.max(0, state.spyShares - amount / spyPrice);
+        break;
+      }
+      case "DIVIDEND": {
+        const amount = gross - tx.fee;
+        if (amount > 0) state.spyShares += amount / spyPrice;
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Snowball-style benchmark: portfolio NAV ($) vs hypothetical SPY portfolio
+ * with matched BUY/SELL/dividend cash flows. Returns are period % change.
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
@@ -319,6 +289,9 @@ export function buildBenchmarkComparison(
   if (curve.length < 2 || benchmark.length < 1) return null;
 
   const sortedEquity = [...curve].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedBenchmark = [...benchmark].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
   const portfolioStart = portfolioInceptionDate(curve, transactions);
   const requestedStart = window?.from ?? portfolioStart;
   const startDate =
@@ -328,7 +301,7 @@ export function buildBenchmarkComparison(
   const clampedToHistory =
     window?.clampedToHistory ?? requestedStart < portfolioStart;
 
-  const benchInRange = pickBenchmarkSeries(benchmark, startDate, endDate);
+  const benchInRange = pickBenchmarkSeries(sortedBenchmark, startDate, endDate);
   if (benchInRange.length < 1) return null;
 
   const dates = benchInRange.map((b) => b.date);
@@ -337,86 +310,68 @@ export function buildBenchmarkComparison(
   const period = resolvePeriodStart(dates, equityByDate, startDate);
   if (!period) return null;
 
-  const { periodStart, startEquity } = period;
+  const { periodStart } = period;
   const comparisonFrom =
     periodStart < portfolioStart ? portfolioStart : periodStart;
   const startBenchIdx = benchInRange.findIndex((b) => b.date >= periodStart);
   if (startBenchIdx < 0) return null;
 
   const benchFromStart = benchInRange.slice(startBenchIdx);
-  const startBench = benchFromStart[0].close;
-  if (startBench <= 0 || startEquity <= 0) return null;
-
   const sortedTx = [...transactions].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
-  const skipSnowballDeposit = hasTradeTransactions(sortedTx);
+  const hasTrades = hasTradeTransactions(sortedTx);
+  const skipSnowballDeposit = hasTrades;
 
-  const opening = snapshotPortfolioAt(
-    sortedTx,
-    periodStart,
-    skipSnowballDeposit
-  );
-  const openingCost =
-    opening.holdingsCost > 0 ? opening.holdingsCost : startEquity;
-  const openingNav = startEquity;
-  const startProfitPct =
-    openingCost > 0 ? ((openingNav - openingCost) / openingCost) * 100 : 0;
-
-  const portfolioState = replayThrough(
-    sortedTx,
-    periodStart,
-    skipSnowballDeposit
-  );
-
+  const spyState = createSpyMirror();
   let txIdx = 0;
-  while (txIdx < sortedTx.length) {
-    const txDate = sortedTx[txIdx].date.slice(0, 10);
-    if (txDate > periodStart) break;
-    txIdx++;
-  }
 
   const dailyPoints: ComparisonPoint[] = benchFromStart.map((b) => {
     while (txIdx < sortedTx.length) {
       const txDate = sortedTx[txIdx].date.slice(0, 10);
       if (txDate > b.date) break;
-      if (txDate > periodStart) {
-        applyTransaction(
-          portfolioState,
-          sortedTx[txIdx],
-          skipSnowballDeposit
-        );
-      }
+      const spyPrice = lookupBenchmarkPrice(sortedBenchmark, txDate);
+      applySpyMirrorFlow(
+        spyState,
+        sortedTx[txIdx],
+        spyPrice,
+        hasTrades,
+        skipSnowballDeposit
+      );
       txIdx++;
     }
 
-    const nav = equityByDate.get(b.date) ?? openingNav;
-    const currentCost = holdingsCost(portfolioState);
-    const cost = currentCost > 0 ? currentCost : openingCost;
-    const netProfit = nav - currentCost;
-    const profitPct = cost > 0 ? (netProfit / cost) * 100 : 0;
-    const portfolio = 100 + (profitPct - startProfitPct);
+    const nav = equityByDate.get(b.date) ?? 0;
+    const sp500 = spyState.spyShares * b.close;
 
     return {
       date: b.date,
-      portfolio,
-      sp500: indexFromStart(b.close, startBench),
+      portfolio: nav,
+      sp500,
     };
   });
 
   if (dailyPoints.length < 1) return null;
 
-  const points = downsampleMonthly(dailyPoints);
+  const firstPoint =
+    dailyPoints.find((p) => p.portfolio > 0) ?? dailyPoints[0];
+  if (firstPoint.portfolio <= 0) return null;
+
   const last = dailyPoints[dailyPoints.length - 1];
-  const portfolioReturn = last.portfolio - 100;
-  const sp500Return = last.sp500 - 100;
+  const portfolioReturn = periodReturn(last.portfolio, firstPoint.portfolio);
+  const sp500Return =
+    firstPoint.sp500 > 0
+      ? periodReturn(last.sp500, firstPoint.sp500)
+      : 0;
+
+  const points = downsampleMonthly(dailyPoints);
 
   return {
     points,
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
-    investedCapital: holdingsCost(portfolioState) || openingCost,
+    investedCapital: spyState.investedCapital,
     from: comparisonFrom,
     to: endDate,
     clampedToHistory,
