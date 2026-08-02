@@ -189,11 +189,127 @@ function indexFromStart(value: number, startValue: number): number {
   return (value / startValue) * 100;
 }
 
+interface PositionState {
+  quantity: number;
+  totalCost: number;
+}
+
+interface PortfolioSnapshot {
+  holdingsCost: number;
+  tradingValue: number;
+}
+
+function isSnowballAutoDeposit(tx: Transaction): boolean {
+  return (
+    tx.type === "DEPOSIT" &&
+    tx.symbol === "CASH" &&
+    (tx.notes?.includes("Snowball Holdings") ?? false)
+  );
+}
+
+/** Replay portfolio to a date — matches stats trading equity + holdings cost. */
+function snapshotPortfolioAt(
+  transactions: Transaction[],
+  throughDate: string,
+  skipSnowballDeposit: boolean
+): PortfolioSnapshot {
+  const positions = new Map<string, PositionState>();
+  const lastPrices = new Map<string, number>();
+  let realizedPnl = 0;
+
+  const holdingsCost = () => {
+    let cost = 0;
+    for (const pos of positions.values()) cost += pos.totalCost;
+    return cost;
+  };
+
+  const holdingsValue = () => {
+    let value = 0;
+    for (const [symbol, pos] of positions) {
+      if (pos.quantity <= 0) continue;
+      const price =
+        lastPrices.get(symbol) ?? pos.totalCost / pos.quantity;
+      value += pos.quantity * price;
+    }
+    return value;
+  };
+
+  for (const tx of transactions) {
+    const txDate = tx.date.slice(0, 10);
+    if (txDate > throughDate) break;
+    if (skipSnowballDeposit && isSnowballAutoDeposit(tx)) continue;
+
+    const gross = tx.quantity * tx.price;
+
+    switch (tx.type) {
+      case "BUY": {
+        const cost = gross + tx.fee;
+        const pos = positions.get(tx.symbol) ?? { quantity: 0, totalCost: 0 };
+        pos.quantity += tx.quantity;
+        pos.totalCost += cost;
+        positions.set(tx.symbol, pos);
+        lastPrices.set(tx.symbol, tx.price);
+        break;
+      }
+      case "SELL": {
+        const pos = positions.get(tx.symbol) ?? { quantity: 0, totalCost: 0 };
+        const avgCost = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
+        const costBasis = avgCost * tx.quantity;
+        const proceeds = gross - tx.fee;
+        realizedPnl += proceeds - costBasis;
+        pos.quantity = Math.max(0, pos.quantity - tx.quantity);
+        pos.totalCost = Math.max(0, pos.totalCost - costBasis);
+        positions.set(tx.symbol, pos);
+        lastPrices.set(tx.symbol, tx.price);
+        break;
+      }
+      case "DIVIDEND":
+        realizedPnl += gross - tx.fee;
+        break;
+      case "DEPOSIT":
+      case "WITHDRAW":
+        break;
+    }
+  }
+
+  return {
+    holdingsCost: holdingsCost(),
+    tradingValue: holdingsValue() + realizedPnl,
+  };
+}
+
+/** Vốn mới bỏ thêm trong kỳ (sau periodStart, đến date). */
+function netCapitalFlowInPeriod(
+  tx: Transaction,
+  skipSnowballDeposit: boolean
+): number {
+  if (skipSnowballDeposit && isSnowballAutoDeposit(tx)) return 0;
+
+  const gross = tx.quantity * tx.price;
+  switch (tx.type) {
+    case "BUY":
+      return gross + tx.fee;
+    case "SELL":
+      return -(gross - tx.fee);
+    case "DEPOSIT":
+      return gross;
+    case "WITHDRAW":
+      return -gross;
+    default:
+      return 0;
+  }
+}
+
+function hasTradeTransactions(transactions: Transaction[]): boolean {
+  return transactions.some((t) => t.type === "BUY" || t.type === "SELL");
+}
+
 /**
- * Compare portfolio vs S&P 500 — cùng khoảng thời gian, cùng mốc 100:
- * - Danh mục: % thay đổi giá trị đang nắm giữ từ đầu kỳ
- * - S&P 500: % thay đổi chỉ số (giá) từ đầu kỳ — vd. 3000→6000 = +100%
- * - 5Y/Tất cả: clamp từ ngày trade đầu nếu chưa đủ lịch sử
+ * Lãi ròng danh mục trên vốn cost đầu kỳ (cố định):
+ * profit(t) = NAV(t) − NAV đầu kỳ − vốn mới bỏ thêm trong kỳ
+ * % = profit / cost đầu kỳ × 100, chart mốc 100 = đầu kỳ
+ *
+ * S&P: % tăng chỉ số thuần từ đầu kỳ.
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
@@ -233,11 +349,50 @@ export function buildBenchmarkComparison(
   const startBench = benchFromStart[0].close;
   if (startBench <= 0 || startEquity <= 0) return null;
 
+  const sortedTx = [...transactions].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  const skipSnowballDeposit = hasTradeTransactions(sortedTx);
+
+  const opening = snapshotPortfolioAt(
+    sortedTx,
+    periodStart,
+    skipSnowballDeposit
+  );
+  const openingCost =
+    opening.holdingsCost > 0 ? opening.holdingsCost : startEquity;
+  const openingNav = startEquity;
+
+  let txIdx = 0;
+  while (txIdx < sortedTx.length) {
+    const txDate = sortedTx[txIdx].date.slice(0, 10);
+    if (txDate > periodStart) break;
+    txIdx++;
+  }
+
+  let cumulativeFlow = 0;
+
   const dailyPoints: ComparisonPoint[] = benchFromStart.map((b) => {
-    const nav = equityByDate.get(b.date) ?? startEquity;
+    while (txIdx < sortedTx.length) {
+      const txDate = sortedTx[txIdx].date.slice(0, 10);
+      if (txDate > b.date) break;
+      if (txDate > periodStart) {
+        cumulativeFlow += netCapitalFlowInPeriod(
+          sortedTx[txIdx],
+          skipSnowballDeposit
+        );
+      }
+      txIdx++;
+    }
+
+    const nav = equityByDate.get(b.date) ?? openingNav;
+    const netProfit = nav - openingNav - cumulativeFlow;
+    const portfolio =
+      openingCost > 0 ? 100 + (netProfit / openingCost) * 100 : 100;
+
     return {
       date: b.date,
-      portfolio: indexFromStart(nav, startEquity),
+      portfolio,
       sp500: indexFromStart(b.close, startBench),
     };
   });
@@ -254,7 +409,7 @@ export function buildBenchmarkComparison(
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
-    investedCapital: startEquity,
+    investedCapital: openingCost,
     from: comparisonFrom,
     to: endDate,
     clampedToHistory,
