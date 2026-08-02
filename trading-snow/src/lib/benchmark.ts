@@ -117,34 +117,6 @@ export function resolveBenchmarkWindow(
   return { from, to, clampedToHistory };
 }
 
-/**
- * Forward-fill NAV on benchmark dates.
- * Dates before the first trade stay at 0 — avoids showing portfolio value pre-inception.
- */
-function forwardFillEquity(
-  equityCurve: { date: string; equity: number }[],
-  dates: string[]
-): Map<string, number> {
-  const sorted = [...equityCurve].sort((a, b) => a.date.localeCompare(b.date));
-  const map = new Map<string, number>();
-  if (sorted.length === 0) return map;
-
-  let idx = -1;
-  let current = 0;
-
-  for (const date of dates) {
-    while (
-      idx + 1 < sorted.length &&
-      sorted[idx + 1].date.slice(0, 10) <= date
-    ) {
-      idx++;
-      current = sorted[idx].equity;
-    }
-    map.set(date, current);
-  }
-  return map;
-}
-
 function pickBenchmarkSeries(
   benchmark: HistoryPoint[],
   startDate: string,
@@ -169,26 +141,6 @@ function pickBenchmarkSeries(
   return benchmark.length >= 2 ? benchmark.slice(-2) : benchmark;
 }
 
-function resolvePeriodStart(
-  dates: string[],
-  equityByDate: Map<string, number>,
-  requestedStart: string
-): { periodStart: string; startEquity: number } | null {
-  const candidates = dates.filter((d) => d >= requestedStart);
-
-  for (const d of candidates) {
-    const equity = equityByDate.get(d) ?? 0;
-    if (equity > 0) return { periodStart: d, startEquity: equity };
-  }
-
-  return null;
-}
-
-function periodReturn(endValue: number, startValue: number): number {
-  if (startValue <= 0) return 0;
-  return ((endValue / startValue) - 1) * 100;
-}
-
 function lookupBenchmarkPrice(benchmark: HistoryPoint[], date: string): number {
   let price = 0;
   for (const point of benchmark) {
@@ -210,19 +162,107 @@ function hasTradeTransactions(transactions: Transaction[]): boolean {
   return transactions.some((t) => t.type === "BUY" || t.type === "SELL");
 }
 
+interface PositionState {
+  quantity: number;
+  totalCost: number;
+}
+
+interface PortfolioState {
+  positions: Map<string, PositionState>;
+  lastPrices: Map<string, number>;
+  realizedPnl: number;
+  netCapitalDeployed: number;
+}
+
+function createPortfolioState(): PortfolioState {
+  return {
+    positions: new Map(),
+    lastPrices: new Map(),
+    realizedPnl: 0,
+    netCapitalDeployed: 0,
+  };
+}
+
+function portfolioNav(state: PortfolioState): number {
+  let holdingsValue = 0;
+  for (const [symbol, pos] of state.positions) {
+    if (pos.quantity <= 0) continue;
+    const price =
+      state.lastPrices.get(symbol) ?? pos.totalCost / pos.quantity;
+    holdingsValue += pos.quantity * price;
+  }
+  return holdingsValue + state.realizedPnl;
+}
+
+function applyPortfolioTx(
+  state: PortfolioState,
+  tx: Transaction,
+  hasTrades: boolean,
+  skipSnowballDeposit: boolean
+): void {
+  if (skipSnowballDeposit && isSnowballAutoDeposit(tx)) return;
+
+  const gross = tx.quantity * tx.price;
+
+  if (hasTrades) {
+    switch (tx.type) {
+      case "BUY": {
+        const cost = gross + tx.fee;
+        state.netCapitalDeployed += cost;
+        const pos = state.positions.get(tx.symbol) ?? {
+          quantity: 0,
+          totalCost: 0,
+        };
+        pos.quantity += tx.quantity;
+        pos.totalCost += cost;
+        state.positions.set(tx.symbol, pos);
+        state.lastPrices.set(tx.symbol, tx.price);
+        break;
+      }
+      case "SELL": {
+        const pos = state.positions.get(tx.symbol) ?? {
+          quantity: 0,
+          totalCost: 0,
+        };
+        const avgCost = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
+        const costBasis = avgCost * tx.quantity;
+        const proceeds = gross - tx.fee;
+        state.netCapitalDeployed -= proceeds;
+        state.realizedPnl += proceeds - costBasis;
+        pos.quantity = Math.max(0, pos.quantity - tx.quantity);
+        pos.totalCost = Math.max(0, pos.totalCost - costBasis);
+        state.positions.set(tx.symbol, pos);
+        state.lastPrices.set(tx.symbol, tx.price);
+        break;
+      }
+      case "DIVIDEND":
+        state.realizedPnl += gross - tx.fee;
+        break;
+    }
+  } else {
+    switch (tx.type) {
+      case "DEPOSIT":
+        state.netCapitalDeployed += gross;
+        break;
+      case "WITHDRAW":
+        state.netCapitalDeployed -= gross;
+        break;
+      case "DIVIDEND":
+        state.realizedPnl += gross - tx.fee;
+        break;
+    }
+  }
+}
+
 interface SpyMirrorState {
   spyShares: number;
-  investedCapital: number;
+  netCapitalDeployed: number;
 }
 
 function createSpyMirror(): SpyMirrorState {
-  return { spyShares: 0, investedCapital: 0 };
+  return { spyShares: 0, netCapitalDeployed: 0 };
 }
 
-/**
- * Mirror portfolio cash flows into SPY (Snowball-style):
- * BUY/DEPOSIT → buy SPY; SELL/WITHDRAW → sell SPY; dividends reinvested.
- */
 function applySpyMirrorFlow(
   state: SpyMirrorState,
   tx: Transaction,
@@ -239,12 +279,13 @@ function applySpyMirrorFlow(
     switch (tx.type) {
       case "BUY": {
         const cost = gross + tx.fee;
-        state.investedCapital += cost;
+        state.netCapitalDeployed += cost;
         state.spyShares += cost / spyPrice;
         break;
       }
       case "SELL": {
         const proceeds = gross - tx.fee;
+        state.netCapitalDeployed -= proceeds;
         state.spyShares = Math.max(0, state.spyShares - proceeds / spyPrice);
         break;
       }
@@ -257,12 +298,12 @@ function applySpyMirrorFlow(
   } else {
     switch (tx.type) {
       case "DEPOSIT":
-        state.investedCapital += gross;
+        state.netCapitalDeployed += gross;
         state.spyShares += gross / spyPrice;
         break;
       case "WITHDRAW": {
         const amount = Math.min(gross, state.spyShares * spyPrice);
-        state.investedCapital = Math.max(0, state.investedCapital - gross);
+        state.netCapitalDeployed -= gross;
         state.spyShares = Math.max(0, state.spyShares - amount / spyPrice);
         break;
       }
@@ -275,20 +316,44 @@ function applySpyMirrorFlow(
   }
 }
 
+interface RawPoint {
+  date: string;
+  costNav: number;
+  sp500: number;
+  netCap: number;
+}
+
 /**
- * Snowball-style benchmark: portfolio NAV ($) vs hypothetical SPY portfolio
- * with matched BUY/SELL/dividend cash flows. Returns are period % change.
+ * Return on net capital deployed (Snowball-style):
+ * (Δ profit) / capital at period start, profit = NAV − net capital.
+ */
+function returnOnNetCapital(
+  startNav: number,
+  startNetCap: number,
+  endNav: number,
+  endNetCap: number
+): number {
+  if (startNetCap <= 0) return 0;
+  const startProfit = startNav - startNetCap;
+  const endProfit = endNav - endNetCap;
+  return ((endProfit - startProfit) / startNetCap) * 100;
+}
+
+/**
+ * Snowball-style benchmark: portfolio NAV ($) vs SPY with mirrored cash flows.
+ * Returns use profit / net capital deployed, not raw NAV start→end.
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
   benchmark: HistoryPoint[],
   transactions: Transaction[],
+  currentTradingValue: number,
   window?: { from: string; to: string; clampedToHistory?: boolean }
 ): ComparisonResult | null {
   const curve = ensureEquityCurve(equityCurve);
   if (curve.length < 2 || benchmark.length < 1) return null;
+  if (currentTradingValue <= 0) return null;
 
-  const sortedEquity = [...curve].sort((a, b) => a.date.localeCompare(b.date));
   const sortedBenchmark = [...benchmark].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
@@ -297,40 +362,35 @@ export function buildBenchmarkComparison(
   const startDate =
     requestedStart < portfolioStart ? portfolioStart : requestedStart;
   const endDate =
-    window?.to ?? sortedEquity[sortedEquity.length - 1].date.slice(0, 10);
+    window?.to ??
+    curve[curve.length - 1].date.slice(0, 10);
   const clampedToHistory =
     window?.clampedToHistory ?? requestedStart < portfolioStart;
 
   const benchInRange = pickBenchmarkSeries(sortedBenchmark, startDate, endDate);
   if (benchInRange.length < 1) return null;
 
-  const dates = benchInRange.map((b) => b.date);
-  const equityByDate = forwardFillEquity(sortedEquity, dates);
-
-  const period = resolvePeriodStart(dates, equityByDate, startDate);
-  if (!period) return null;
-
-  const { periodStart } = period;
-  const comparisonFrom =
-    periodStart < portfolioStart ? portfolioStart : periodStart;
-  const startBenchIdx = benchInRange.findIndex((b) => b.date >= periodStart);
-  if (startBenchIdx < 0) return null;
-
-  const benchFromStart = benchInRange.slice(startBenchIdx);
   const sortedTx = [...transactions].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
   const hasTrades = hasTradeTransactions(sortedTx);
   const skipSnowballDeposit = hasTrades;
 
+  const portfolioState = createPortfolioState();
   const spyState = createSpyMirror();
   let txIdx = 0;
 
-  const dailyPoints: ComparisonPoint[] = benchFromStart.map((b) => {
+  const rawPoints: RawPoint[] = benchInRange.map((b) => {
     while (txIdx < sortedTx.length) {
       const txDate = sortedTx[txIdx].date.slice(0, 10);
       if (txDate > b.date) break;
       const spyPrice = lookupBenchmarkPrice(sortedBenchmark, txDate);
+      applyPortfolioTx(
+        portfolioState,
+        sortedTx[txIdx],
+        hasTrades,
+        skipSnowballDeposit
+      );
       applySpyMirrorFlow(
         spyState,
         sortedTx[txIdx],
@@ -341,37 +401,56 @@ export function buildBenchmarkComparison(
       txIdx++;
     }
 
-    const nav = equityByDate.get(b.date) ?? 0;
-    const sp500 = spyState.spyShares * b.close;
-
     return {
       date: b.date,
-      portfolio: nav,
-      sp500,
+      costNav: portfolioNav(portfolioState),
+      sp500: spyState.spyShares * b.close,
+      netCap: portfolioState.netCapitalDeployed,
     };
   });
 
-  if (dailyPoints.length < 1) return null;
+  if (rawPoints.length < 1) return null;
 
-  const firstPoint =
-    dailyPoints.find((p) => p.portfolio > 0) ?? dailyPoints[0];
-  if (firstPoint.portfolio <= 0) return null;
+  const firstIdx = rawPoints.findIndex((p) => p.netCap > 0);
+  if (firstIdx < 0) return null;
 
+  const firstRaw = rawPoints[firstIdx];
+  const lastRaw = rawPoints[rawPoints.length - 1];
+  const scale =
+    lastRaw.costNav > 0 ? currentTradingValue / lastRaw.costNav : 1;
+
+  const dailyPoints: ComparisonPoint[] = rawPoints.map((p) => ({
+    date: p.date,
+    portfolio: p.costNav * scale,
+    sp500: p.sp500,
+  }));
+
+  const first = dailyPoints[firstIdx];
   const last = dailyPoints[dailyPoints.length - 1];
-  const portfolioReturn = periodReturn(last.portfolio, firstPoint.portfolio);
-  const sp500Return =
-    firstPoint.sp500 > 0
-      ? periodReturn(last.sp500, firstPoint.sp500)
-      : 0;
 
-  const points = downsampleMonthly(dailyPoints);
+  const portfolioReturn = returnOnNetCapital(
+    first.portfolio,
+    firstRaw.netCap,
+    last.portfolio,
+    lastRaw.netCap
+  );
+  const sp500Return = returnOnNetCapital(
+    first.sp500,
+    firstRaw.netCap,
+    last.sp500,
+    lastRaw.netCap
+  );
+
+  const points = downsampleMonthly(dailyPoints.slice(firstIdx));
+  const comparisonFrom =
+    firstRaw.date < portfolioStart ? portfolioStart : firstRaw.date;
 
   return {
     points,
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
-    investedCapital: spyState.investedCapital,
+    investedCapital: lastRaw.netCap,
     from: comparisonFrom,
     to: endDate,
     clampedToHistory,
