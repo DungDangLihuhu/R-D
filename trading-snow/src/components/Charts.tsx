@@ -12,7 +12,13 @@ import {
   YAxis,
 } from "recharts";
 import type { PortfolioStats } from "@/lib/types";
-import { formatMoney } from "@/lib/format";
+import {
+  downsampleMonthly,
+  formatChartMonthYear,
+  formatDate,
+  formatMonthKey,
+  formatMoney,
+} from "@/lib/format";
 
 const GRID = "#e2e5ea";
 const TICK = "#6b7280";
@@ -32,9 +38,11 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
     );
   }
 
-  const chartData = data.map((d) => ({
+  const chartData = downsampleMonthly(
+    [...data].sort((a, b) => a.date.localeCompare(b.date))
+  ).map((d) => ({
     ...d,
-    label: d.date.slice(0, 10),
+    label: formatChartMonthYear(d.date),
   }));
 
   return (
@@ -48,7 +56,12 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
           </linearGradient>
         </defs>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
-        <XAxis dataKey="label" tick={{ fill: TICK, fontSize: 11 }} />
+        <XAxis
+          dataKey="label"
+          tick={{ fill: TICK, fontSize: 11 }}
+          interval="preserveStartEnd"
+          minTickGap={28}
+        />
         <YAxis
           tick={{ fill: TICK, fontSize: 11 }}
           tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
@@ -56,6 +69,10 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
         <Tooltip
           contentStyle={TOOLTIP}
           formatter={(v) => [formatMoney(Number(v ?? 0)), "Lợi nhuận ròng"]}
+          labelFormatter={(_, payload) => {
+            const date = payload?.[0]?.payload?.date as string | undefined;
+            return date ? formatDate(date) : "";
+          }}
         />
         <Area
           type="monotone"
@@ -79,12 +96,22 @@ export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }
     );
   }
 
+  const chartData = data.map((d) => ({
+    ...d,
+    label: formatMonthKey(d.month),
+  }));
+
   return (
     <div className="min-w-0 w-full">
       <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data}>
+      <BarChart data={chartData}>
         <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
-        <XAxis dataKey="month" tick={{ fill: TICK, fontSize: 11 }} />
+        <XAxis
+          dataKey="label"
+          tick={{ fill: TICK, fontSize: 11 }}
+          interval="preserveStartEnd"
+          minTickGap={20}
+        />
         <YAxis
           tick={{ fill: TICK, fontSize: 11 }}
           tickFormatter={(v) => `$${v}`}
@@ -92,6 +119,7 @@ export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }
         <Tooltip
           contentStyle={TOOLTIP}
           formatter={(v) => [formatMoney(Number(v ?? 0)), "P&L"]}
+          labelFormatter={(label) => `Tháng ${label}`}
         />
         <Bar
           dataKey="pnl"
