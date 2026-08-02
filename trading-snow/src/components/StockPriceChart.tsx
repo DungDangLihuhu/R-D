@@ -189,14 +189,22 @@ export function StockPriceChart({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
+    const startFetch = () => {
+      if (!cancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    };
+    const tid = globalThis.setTimeout(startFetch, 0);
+
     const controller = new AbortController();
     fetch(`/api/stock/${encodeURIComponent(symbol)}/history?timeframe=${timeframe}`, {
       signal: controller.signal,
     })
       .then((r) => r.json())
       .then((json) => {
+        if (cancelled) return;
         if (json.error) {
           setError(json.error);
           setPoints([]);
@@ -205,14 +213,19 @@ export function StockPriceChart({
         setPoints(json.points ?? []);
       })
       .catch((e) => {
-        if (e.name !== "AbortError") {
-          setError("Không tải được biểu đồ");
-          setPoints([]);
-        }
+        if (cancelled || e.name === "AbortError") return;
+        setError("Không tải được biểu đồ");
+        setPoints([]);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(tid);
+      controller.abort();
+    };
   }, [symbol, timeframe]);
 
   const levels = showPriceLevelsOnChart(timeframe) ? priceLevels : undefined;

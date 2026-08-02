@@ -127,6 +127,19 @@ export function computePortfolioStats(
     snapshotEquity(tx.date, false);
   }
 
+  if (equityPoints.length > 0) {
+    const lastIdx = equityPoints.length - 1;
+    const marketHoldings = holdingsValueAtPrices(true);
+    equityPoints[lastIdx] = {
+      date: equityPoints[lastIdx].date,
+      equity: cashBalance + marketHoldings,
+    };
+    tradingEquityPoints[lastIdx] = {
+      date: tradingEquityPoints[lastIdx].date,
+      equity: marketHoldings + realizedPnl,
+    };
+  }
+
   let unrealizedPnl = 0;
   const holdings: Holding[] = [];
 
@@ -229,10 +242,10 @@ export function computePortfolioStats(
     totalDividends,
     realizedPnl,
     unrealizedPnl,
-    totalPnl: realizedPnl + unrealizedPnl,
+    totalPnl: realizedPnl + unrealizedPnl + totalDividends,
     portfolioValue,
     tradingValue,
-    netCapital: tradingValue - realizedPnl,
+    netCapital: totalDeposits - totalWithdrawals,
     cashBalance,
     winCount,
     lossCount,

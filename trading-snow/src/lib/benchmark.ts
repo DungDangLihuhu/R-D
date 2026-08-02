@@ -151,7 +151,7 @@ function pickBenchmarkSeries(
   startDate: string,
   endDate: string
 ): HistoryPoint[] {
-  let series = benchmark
+  const series = benchmark
     .filter((b) => b.date >= startDate && b.date <= endDate)
     .sort((a, b) => a.date.localeCompare(b.date));
 
@@ -184,7 +184,7 @@ function resolvePeriodStart(
     return { periodStart: start, startEquity: adj, raw };
   };
 
-  let { periodStart, startEquity, raw } = tryStart(requestedStart);
+  const { periodStart, startEquity, raw } = tryStart(requestedStart);
 
   if (startEquity > 0) return { periodStart, startEquity };
 

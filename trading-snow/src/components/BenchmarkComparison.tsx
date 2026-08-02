@@ -48,28 +48,26 @@ export function BenchmarkComparison({
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
   useEffect(() => {
-    if (curve.length < 2) {
-      setComparison(null);
-      setError(null);
-      return;
-    }
+    if (curve.length < 2) return;
 
-    const window = resolveBenchmarkWindow(curve, range);
-    if (!window) {
-      setComparison(null);
-      setError(null);
-      return;
-    }
+    const benchmarkWindow = resolveBenchmarkWindow(curve, range);
+    if (!benchmarkWindow) return;
 
     const historyStart = curve[0].date.slice(0, 10);
     const fetchFrom = extendBenchmarkFrom(historyStart);
 
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
+    const startFetch = () => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+    };
+    const tid = globalThis.setTimeout(startFetch, 0);
 
-    fetch(`/api/benchmark?from=${fetchFrom}&to=${window.to}`)
+    fetch(`/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`)
       .then((res) => res.json())
       .then((data) => {
+        if (cancelled) return;
         if (data.error) {
           setError(data.error);
           setComparison(null);
@@ -79,15 +77,24 @@ export function BenchmarkComparison({
           curve,
           data.points ?? [],
           transactions,
-          window
+          benchmarkWindow
         );
         setComparison(result);
         if (!result) {
           setError("Không tải được dữ liệu S&P 500 cho khoảng thời gian này");
         }
       })
-      .catch(() => setError("Không tải được dữ liệu S&P 500"))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setError("Không tải được dữ liệu S&P 500");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(tid);
+    };
   }, [curve, transactions, range]);
 
   if (curve.length < 2) {

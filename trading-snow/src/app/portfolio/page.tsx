@@ -38,7 +38,7 @@ export default function PortfolioPage() {
           )
         )} />
         <Mini label="Tiền mặt" value={formatMoney(stats.cashBalance)} />
-        <Mini label="Lợi nhuận ròng" value={formatMoney(stats.portfolioValue)} />
+        <Mini label="Tổng giá trị" value={formatMoney(stats.portfolioValue)} />
       </div>
       <HoldingsTable />
     </div>

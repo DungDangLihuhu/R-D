@@ -77,18 +77,26 @@ export function EventsCalendar() {
   const fetchFrom = format(subMonths(startOfMonth(month), 1), "yyyy-MM-dd");
   const fetchTo = format(addMonths(endOfMonth(month), 3), "yyyy-MM-dd");
 
+  const symbolKey = symbols.join(",");
+
   useEffect(() => {
-    if (symbols.length === 0) {
-      setApiEvents([]);
-      return;
-    }
-    setLoading(true);
-    setError(null);
+    if (symbols.length === 0) return;
+
+    let cancelled = false;
+    const startFetch = () => {
+      if (!cancelled) {
+        setLoading(true);
+        setError(null);
+      }
+    };
+    const tid = globalThis.setTimeout(startFetch, 0);
+
     fetch(
-      `/api/events?symbols=${symbols.join(",")}&from=${fetchFrom}&to=${fetchTo}`
+      `/api/events?symbols=${symbolKey}&from=${fetchFrom}&to=${fetchTo}`
     )
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         if (data.error) {
           setError(data.error);
           setApiEvents([]);
@@ -96,20 +104,34 @@ export function EventsCalendar() {
         }
         setApiEvents(data.events ?? []);
       })
-      .catch(() => setError("Không tải được lịch sự kiện"))
-      .finally(() => setLoading(false));
-  }, [symbols.join(","), fetchFrom, fetchTo]);
+      .catch(() => {
+        if (!cancelled) setError("Không tải được lịch sự kiện");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(tid);
+    };
+  }, [symbolKey, fetchFrom, fetchTo, symbols.length]);
+
+  const effectiveApiEvents = useMemo(
+    () => (symbols.length > 0 ? apiEvents : []),
+    [symbols.length, apiEvents]
+  );
 
   const all = useMemo(() => {
     const ids = new Set<string>();
     const merged: CalendarEvent[] = [];
-    for (const e of [...recordedDividends, ...apiEvents]) {
+    for (const e of [...recordedDividends, ...effectiveApiEvents]) {
       if (ids.has(e.id)) continue;
       ids.add(e.id);
       merged.push(e);
     }
     return merged.sort((a, b) => a.date.localeCompare(b.date));
-  }, [recordedDividends, apiEvents]);
+  }, [recordedDividends, effectiveApiEvents]);
 
   const monthStart = startOfMonth(month);
   const monthEnd = endOfMonth(month);

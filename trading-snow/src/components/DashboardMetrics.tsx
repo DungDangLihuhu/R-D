@@ -29,10 +29,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
   );
 
   useEffect(() => {
-    if (!symbols) {
-      setDividendEvents([]);
-      return;
-    }
+    if (!symbols) return;
 
     let cancelled = false;
     fetch(`/api/dividends?symbols=${encodeURIComponent(symbols)}`)
@@ -49,14 +46,19 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
     };
   }, [symbols]);
 
+  const effectiveDividendEvents = useMemo(
+    () => (symbols ? dividendEvents : []),
+    [symbols, dividendEvents]
+  );
+
   const passiveIncome = useMemo(
     () =>
       projectPassiveIncome(
         stats.holdings,
-        dividendEvents,
+        effectiveDividendEvents,
         stats.holdingsValue
       ),
-    [stats.holdings, stats.holdingsValue, dividendEvents]
+    [stats.holdings, stats.holdingsValue, effectiveDividendEvents]
   );
 
   const hasDailyQuote = stats.holdings.some((h) => h.marketPrice != null);
