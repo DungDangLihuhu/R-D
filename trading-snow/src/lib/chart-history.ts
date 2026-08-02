@@ -49,13 +49,16 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
       minute: "2-digit",
     });
   }
-  if (timeframe === "5y" || timeframe === "all") {
-    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "2-digit" });
+  if (timeframe === "5y" || timeframe === "all" || timeframe === "1y") {
+    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
-  if (timeframe === "1w") {
-    return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "2-digit" });
+  if (timeframe === "1w" || timeframe === "1m") {
+    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
-  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  if (timeframe === "1d") {
+    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
+  }
+  return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
 }
 
 function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {

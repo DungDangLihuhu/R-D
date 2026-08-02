@@ -36,6 +36,30 @@ export function formatDate(date: string): string {
   }).format(new Date(date));
 }
 
+/** Trục chart: MM/YYYY */
+export function formatChartMonthYear(date: string): string {
+  const d = new Date(date);
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = d.getUTCFullYear();
+  return `${mm}/${yyyy}`;
+}
+
+/** Tháng P&L dạng YYYY-MM → MM/YYYY */
+export function formatMonthKey(month: string): string {
+  const [year, mon] = month.split("-");
+  if (!year || !mon) return month;
+  return `${mon}/${year}`;
+}
+
+/** Downsample chuỗi thời gian: 1 điểm / tháng (ngày cuối trong tháng). */
+export function downsampleMonthly<T extends { date: string }>(points: T[]): T[] {
+  const byMonth = new Map<string, T>();
+  for (const p of points) {
+    byMonth.set(p.date.slice(0, 7), p);
+  }
+  return [...byMonth.values()];
+}
+
 /** Finnhub market cap is in millions USD */
 export function formatMarketCap(millions: number, currency = "USD"): string {
   const usd = millions * 1_000_000;

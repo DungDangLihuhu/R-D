@@ -21,7 +21,12 @@ import {
   type BenchmarkRange,
   type ComparisonResult,
 } from "@/lib/benchmark";
-import { formatDate, formatMoney, formatPercent } from "@/lib/format";
+import {
+  formatChartMonthYear,
+  formatDate,
+  formatMoney,
+  formatPercent,
+} from "@/lib/format";
 import type { PortfolioStats, Transaction } from "@/lib/types";
 
 const GRID = "#e2e5ea";
@@ -113,7 +118,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Vốn = giá cost (mua + nạp − bán − rút) · S&P mirror từng dòng vốn · 100 = đầu kỳ
+            Danh mục: % tăng giá trị CP đang giữ · S&P: % tăng chỉ số · 100 = đầu kỳ
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -122,7 +127,7 @@ export function BenchmarkComparison({
                 {" "}
                 · {formatDate(comparison.from)} – {formatDate(comparison.to)}
                 {" "}
-                · Vốn (cost): {formatMoney(comparison.investedCapital)}
+                · Giá trị đầu kỳ: {formatMoney(comparison.investedCapital)}
               </>
             )}
           </p>
@@ -158,12 +163,12 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Lãi/lỗ danh mục (trên giá vốn)"
+              label="Lãi/lỗ danh mục (đầu kỳ → nay)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="Lãi/lỗ S&P 500 mua giữ"
+              label="Lãi/lỗ S&P 500 (đầu kỳ → nay)"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
@@ -184,7 +189,7 @@ export function BenchmarkComparison({
               <LineChart
                 data={comparison.points.map((p) => ({
                   ...p,
-                  label: p.date.slice(5),
+                  label: formatChartMonthYear(p.date),
                 }))}
               >
                 <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
@@ -192,6 +197,7 @@ export function BenchmarkComparison({
                   dataKey="label"
                   tick={{ fill: TICK, fontSize: 11 }}
                   interval="preserveStartEnd"
+                  minTickGap={28}
                 />
                 <YAxis
                   tick={{ fill: TICK, fontSize: 11 }}
@@ -204,7 +210,10 @@ export function BenchmarkComparison({
                     `${Number(v ?? 0).toFixed(1)} (${Number(v ?? 0) >= 100 ? "+" : ""}${(Number(v ?? 0) - 100).toFixed(1)}%)`,
                     name === "portfolio" ? "Danh mục" : "S&P 500",
                   ]}
-                  labelFormatter={(l) => `Ngày: ${l}`}
+                  labelFormatter={(_, payload) => {
+                    const date = payload?.[0]?.payload?.date as string | undefined;
+                    return date ? formatDate(date) : "";
+                  }}
                 />
                 <Legend
                   formatter={(value) =>
