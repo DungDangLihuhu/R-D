@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { Pagination } from "@/components/Pagination";
@@ -265,14 +265,7 @@ export function HoldingsTable() {
   const [editing, setEditing] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
 
-  const holdings = useMemo(() => {
-    return [...stats.allHoldings].sort((a, b) => {
-      const ah = isSymbolHidden(a.symbol) ? 1 : 0;
-      const bh = isSymbolHidden(b.symbol) ? 1 : 0;
-      if (ah !== bh) return ah - bh;
-      return b.totalCost - a.totalCost;
-    });
-  }, [stats.allHoldings, isSymbolHidden]);
+  const holdings = stats.allHoldings;
 
   const hiddenCount = holdings.filter((h) => isSymbolHidden(h.symbol)).length;
 
