@@ -50,7 +50,7 @@ export function BenchmarkComparison({
   useEffect(() => {
     if (curve.length < 2) return;
 
-    const benchmarkWindow = resolveBenchmarkWindow(curve, range);
+    const benchmarkWindow = resolveBenchmarkWindow(curve, range, undefined, transactions);
     if (!benchmarkWindow) return;
 
     const fetchFrom = extendBenchmarkFrom(benchmarkWindow.from);
@@ -115,7 +115,7 @@ export function BenchmarkComparison({
           <p className="text-xs text-gray-500">
             Vốn mốc = NAV đầu kỳ · S&P theo nạp/rút/cổ tức · 100 = hòa vốn
             {comparison?.clampedToHistory && (
-              <> · Khoảng chọn dài hơn lịch sử giao dịch — tính từ ngày trade đầu</>
+              <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
             {comparison && (
               <>

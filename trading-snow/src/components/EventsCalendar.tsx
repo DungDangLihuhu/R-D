@@ -76,6 +76,8 @@ export function EventsCalendar() {
 
   const fetchFrom = format(subMonths(startOfMonth(month), 1), "yyyy-MM-dd");
   const fetchTo = format(addMonths(endOfMonth(month), 3), "yyyy-MM-dd");
+  const macroFrom = format(startOfMonth(month), "yyyy-MM-dd");
+  const macroTo = format(endOfMonth(month), "yyyy-MM-dd");
 
   const symbolKey = symbols.join(",");
 
@@ -89,7 +91,12 @@ export function EventsCalendar() {
     };
     const tid = globalThis.setTimeout(startFetch, 0);
 
-    const params = new URLSearchParams({ from: fetchFrom, to: fetchTo });
+    const params = new URLSearchParams({
+      from: fetchFrom,
+      to: fetchTo,
+      macroFrom,
+      macroTo,
+    });
     if (symbolKey) params.set("symbols", symbolKey);
 
     fetch(`/api/events?${params.toString()}`)
@@ -114,7 +121,7 @@ export function EventsCalendar() {
       cancelled = true;
       globalThis.clearTimeout(tid);
     };
-  }, [symbolKey, fetchFrom, fetchTo]);
+  }, [symbolKey, fetchFrom, fetchTo, macroFrom, macroTo]);
 
   const effectiveApiEvents = apiEvents;
 
