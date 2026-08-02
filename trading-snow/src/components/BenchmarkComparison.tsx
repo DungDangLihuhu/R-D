@@ -38,6 +38,13 @@ const TOOLTIP = {
   color: "#1a1d21",
 };
 
+function formatChartAxisMoney(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  return String(Math.round(value));
+}
+
 export function BenchmarkComparison({
   equityCurve,
   transactions,
@@ -118,7 +125,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Danh mục: % lãi = lãi ròng × 100 / cost CP (từng thời điểm) · S&P: % chỉ số · 100 = đầu kỳ
+            Snowball-style: giá trị danh mục ($) vs SPY nếu mirror cùng dòng tiền BUY/SELL/cổ tức
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -127,7 +134,7 @@ export function BenchmarkComparison({
                 {" "}
                 · {formatDate(comparison.from)} – {formatDate(comparison.to)}
                 {" "}
-                · Vốn cost hiện tại: {formatMoney(comparison.investedCapital)}
+                · Vốn đã mirror SPY: {formatMoney(comparison.investedCapital)}
               </>
             )}
           </p>
@@ -163,12 +170,12 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Lãi/lỗ danh mục (lãi ròng / cost)"
+              label="Lãi/lỗ danh mục (đầu kỳ → nay)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="Lãi/lỗ S&P 500 (đầu kỳ → nay)"
+              label="Lãi/lỗ S&P 500 mirror (đầu kỳ → nay)"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
@@ -201,14 +208,14 @@ export function BenchmarkComparison({
                 />
                 <YAxis
                   tick={{ fill: TICK, fontSize: 11 }}
-                  tickFormatter={(v) => `${Number(v).toFixed(0)}`}
+                  tickFormatter={(v) => formatChartAxisMoney(Number(v))}
                   domain={["auto", "auto"]}
                 />
                 <Tooltip
                   contentStyle={TOOLTIP}
                   formatter={(v, name) => [
-                    `${Number(v ?? 0).toFixed(1)} (${Number(v ?? 0) >= 100 ? "+" : ""}${(Number(v ?? 0) - 100).toFixed(1)}%)`,
-                    name === "portfolio" ? "Danh mục" : "S&P 500",
+                    formatMoney(Number(v ?? 0)),
+                    name === "portfolio" ? "Danh mục" : "S&P 500 mirror",
                   ]}
                   labelFormatter={(_, payload) => {
                     const date = payload?.[0]?.payload?.date as string | undefined;
@@ -217,7 +224,7 @@ export function BenchmarkComparison({
                 />
                 <Legend
                   formatter={(value) =>
-                    value === "portfolio" ? "Danh mục" : "S&P 500"
+                    value === "portfolio" ? "Danh mục" : "S&P 500 mirror"
                   }
                 />
                 <Line
