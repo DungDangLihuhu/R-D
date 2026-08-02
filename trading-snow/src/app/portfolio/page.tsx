@@ -7,7 +7,7 @@ import { formatMoney } from "@/lib/format";
 
 export default function PortfolioPage() {
   const { stats } = useApp();
-  const missingPrices = stats.holdings.filter((h) => !h.marketPrice).length;
+  const missingPrices = stats.allHoldings.filter((h) => !h.marketPrice).length;
 
   return (
     <div className="space-y-6">

@@ -10,17 +10,19 @@ import {
   computePortfolioIrr,
   computeTotalProfit,
 } from "./portfolio-snowball";
+import { isTransactionHidden } from "./hidden-symbols";
 
 interface PositionState {
   quantity: number;
   totalCost: number;
 }
 
-export function computePortfolioStats(
+function computePortfolioStatsInternal(
   transactions: Transaction[],
   portfolioId: string,
-  marketPrices: Record<string, number> = {},
-  marketQuotes: Record<string, MarketQuote> = {}
+  marketPrices: Record<string, number>,
+  marketQuotes: Record<string, MarketQuote>,
+  hiddenSymbols: ReadonlySet<string>
 ): PortfolioStats {
   const sorted = [...transactions]
     .filter((t) => t.portfolioId === portfolioId)
@@ -70,6 +72,8 @@ export function computePortfolioStats(
   };
 
   for (const tx of sorted) {
+    if (isTransactionHidden(tx, hiddenSymbols)) continue;
+
     const gross = tx.quantity * tx.price;
     totalFees += tx.fee;
 
@@ -255,6 +259,7 @@ export function computePortfolioStats(
     profitFactor,
     totalTrades,
     holdings,
+    allHoldings: holdings,
     closedTrades,
     monthlyPnl,
     equityCurve: equityPoints,
@@ -269,5 +274,38 @@ export function computePortfolioStats(
     profitExDivSales,
     profitExDivSalesPercent,
     irr,
+  };
+}
+
+export function computePortfolioStats(
+  transactions: Transaction[],
+  portfolioId: string,
+  marketPrices: Record<string, number> = {},
+  marketQuotes: Record<string, MarketQuote> = {},
+  hiddenSymbols: ReadonlySet<string> = new Set()
+): PortfolioStats {
+  const stats = computePortfolioStatsInternal(
+    transactions,
+    portfolioId,
+    marketPrices,
+    marketQuotes,
+    hiddenSymbols
+  );
+
+  if (hiddenSymbols.size === 0) {
+    return stats;
+  }
+
+  const full = computePortfolioStatsInternal(
+    transactions,
+    portfolioId,
+    marketPrices,
+    marketQuotes,
+    new Set()
+  );
+
+  return {
+    ...stats,
+    allHoldings: full.holdings,
   };
 }

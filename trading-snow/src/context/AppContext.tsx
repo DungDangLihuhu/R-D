@@ -12,6 +12,7 @@ import {
 } from "react";
 import { v4 as uuid } from "uuid";
 import { computePortfolioStats } from "@/lib/stats";
+import { hiddenSymbolSet } from "@/lib/hidden-symbols";
 import {
   checkCloudConfigured,
   getSyncRoomId,
@@ -33,6 +34,9 @@ interface AppContextValue {
   activePortfolioId: string;
   setActivePortfolioId: (id: string) => void;
   stats: PortfolioStats;
+  hiddenSymbols: Set<string>;
+  isSymbolHidden: (symbol: string) => boolean;
+  toggleHiddenSymbol: (symbol: string) => void;
   priceLoading: boolean;
   quoteUnresolved: string[];
   cloudConfigured: boolean;
@@ -152,20 +156,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [hydrated, cloudConfigured, syncRoom]);
 
+  const hiddenSymbols = useMemo(
+    () => hiddenSymbolSet(state.hiddenSymbols?.[activePortfolioId]),
+    [state.hiddenSymbols, activePortfolioId]
+  );
+
   const stats = useMemo(
     () =>
       computePortfolioStats(
         state.transactions,
         activePortfolioId,
         state.marketPrices,
-        state.marketQuotes ?? {}
+        state.marketQuotes ?? {},
+        hiddenSymbols
       ),
-    [state.transactions, state.marketPrices, state.marketQuotes, activePortfolioId]
+    [
+      state.transactions,
+      state.marketPrices,
+      state.marketQuotes,
+      activePortfolioId,
+      hiddenSymbols,
+    ]
   );
 
   const holdingSymbols = useMemo(
-    () => stats.holdings.map((h) => h.symbol),
-    [stats.holdings]
+    () => stats.allHoldings.map((h) => h.symbol),
+    [stats.allHoldings]
+  );
+
+  const isSymbolHidden = useCallback(
+    (symbol: string) => hiddenSymbols.has(symbol.toUpperCase()),
+    [hiddenSymbols]
+  );
+
+  const toggleHiddenSymbol = useCallback(
+    (symbol: string) => {
+      const sym = symbol.toUpperCase();
+      setState((s) => {
+        const map = { ...(s.hiddenSymbols ?? {}) };
+        const list = [...(map[activePortfolioId] ?? [])];
+        const idx = list.indexOf(sym);
+        if (idx >= 0) list.splice(idx, 1);
+        else list.push(sym);
+        map[activePortfolioId] = list;
+        return { ...s, hiddenSymbols: map };
+      });
+    },
+    [activePortfolioId]
   );
 
   const refreshPrices = useCallback(async (symbols?: string[], opts?: { notify?: boolean }) => {
@@ -372,6 +409,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         activePortfolioId,
         setActivePortfolioId,
         stats,
+        hiddenSymbols,
+        isSymbolHidden,
+        toggleHiddenSymbol,
         priceLoading,
         quoteUnresolved,
         cloudConfigured,

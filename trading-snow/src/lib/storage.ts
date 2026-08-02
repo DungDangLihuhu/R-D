@@ -14,6 +14,7 @@ export const defaultState = (): AppState => ({
   transactions: [],
   marketPrices: {},
   pricesUpdatedAt: null,
+  hiddenSymbols: {},
 });
 
 export function loadState(): AppState {

@@ -40,7 +40,7 @@ const CATEGORY_STYLE: Record<
 };
 
 export function EventsCalendar() {
-  const { state, activePortfolioId, stats } = useApp();
+  const { state, activePortfolioId, stats, isSymbolHidden } = useApp();
   const [apiEvents, setApiEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,10 @@ export function EventsCalendar() {
   const recordedDividends: CalendarEvent[] = useMemo(() => {
     return state.transactions
       .filter(
-        (t) => t.portfolioId === activePortfolioId && t.type === "DIVIDEND"
+        (t) =>
+          t.portfolioId === activePortfolioId &&
+          t.type === "DIVIDEND" &&
+          !isSymbolHidden(t.symbol)
       )
       .map((t) => ({
         id: `rec-${t.id}`,
@@ -72,7 +75,7 @@ export function EventsCalendar() {
         subtitle: `${t.quantity} cp · ${formatMoney(t.quantity * t.price)}`,
         impact: "low" as const,
       }));
-  }, [state.transactions, activePortfolioId]);
+  }, [state.transactions, activePortfolioId, isSymbolHidden]);
 
   const fetchFrom = format(subMonths(startOfMonth(month), 1), "yyyy-MM-dd");
   const fetchTo = format(addMonths(endOfMonth(month), 3), "yyyy-MM-dd");
