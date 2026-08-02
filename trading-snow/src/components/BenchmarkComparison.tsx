@@ -48,9 +48,11 @@ function formatChartAxisMoney(value: number): string {
 export function BenchmarkComparison({
   equityCurve,
   transactions,
+  tradingValue,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
   transactions: Transaction[];
+  tradingValue: number;
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
@@ -88,6 +90,7 @@ export function BenchmarkComparison({
           curve,
           data.points ?? [],
           transactions,
+          tradingValue,
           benchmarkWindow
         );
         setComparison(result);
@@ -106,7 +109,7 @@ export function BenchmarkComparison({
       cancelled = true;
       globalThis.clearTimeout(tid);
     };
-  }, [curve, transactions, range]);
+  }, [curve, transactions, range, tradingValue]);
 
   if (curve.length < 2) {
     return (
@@ -125,7 +128,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Snowball-style: giá trị danh mục ($) vs SPY nếu mirror cùng dòng tiền BUY/SELL/cổ tức
+            Snowball-style: giá trị danh mục ($) vs SPY mirror cùng dòng tiền · % = lãi / vốn ròng đầu tư
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -134,7 +137,7 @@ export function BenchmarkComparison({
                 {" "}
                 · {formatDate(comparison.from)} – {formatDate(comparison.to)}
                 {" "}
-                · Vốn đã mirror SPY: {formatMoney(comparison.investedCapital)}
+                · Vốn ròng: {formatMoney(comparison.investedCapital)}
               </>
             )}
           </p>
@@ -170,12 +173,12 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Lãi/lỗ danh mục (đầu kỳ → nay)"
+              label="Lãi/lỗ danh mục (lãi / vốn ròng)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="Lãi/lỗ S&P 500 mirror (đầu kỳ → nay)"
+              label="Lãi/lỗ S&P mirror (lãi / vốn ròng)"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
