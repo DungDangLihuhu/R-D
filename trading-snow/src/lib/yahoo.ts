@@ -368,7 +368,12 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
   }
 
   if ((state === "POST" || state === "POSTPOST") && post && post > 0) {
-    return { ...fromPrevClose(post), marketSession: "post" };
+    const base = regular;
+    const change = meta.postMarketChange ?? post - base;
+    const changePercent =
+      meta.postMarketChangePercent ??
+      (base > 0 ? (change / base) * 100 : 0);
+    return { price: post, change, changePercent, marketSession: "post" };
   }
 
   if (state === "REGULAR") {
@@ -386,7 +391,12 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
 
   // CLOSED — use latest extended quote if still from current session day
   if (post && post > 0 && postTime && regularTime && postTime >= regularTime) {
-    return { ...fromPrevClose(post), marketSession: "post" };
+    const base = regular;
+    const change = meta.postMarketChange ?? post - base;
+    const changePercent =
+      meta.postMarketChangePercent ??
+      (base > 0 ? (change / base) * 100 : 0);
+    return { price: post, change, changePercent, marketSession: "post" };
   }
   if (pre && pre > 0 && preTime && (!regularTime || preTime > regularTime)) {
     const change = meta.preMarketChange ?? pre - prevClose;

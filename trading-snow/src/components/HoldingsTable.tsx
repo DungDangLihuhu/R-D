@@ -10,6 +10,7 @@ import { usePagination } from "@/hooks/usePagination";
 import type { Holding, MarketQuote, MarketSession } from "@/lib/types";
 import {
   formatMoney,
+  formatPercent,
   formatPnlArrow,
   formatShares,
 } from "@/lib/format";
@@ -20,10 +21,27 @@ function pnlClass(value: number) {
   return "text-gray-600";
 }
 
-function sessionLabel(session?: MarketSession): string | null {
-  if (session === "pre") return "Pre-market";
-  if (session === "post") return "After hours";
-  return null;
+function SessionBadge({
+  session,
+  changePercent,
+}: {
+  session?: MarketSession;
+  changePercent?: number | null;
+}) {
+  if (session !== "pre" && session !== "post") return null;
+  const label = session === "pre" ? "Pre-market" : "After hours";
+  if (changePercent == null || !Number.isFinite(changePercent)) {
+    return (
+      <span className="ml-1 text-[10px] font-medium text-violet-600">
+        ({label})
+      </span>
+    );
+  }
+  return (
+    <span className={`ml-1 text-[10px] font-semibold tabular-nums ${pnlClass(changePercent)}`}>
+      ({label} {formatPercent(changePercent)})
+    </span>
+  );
 }
 
 function MetricStack({
@@ -93,7 +111,11 @@ function HoldingRow({
   const dailyChange =
     quote && holding.marketPrice ? quote.change * holding.quantity : null;
   const dailyPct = quote?.changePercent ?? null;
-  const sessionTag = sessionLabel(quote?.marketSession);
+  const extendedSession =
+    quote?.marketSession === "pre" || quote?.marketSession === "post"
+      ? quote.marketSession
+      : undefined;
+  const extendedPct = extendedSession ? dailyPct : null;
   const displayName = quote?.name ?? holding.symbol;
 
   const priceSecondary = editing ? (
@@ -114,11 +136,7 @@ function HoldingRow({
       className="mt-0.5 block w-full text-[11px] tabular-nums text-sky-600 hover:underline"
     >
       {formatMoney(market)}/cp
-      {sessionTag && (
-        <span className="ml-1 text-[10px] font-medium text-violet-600">
-          ({sessionTag})
-        </span>
-      )}
+      <SessionBadge session={extendedSession} changePercent={extendedPct} />
     </button>
   );
 
@@ -204,11 +222,7 @@ function HoldingRow({
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-500">
                 Hôm nay
-                {sessionTag && (
-                  <span className="ml-1 text-[10px] font-medium text-violet-600">
-                    ({sessionTag})
-                  </span>
-                )}
+                <SessionBadge session={extendedSession} changePercent={extendedPct} />
               </span>
               <div className="text-right">
                 <span
