@@ -134,7 +134,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Danh mục: TWR (loại bỏ nạp/rút vốn) · S&P 500: % giá chỉ số — cùng mốc 0% tại ngày bắt đầu
+            Cùng vốn bỏ ra — mỗi lần mua/bán trade mirror sang S&P 500 (100 = hoà vốn)
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -177,12 +177,17 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Danh mục (TWR)"
+              label="Trade của bạn"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
+              sub={
+                comparison.investedCapital > 0
+                  ? `Vốn: ${formatMoney(comparison.investedCapital)}`
+                  : undefined
+              }
             />
             <StatCard
-              label="S&P 500"
+              label="Nếu mua S&P 500"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
@@ -222,7 +227,7 @@ export function BenchmarkComparison({
                   contentStyle={TOOLTIP}
                   formatter={(v, name) => [
                     formatIndexedReturn(Number(v ?? 100)),
-                    name === "portfolio" ? "Danh mục" : "S&P 500",
+                    name === "portfolio" ? "Trade" : "S&P 500 (mirror)",
                   ]}
                   labelFormatter={(_, payload) => {
                     const date = payload?.[0]?.payload?.date as string | undefined;
@@ -231,7 +236,7 @@ export function BenchmarkComparison({
                 />
                 <Legend
                   formatter={(value) =>
-                    value === "portfolio" ? "Danh mục" : "S&P 500"
+                    value === "portfolio" ? "Trade" : "S&P 500 (mirror)"
                   }
                 />
                 <Line
