@@ -327,11 +327,15 @@ export function buildBenchmarkComparison(
   if (!hasPortfolioData) return null;
 
   const rebaseToWindow = range !== "all";
-  const basePortfolioReturn = rebaseToWindow
-    ? (portfolioSnaps[0]?.returnPct ??
-      portfolioSnaps.find((s) => s.returnPct != null)?.returnPct ??
-      0)
-    : 0;
+  const startSnap =
+    portfolioSnaps[0]?.returnPct != null
+      ? portfolioSnaps[0]
+      : portfolioSnaps.find((s) => s.returnPct != null);
+  /** Chỉ trừ lãi đã chốt tại mốc đầu kỳ — giữ phần float đang hold */
+  const baseRealizedReturn =
+    rebaseToWindow && startSnap && startSnap.openCost > 0
+      ? (startSnap.realizedPnl / startSnap.openCost) * 100
+      : 0;
 
   const rawPoints: ComparisonPoint[] = benchInRange.map((b, i) => {
     const snap = portfolioSnaps[i];
@@ -341,7 +345,7 @@ export function buildBenchmarkComparison(
     if (!rebaseToWindow) {
       portfolio = snap.returnPct != null ? 100 + snap.returnPct : null;
     } else if (snap.returnPct != null) {
-      portfolio = 100 + (snap.returnPct - basePortfolioReturn);
+      portfolio = 100 + (snap.returnPct - baseRealizedReturn);
     } else {
       portfolio = 100;
     }
@@ -350,7 +354,7 @@ export function buildBenchmarkComparison(
   });
 
   if (rebaseToWindow && rawPoints.length > 0) {
-    rawPoints[0] = { ...rawPoints[0], sp500: 100, portfolio: 100 };
+    rawPoints[0] = { ...rawPoints[0], sp500: 100 };
   }
 
   const points = downsampleMonthly(rawPoints);
@@ -358,7 +362,7 @@ export function buildBenchmarkComparison(
   const lastPoint = rawPoints[rawPoints.length - 1];
   const sp500Return = lastPoint.sp500 - 100;
   const portfolioReturn = rebaseToWindow
-    ? (lastSnap?.returnPct ?? 0) - basePortfolioReturn
+    ? (lastSnap?.returnPct ?? 0) - baseRealizedReturn
     : lastSnap?.returnPct ?? 0;
 
   return {

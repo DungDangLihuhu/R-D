@@ -302,11 +302,7 @@ function buildInsiderRows(
   if (finnhubData.length > 0) {
     return finnhubData.slice(0, 12).map((t) => {
       const unitPrice =
-        t.transactionPrice && t.transactionPrice > 0
-          ? t.transactionPrice
-          : quotePrice > 0
-            ? quotePrice
-            : null;
+        t.transactionPrice && t.transactionPrice > 0 ? t.transactionPrice : null;
       const amount = unitPrice != null ? t.change * unitPrice : null;
       return {
         name: t.name,
@@ -314,7 +310,8 @@ function buildInsiderRows(
         change: t.change,
         shares: t.share,
         transactionCode: t.transactionCode,
-        transactionPrice: t.transactionPrice ?? null,
+        transactionPrice:
+          t.transactionPrice && t.transactionPrice > 0 ? t.transactionPrice : null,
         amount,
         relationship:
           t.relationship?.trim() ||
@@ -331,7 +328,9 @@ function buildInsiderRows(
   return yahooInsider.transactions.slice(0, 12).map((t) => {
     const change = yahooInsiderShareChange(t.shares, t.transactionText);
     const unitPrice =
-      t.value && t.shares ? Math.abs(t.value / t.shares) : quotePrice > 0 ? quotePrice : null;
+      t.value && t.shares
+        ? Math.abs(t.value / t.shares)
+        : null;
     const amount =
       t.value ?? (unitPrice != null ? change * unitPrice : null);
     return {
