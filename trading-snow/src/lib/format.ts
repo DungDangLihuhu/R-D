@@ -51,13 +51,31 @@ export function formatMonthKey(month: string): string {
   return `${mon}/${year}`;
 }
 
-/** Downsample chuỗi thời gian: 1 điểm / tháng (ngày cuối trong tháng). */
+/** Downsample chuỗi thời gian: 1 điểm / tháng, luôn giữ điểm đầu và cuối. */
 export function downsampleMonthly<T extends { date: string }>(points: T[]): T[] {
+  if (points.length <= 2) return points;
+
+  const first = points[0];
+  const last = points[points.length - 1];
   const byMonth = new Map<string, T>();
+
   for (const p of points) {
-    byMonth.set(p.date.slice(0, 7), p);
+    const key = p.date.slice(0, 7);
+    const prev = byMonth.get(key);
+    if (!prev || p.date >= prev.date) {
+      byMonth.set(key, p);
+    }
   }
-  return [...byMonth.values()];
+
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const p of [first, ...byMonth.values(), last]) {
+    if (seen.has(p.date)) continue;
+    seen.add(p.date);
+    out.push(p);
+  }
+
+  return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Finnhub market cap is in millions USD */
