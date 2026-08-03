@@ -149,29 +149,37 @@ export async function fetchQuotesForSymbols(
   const normalized = normalizeSymbolList(symbols);
   const requested = normalized.length;
   const list = normalized.slice(0, QUOTE_MAX_SYMBOLS);
-  const quotes: QuoteResult[] = [];
-  const prices: Record<string, number> = {};
   const quoteBySymbol = new Map<string, QuoteResult>();
 
+  const chunks: string[][] = [];
   for (let i = 0; i < list.length; i += QUOTE_BATCH_SIZE) {
-    const chunk = list.slice(i, i + QUOTE_BATCH_SIZE);
-    const chunkQuotes = await fetchQuotes(chunk);
-    for (const q of chunkQuotes) {
-      if (q.price <= 0) continue;
-      quoteBySymbol.set(q.symbol, q);
-      prices[q.symbol] = q.price;
-    }
-
-    const missing = chunk.filter((s) => !prices[s]);
-    const chunkQuotesArr = [...quoteBySymbol.values()];
-    await fillMissingQuotes(missing, prices, chunkQuotesArr);
-    for (const q of chunkQuotesArr) {
-      if (q.price > 0) quoteBySymbol.set(q.symbol, q);
-    }
+    chunks.push(list.slice(i, i + QUOTE_BATCH_SIZE));
   }
 
-  for (const q of quoteBySymbol.values()) {
-    quotes.push(q);
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const chunkQuotes = await fetchQuotes(chunk);
+      const prices: Record<string, number> = {};
+
+      for (const q of chunkQuotes) {
+        if (q.price <= 0) continue;
+        quoteBySymbol.set(q.symbol, q);
+        prices[q.symbol] = q.price;
+      }
+
+      const missing = chunk.filter((s) => !prices[s]);
+      const resolved: QuoteResult[] = [...chunkQuotes];
+      await fillMissingQuotes(missing, prices, resolved);
+      for (const q of resolved) {
+        if (q.price > 0) quoteBySymbol.set(q.symbol, q);
+      }
+    })
+  );
+
+  const quotes = [...quoteBySymbol.values()];
+  const prices: Record<string, number> = {};
+  for (const q of quotes) {
+    prices[q.symbol] = q.price;
   }
 
   await enrichQuotesWithProfiles(quotes);

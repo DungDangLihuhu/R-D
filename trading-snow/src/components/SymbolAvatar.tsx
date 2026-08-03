@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { tickerLabel } from "@/lib/symbol-profile";
+import { fetchProfileLogo, getCachedLogo } from "@/lib/profile-client-cache";
 
 export { tickerLabel };
 
@@ -42,13 +43,16 @@ export function SymbolAvatar({
   useEffect(() => {
     if (symbol === "CASH" || imgSrc || failed) return;
 
+    const cached = getCachedLogo(symbol);
+    if (cached) {
+      setImgSrc(cached);
+      return;
+    }
+
     let cancelled = false;
-    fetch(`/api/profile?symbol=${encodeURIComponent(symbol)}`)
-      .then((res) => res.json())
-      .then((data: { logo?: string }) => {
-        if (!cancelled && data.logo) setImgSrc(data.logo);
-      })
-      .catch(() => {});
+    fetchProfileLogo(symbol).then((logo) => {
+      if (!cancelled && logo) setImgSrc(logo);
+    });
 
     return () => {
       cancelled = true;

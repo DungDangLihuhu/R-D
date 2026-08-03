@@ -102,6 +102,8 @@ export interface StockAnalysis {
   priceHistory: { date: string; close: number }[];
   priceLevels: PriceLevels;
   assessment: StockAssessment;
+  /** Finnhub metrics — dùng cho lazy extra / assessment */
+  metrics?: Record<string, number>;
   sources: string[];
   note?: string;
 }
@@ -587,45 +589,90 @@ function buildSections(
   ];
 }
 
-export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis | null> {
-  const upper = symbol.trim().toUpperCase();
-  if (!upper || upper === "CASH") return null;
+export interface StockAnalysisExtra {
+  peers: string[];
+  insiderTransactions: InsiderRow[];
+  news: NewsRow[];
+  optionFlow: OptionFlowSummary | null;
+  assessment: StockAssessment;
+}
 
-  const quote = await fetchQuoteForSymbol(upper);
-  if (!quote) return null;
+async function fetchEarningsUpcoming(
+  upper: string
+): Promise<StockAnalysis["earningsUpcoming"]> {
+  const key = getFinnhubApiKey();
+  if (!key) return [];
 
-  const from = new Date();
-  from.setFullYear(from.getFullYear() - 1);
-  const priceHistory = await fetchPriceHistory(upper, from, new Date());
+  const now = new Date();
+  const calFrom = now.toISOString().slice(0, 10);
+  const calTo = new Date(now.getTime() + 180 * 24 * 3600 * 1000).toISOString().slice(0, 10);
 
-  const sources: string[] = ["Yahoo Finance"];
-  let note: string | undefined;
-
-  const profile = await finnhubGet<{
-    name?: string;
-    ticker?: string;
-    exchange?: string;
-    country?: string;
-    currency?: string;
-    logo?: string;
-    weburl?: string;
-    ipo?: string;
-    marketCapitalization?: number;
-    shareOutstanding?: number;
-    finnhubIndustry?: string;
-  }>("stock/profile2?", upper);
-
-  const metricsRes = await finnhubGet<{ metric?: Record<string, number> }>(
-    "stock/metric?metric=all&",
-    upper
-  );
-
-  if (profile) sources.push("Finnhub");
-  else if (upper.includes(".")) {
-    note =
-      "Finnhub free chủ yếu hỗ trợ mã US — chỉ số cơ bản có thể thiếu với mã .PA.";
+  for (const sym of resolveYahooSymbolCandidates(upper)) {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/calendar/earnings?symbol=${encodeURIComponent(sym)}&from=${calFrom}&to=${calTo}&token=${key}`,
+      { next: { revalidate: 3600 } }
+    );
+    if (!res.ok) continue;
+    const data = (await res.json()) as {
+      earningsCalendar?: StockAnalysis["earningsUpcoming"];
+    };
+    if (data.earningsCalendar?.length) {
+      return data.earningsCalendar.sort((a, b) => a.date.localeCompare(b.date));
+    }
   }
+  return [];
+}
 
+async function fetchCompanyNews(upper: string): Promise<NewsRow[]> {
+  const key = getFinnhubApiKey();
+  if (!key) return [];
+
+  const now = new Date();
+  const fromNews = new Date();
+  fromNews.setDate(fromNews.getDate() - 30);
+
+  for (const sym of resolveYahooSymbolCandidates(upper)) {
+    const res = await fetch(
+      `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(sym)}&from=${fromNews.toISOString().slice(0, 10)}&to=${now.toISOString().slice(0, 10)}&token=${key}`,
+      { next: { revalidate: 1800 } }
+    );
+    if (!res.ok) continue;
+    const items = (await res.json()) as {
+      datetime: number;
+      headline: string;
+      source?: string;
+      url?: string;
+    }[];
+    if (!Array.isArray(items) || !items.length) continue;
+    return items.slice(0, 15).map((n) => ({
+      headline: n.headline,
+      date: new Date(n.datetime * 1000).toISOString(),
+      source: n.source,
+      url: n.url,
+    }));
+  }
+  return [];
+}
+
+type FinnhubProfile = {
+  name?: string;
+  ticker?: string;
+  exchange?: string;
+  country?: string;
+  currency?: string;
+  logo?: string;
+  weburl?: string;
+  ipo?: string;
+  marketCapitalization?: number;
+  shareOutstanding?: number;
+  finnhubIndustry?: string;
+};
+
+function buildCoreSections(
+  quote: { price: number; changePercent: number },
+  profile: FinnhubProfile | null,
+  metricsRes: { metric?: Record<string, number> } | null
+): AnalysisSection[] {
   const m = metricsRes?.metric ?? {};
   const sections: AnalysisSection[] = metricsRes
     ? buildSections(m, profile ?? {})
@@ -647,101 +694,125 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     });
   }
 
-  const earningsHist = await finnhubGet<
-    { period: string; estimate?: number; actual?: number; surprisePercent?: number }[]
-  >("stock/earnings?", upper);
+  return sections;
+}
 
-  const now = new Date();
-  const calFrom = now.toISOString().slice(0, 10);
-  const calTo = new Date(now.getTime() + 180 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const key = getFinnhubApiKey();
-  let earningsUpcoming: StockAnalysis["earningsUpcoming"] = [];
-  if (key) {
-    for (const sym of resolveYahooSymbolCandidates(upper)) {
-      const res = await fetch(
-        `https://finnhub.io/api/v1/calendar/earnings?symbol=${encodeURIComponent(sym)}&from=${calFrom}&to=${calTo}&token=${key}`,
-        { next: { revalidate: 3600 } }
-      );
-      if (!res.ok) continue;
-      const data = (await res.json()) as {
-        earningsCalendar?: StockAnalysis["earningsUpcoming"];
-      };
-      if (data.earningsCalendar?.length) {
-        earningsUpcoming = data.earningsCalendar.sort((a, b) =>
-          a.date.localeCompare(b.date)
-        );
-        break;
-      }
-    }
-  }
+export async function fetchStockAnalysisExtra(
+  symbol: string,
+  core: Pick<
+    StockAnalysis,
+    "symbol" | "price" | "sections" | "priceHistory" | "priceLevels" | "recommendations"
+  > & { metrics: Record<string, number> }
+): Promise<StockAnalysisExtra> {
+  const upper = symbol.trim().toUpperCase();
 
-  const recommendations =
-    (await finnhubGet<RecommendationRow[]>("stock/recommendation?", upper)) ?? [];
-
-  const [insiderRes, executiveRes, yahooInsider] = await Promise.all([
-    finnhubGet<{
-      data?: {
-        name: string;
-        share: number;
-        change: number;
-        transactionDate: string;
-        transactionCode: string;
-        transactionPrice?: number;
-        relationship?: string;
-        position?: string;
-      }[];
-    }>("stock/insider-transactions?", upper),
-    finnhubGet<{
-      executive?: { name: string; position?: string }[];
-    }>("stock/executive?", upper),
-    fetchYahooInsiderData(upper),
-  ]);
-  const executives = executiveRes?.executive ?? [];
-
-  const peers = (await finnhubGet<string[]>("stock/peers?", upper)) ?? [];
-  const optionFlow = await fetchOptionFlow(upper);
-
-  const fromNews = new Date();
-  fromNews.setDate(fromNews.getDate() - 30);
-  let news: NewsRow[] = [];
-  if (key) {
-    for (const sym of resolveYahooSymbolCandidates(upper)) {
-      const res = await fetch(
-        `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(sym)}&from=${fromNews.toISOString().slice(0, 10)}&to=${now.toISOString().slice(0, 10)}&token=${key}`,
-        { next: { revalidate: 1800 } }
-      );
-      if (!res.ok) continue;
-      const items = (await res.json()) as {
-        datetime: number;
-        headline: string;
-        source?: string;
-        url?: string;
-      }[];
-      if (!Array.isArray(items) || !items.length) continue;
-      news = items.slice(0, 15).map((n) => ({
-        headline: n.headline,
-        date: new Date(n.datetime * 1000).toISOString(),
-        source: n.source,
-        url: n.url,
-      }));
-      break;
-    }
-  }
+  const [insiderRes, executiveRes, yahooInsider, peers, optionFlow, news] =
+    await Promise.all([
+      finnhubGet<{
+        data?: {
+          name: string;
+          share: number;
+          change: number;
+          transactionDate: string;
+          transactionCode: string;
+          transactionPrice?: number;
+          relationship?: string;
+          position?: string;
+        }[];
+      }>("stock/insider-transactions?", upper),
+      finnhubGet<{
+        executive?: { name: string; position?: string }[];
+      }>("stock/executive?", upper),
+      fetchYahooInsiderData(upper),
+      finnhubGet<string[]>("stock/peers?", upper),
+      fetchOptionFlow(upper),
+      fetchCompanyNews(upper),
+    ]);
 
   const insiderTransactions = buildInsiderRows(
     insiderRes?.data ?? [],
     yahooInsider,
-    executives,
-    quote.price
+    executiveRes?.executive ?? [],
+    core.price
   );
+
+  const assessment = computeStockAssessment({
+    price: core.price,
+    metrics: core.metrics,
+    news,
+    insiderTransactions,
+    recommendations: core.recommendations,
+    priceLevels: core.priceLevels,
+    optionFlow,
+  });
+
+  return {
+    peers: (peers ?? []).filter((p) => p !== upper).slice(0, 8),
+    insiderTransactions,
+    news,
+    optionFlow,
+    assessment,
+  };
+}
+
+export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis | null> {
+  const upper = symbol.trim().toUpperCase();
+  if (!upper || upper === "CASH") return null;
+
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - 1);
+
+  const [
+    quote,
+    priceHistory,
+    profile,
+    metricsRes,
+    earningsHist,
+    earningsUpcoming,
+    recommendations,
+  ] = await Promise.all([
+    fetchQuoteForSymbol(upper),
+    fetchPriceHistory(upper, from, new Date()),
+    finnhubGet<FinnhubProfile>("stock/profile2?", upper),
+    finnhubGet<{ metric?: Record<string, number> }>("stock/metric?metric=all&", upper),
+    finnhubGet<
+      { period: string; estimate?: number; actual?: number; surprisePercent?: number }[]
+    >("stock/earnings?", upper),
+    fetchEarningsUpcoming(upper),
+    finnhubGet<RecommendationRow[]>("stock/recommendation?", upper),
+  ]);
+
+  if (!quote) return null;
+
+  const sources: string[] = ["Yahoo Finance"];
+  let note: string | undefined;
+
+  if (profile) sources.push("Finnhub");
+  else if (upper.includes(".")) {
+    note =
+      "Finnhub free chủ yếu hỗ trợ mã US — chỉ số cơ bản có thể thiếu với mã .PA.";
+  }
+
+  const m = metricsRes?.metric ?? {};
+  const sections = buildCoreSections(quote, profile, metricsRes);
 
   const priceLevels = computePriceLevels(
     quote.price,
     m,
     priceHistory,
-    recommendations,
+    recommendations ?? [],
     earningsUpcoming
   );
+
+  const assessment = computeStockAssessment({
+    price: quote.price,
+    metrics: m,
+    news: [],
+    insiderTransactions: [],
+    recommendations: recommendations ?? [],
+    priceLevels,
+    optionFlow: null,
+  });
 
   return {
     symbol: upper,
@@ -752,7 +823,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     logo: profile?.logo,
     website: profile?.weburl,
     ipo: profile?.ipo,
-    peers: peers.filter((p) => p !== upper).slice(0, 8),
+    peers: [],
     price: quote.price,
     change: quote.change,
     changePercent: quote.changePercent,
@@ -766,20 +837,13 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
       surprisePercent: e.surprisePercent ?? null,
     })),
     earningsUpcoming: earningsUpcoming.slice(0, 4),
-    recommendations: recommendations.slice(0, 6),
-    insiderTransactions,
-    news,
+    recommendations: (recommendations ?? []).slice(0, 6),
+    insiderTransactions: [],
+    news: [],
     priceHistory,
     priceLevels,
-    assessment: computeStockAssessment({
-      price: quote.price,
-      metrics: m,
-      news,
-      insiderTransactions,
-      recommendations,
-      priceLevels,
-      optionFlow,
-    }),
+    assessment,
+    metrics: m,
     sources,
     note,
   };

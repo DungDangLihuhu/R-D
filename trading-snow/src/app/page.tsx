@@ -1,12 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { DashboardMetrics } from "@/components/DashboardMetrics";
-import { EquityChart } from "@/components/Charts";
 import { DataTools } from "@/components/DataTools";
 import { PriceRefresh } from "@/components/PriceRefresh";
 import { SyncPanel } from "@/components/SyncPanel";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
+
+const EquityChart = dynamic(
+  () => import("@/components/Charts").then((m) => m.EquityChart),
+  {
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
+    ),
+  }
+);
 
 export default function DashboardPage() {
   const { stats } = useApp();

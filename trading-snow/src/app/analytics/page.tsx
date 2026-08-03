@@ -1,11 +1,38 @@
 "use client";
 
-import { BenchmarkComparison } from "@/components/BenchmarkComparison";
-import { EquityChart, MonthlyPnlChart } from "@/components/Charts";
+import dynamic from "next/dynamic";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
 import { filterHiddenTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
+
+const BenchmarkComparison = dynamic(
+  () =>
+    import("@/components/BenchmarkComparison").then((m) => m.BenchmarkComparison),
+  {
+    loading: () => (
+      <div className="h-80 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+    ),
+  }
+);
+
+const EquityChart = dynamic(
+  () => import("@/components/Charts").then((m) => m.EquityChart),
+  {
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
+    ),
+  }
+);
+
+const MonthlyPnlChart = dynamic(
+  () => import("@/components/Charts").then((m) => m.MonthlyPnlChart),
+  {
+    loading: () => (
+      <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
+    ),
+  }
+);
 
 export default function AnalyticsPage() {
   const { stats, state, activePortfolioId, hiddenSymbols } = useApp();

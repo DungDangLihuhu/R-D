@@ -17,6 +17,7 @@ import { PriceRefresh } from "@/components/PriceRefresh";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
 import { formatDate, formatMoney } from "@/lib/format";
+import { fetchJson } from "@/lib/fetch-cache";
 import type { CalendarEvent, EventCategory } from "@/lib/types";
 
 const TABS: { id: EventCategory | "all"; label: string }[] = [
@@ -102,8 +103,10 @@ export function EventsCalendar() {
     });
     if (symbolKey) params.set("symbols", symbolKey);
 
-    fetch(`/api/events?${params.toString()}`)
-      .then((r) => r.json())
+    fetchJson<{ events?: CalendarEvent[]; error?: string }>(
+      `/api/events?${params.toString()}`,
+      { ttlMs: 5 * 60 * 1000 }
+    )
       .then((data) => {
         if (cancelled) return;
         if (data.error) {

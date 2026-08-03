@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -17,6 +17,7 @@ import { formatMoney } from "@/lib/format";
 import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { TECHNICAL_CHART_TIMEFRAMES } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
+import { useChartHistory } from "@/hooks/useChartHistory";
 import {
   computeBenDangIndicators,
   type BenDangIndicators,
@@ -425,55 +426,15 @@ function LayerToggle({
 export function BenDangChart({
   symbol,
   currency,
+  dailySeed,
 }: {
   symbol: string;
   currency: string;
+  dailySeed?: { date: string; close: number }[];
 }) {
   const [timeframe, setTimeframe] = useState<ChartTimeframe>("1d");
-  const [points, setPoints] = useState<OhlcPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [layers, setLayers] = useState<BenDangLayers>(DEFAULT_LAYERS);
-
-  useEffect(() => {
-    let cancelled = false;
-    const startFetch = () => {
-      if (!cancelled) {
-        setLoading(true);
-        setError(null);
-      }
-    };
-    const tid = globalThis.setTimeout(startFetch, 0);
-
-    const controller = new AbortController();
-    fetch(`/api/stock/${encodeURIComponent(symbol)}/history?timeframe=${timeframe}`, {
-      signal: controller.signal,
-    })
-      .then((r) => r.json())
-      .then((json) => {
-        if (cancelled) return;
-        if (json.error) {
-          setError(json.error);
-          setPoints([]);
-          return;
-        }
-        setPoints(json.points ?? []);
-      })
-      .catch((e) => {
-        if (cancelled || e.name === "AbortError") return;
-        setError("Không tải được biểu đồ");
-        setPoints([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-      globalThis.clearTimeout(tid);
-      controller.abort();
-    };
-  }, [symbol, timeframe]);
+  const { points, loading, error } = useChartHistory(symbol, timeframe, dailySeed);
 
   const indicators = useMemo(
     () => (points.length > 5 ? computeBenDangIndicators(points) : null),
