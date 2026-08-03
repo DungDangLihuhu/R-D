@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Search } from "lucide-react";
 import { StockPriceChart } from "@/components/StockPriceChart";
+import { TradingViewChart } from "@/components/TradingViewChart";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { useApp } from "@/context/AppContext";
 import {
@@ -39,6 +40,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [chartMode, setChartMode] = useState<"tradingview" | "app">("tradingview");
   const searchRef = useRef<HTMLDivElement>(null);
 
   if (symbol !== syncedSymbol) {
@@ -356,11 +358,52 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             )}
           </div>
 
-          <StockPriceChart
-            symbol={data.symbol}
-            currency={data.currency}
-            priceLevels={data.priceLevels}
-          />
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setChartMode("tradingview")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    chartMode === "tradingview"
+                      ? "bg-white text-sky-700 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  TradingView
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode("app")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    chartMode === "app"
+                      ? "bg-white text-sky-700 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Vốn &amp; kháng cự
+                </button>
+              </div>
+              {chartMode === "tradingview" && data.exchange && (
+                <span className="text-xs text-gray-500">
+                  {data.exchange} · TradingView
+                </span>
+              )}
+            </div>
+
+            {chartMode === "tradingview" ? (
+              <TradingViewChart
+                symbol={data.symbol}
+                exchange={data.exchange}
+              />
+            ) : (
+              <StockPriceChart
+                symbol={data.symbol}
+                currency={data.currency}
+                priceLevels={data.priceLevels}
+              />
+            )}
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {data.sections.map((section) => (
