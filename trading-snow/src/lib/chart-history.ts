@@ -9,7 +9,7 @@ const YAHOO_HEADERS = {
 /** All chart timeframes use daily (1D) candles; range controls the window. */
 const CHART_INTERVAL = "1d";
 
-export const CHART_TIMEFRAMES = ["1h", "4h", "1d", "1w", "1m", "1y", "5y", "all"] as const;
+export const CHART_TIMEFRAMES = ["1h", "4h", "1d", "1w", "1m", "all"] as const;
 export type ChartTimeframe = (typeof CHART_TIMEFRAMES)[number];
 export type ChartStyle = "line" | "candle";
 
@@ -23,16 +23,19 @@ export interface OhlcPoint {
   volume: number;
 }
 
-/** Lookback window per button — all 1D candles; range tăng dần trái → phải. */
-const TIMEFRAME_RANGES: Record<ChartTimeframe, string> = {
-  "1h": "5d",
-  "4h": "1mo",
-  "1d": "3mo",
-  "1w": "6mo",
-  "1m": "1y",
-  "1y": "2y",
-  "5y": "5y",
-  all: "max",
+interface TimeframeSpec {
+  range: string;
+  /** Yahoo lacks some ranges (e.g. 2w) — trim after fetch. */
+  trimDays?: number;
+}
+
+const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
+  "1h": { range: "1mo", trimDays: 14 },
+  "4h": { range: "2mo" },
+  "1d": { range: "6mo" },
+  "1w": { range: "2y" },
+  "1m": { range: "5y" },
+  all: { range: "max" },
 };
 
 export function isChartTimeframe(value: string): value is ChartTimeframe {
@@ -40,7 +43,7 @@ export function isChartTimeframe(value: string): value is ChartTimeframe {
 }
 
 function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
-  if (timeframe === "1h" || timeframe === "4h" || timeframe === "1d" || timeframe === "1m") {
+  if (timeframe === "1h" || timeframe === "4h" || timeframe === "1d") {
     return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
   }
   if (timeframe === "1w") {
@@ -50,10 +53,17 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
       year: "2-digit",
     });
   }
-  if (timeframe === "5y" || timeframe === "all" || timeframe === "1y") {
+  if (timeframe === "1m" || timeframe === "all") {
     return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
+}
+
+function trimToDays(points: OhlcPoint[], days: number): OhlcPoint[] {
+  if (!points.length || days <= 0) return points;
+  const last = new Date(points[points.length - 1].date).getTime();
+  const cutoff = last - days * 24 * 60 * 60 * 1000;
+  return points.filter((p) => new Date(p.date).getTime() >= cutoff);
 }
 
 function parseYahooOhlc(
@@ -115,8 +125,8 @@ async function fetchOhlcOne(
   yahooSymbol: string,
   timeframe: ChartTimeframe
 ): Promise<OhlcPoint[]> {
-  const range = TIMEFRAME_RANGES[timeframe];
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=${CHART_INTERVAL}&range=${range}`;
+  const spec = TIMEFRAME_SPECS[timeframe];
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=${CHART_INTERVAL}&range=${spec.range}`;
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 300 } });
   if (!res.ok) return [];
 
@@ -124,7 +134,11 @@ async function fetchOhlcOne(
   const result = json?.chart?.result?.[0];
   if (!result) return [];
 
-  return parseYahooOhlc(result, timeframe);
+  let points = parseYahooOhlc(result, timeframe);
+  if (spec.trimDays) {
+    points = trimToDays(points, spec.trimDays);
+  }
+  return points;
 }
 
 export async function fetchChartHistory(

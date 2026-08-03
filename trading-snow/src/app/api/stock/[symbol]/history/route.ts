@@ -11,7 +11,7 @@ export async function GET(
     return NextResponse.json({ error: "symbol required" }, { status: 400 });
   }
 
-  const tf = req.nextUrl.searchParams.get("timeframe") ?? "1y";
+  const tf = req.nextUrl.searchParams.get("timeframe") ?? "1d";
   if (!isChartTimeframe(tf)) {
     return NextResponse.json(
       { error: `timeframe must be one of: ${CHART_TIMEFRAMES.join(", ")}` },
