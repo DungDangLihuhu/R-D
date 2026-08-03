@@ -67,13 +67,13 @@ function MetricStack({
         : "text-left";
 
   return (
-    <div className={alignClass}>
+    <div className={`${alignClass} w-full`}>
       <p className={`text-sm font-medium tabular-nums leading-tight ${color}`}>
         {primary}
       </p>
       {secondary != null && secondary !== "" && (
         <div
-          className={`mt-0.5 text-[11px] tabular-nums leading-tight ${subColor}`}
+          className={`mt-0.5 w-full text-[11px] tabular-nums leading-tight ${subColor}`}
         >
           {secondary}
         </div>
@@ -120,27 +120,38 @@ function HoldingRow({
   const extendedPct = extendedSession ? dailyPct : null;
   const displayName = quote?.name ?? holding.symbol;
 
-  const priceSecondary = editing ? (
-    <input
-      autoFocus
-      type="number"
-      step="any"
-      value={priceInput}
-      onChange={(e) => onPriceInput(e.target.value)}
-      onBlur={onSavePrice}
-      onKeyDown={(e) => e.key === "Enter" && onSavePrice()}
-      className="mx-auto mt-0.5 w-full max-w-[6.5rem] rounded border border-gray-300 bg-white px-1.5 py-0.5 text-center text-[11px]"
-    />
-  ) : (
-    <button
-      type="button"
-      onClick={onEditStart}
-      className="mx-auto mt-0.5 block w-full max-w-[7.5rem] text-center text-[11px] tabular-nums text-sky-600 hover:underline"
-    >
-      <span className="block">{formatMoney(market)}/cp</span>
-      <SessionBadge session={extendedSession} changePercent={extendedPct} />
-    </button>
-  );
+  const priceSecondary = (align: "left" | "center" | "right") => {
+    const items =
+      align === "center" ? "items-center" : align === "right" ? "items-end" : "items-start";
+    const text =
+      align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
+
+    if (editing) {
+      return (
+        <input
+          autoFocus
+          type="number"
+          step="any"
+          value={priceInput}
+          onChange={(e) => onPriceInput(e.target.value)}
+          onBlur={onSavePrice}
+          onKeyDown={(e) => e.key === "Enter" && onSavePrice()}
+          className={`mt-0.5 w-full max-w-[8.5rem] rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[11px] tabular-nums ${text}`}
+        />
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={onEditStart}
+        className={`mt-0.5 flex w-full flex-col ${items} ${text} text-[11px] tabular-nums text-sky-600 hover:underline`}
+      >
+        <span>{formatMoney(market)}/cp</span>
+        <SessionBadge session={extendedSession} changePercent={extendedPct} />
+      </button>
+    );
+  };
 
   const hideBtn = (
     <button
@@ -204,7 +215,7 @@ function HoldingRow({
           <MetricStack
             align="center"
             primary={formatMoney(value)}
-            secondary={priceSecondary}
+            secondary={priceSecondary("center")}
           />
           {holding.marketPrice ? (
             <MetricStack
@@ -263,7 +274,7 @@ function HoldingRow({
           secondary={`${formatMoney(holding.avgCost)}/cp`}
         />
 
-        <MetricStack primary={formatMoney(value)} secondary={priceSecondary} />
+        <MetricStack primary={formatMoney(value)} secondary={priceSecondary("right")} />
 
         {holding.marketPrice ? (
           <MetricStack
