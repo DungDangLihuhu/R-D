@@ -38,11 +38,17 @@ const TOOLTIP = {
   color: "#1a1d21",
 };
 
-function formatChartAxisMoney(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
-  return String(Math.round(value));
+function formatChartAxisPercent(value: number): string {
+  const pct = value - 100;
+  if (pct === 0) return "0%";
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(0)}%`;
+}
+
+function formatIndexedReturn(value: number): string {
+  const pct = value - 100;
+  const sign = pct > 0 ? "+" : pct < 0 ? "−" : "";
+  return `${sign}${Math.abs(pct).toFixed(2)}%`;
 }
 
 export function BenchmarkComparison({
@@ -128,7 +134,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Snowball-style: giá trị danh mục ($) vs SPY mirror cùng dòng tiền · % = lãi / vốn ròng đầu tư
+            % tăng trưởng tích lũy từng ngày (TWR) — danh mục vs S&P 500, mốc 0% tại ngày bắt đầu
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -136,8 +142,6 @@ export function BenchmarkComparison({
               <>
                 {" "}
                 · {formatDate(comparison.from)} – {formatDate(comparison.to)}
-                {" "}
-                · Vốn ròng: {formatMoney(comparison.investedCapital)}
               </>
             )}
           </p>
@@ -173,12 +177,12 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Lãi/lỗ danh mục (lãi / vốn ròng)"
+              label="Danh mục (tích lũy % ngày)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="Lãi/lỗ S&P mirror (lãi / vốn ròng)"
+              label="S&P 500 (% ngày)"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
@@ -211,14 +215,14 @@ export function BenchmarkComparison({
                 />
                 <YAxis
                   tick={{ fill: TICK, fontSize: 11 }}
-                  tickFormatter={(v) => formatChartAxisMoney(Number(v))}
+                  tickFormatter={(v) => formatChartAxisPercent(Number(v))}
                   domain={["auto", "auto"]}
                 />
                 <Tooltip
                   contentStyle={TOOLTIP}
                   formatter={(v, name) => [
-                    formatMoney(Number(v ?? 0)),
-                    name === "portfolio" ? "Danh mục" : "S&P 500 mirror",
+                    formatIndexedReturn(Number(v ?? 100)),
+                    name === "portfolio" ? "Danh mục" : "S&P 500",
                   ]}
                   labelFormatter={(_, payload) => {
                     const date = payload?.[0]?.payload?.date as string | undefined;
@@ -227,7 +231,7 @@ export function BenchmarkComparison({
                 />
                 <Legend
                   formatter={(value) =>
-                    value === "portfolio" ? "Danh mục" : "S&P 500 mirror"
+                    value === "portfolio" ? "Danh mục" : "S&P 500"
                   }
                 />
                 <Line
@@ -243,6 +247,7 @@ export function BenchmarkComparison({
                   stroke="#f59e0b"
                   strokeWidth={2}
                   dot={false}
+                  name="sp500"
                 />
               </LineChart>
             </ResponsiveContainer>
