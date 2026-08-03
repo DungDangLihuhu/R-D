@@ -328,20 +328,30 @@ export function buildBenchmarkComparison(
 
   const rebaseToWindow = range !== "all";
   const basePortfolioReturn = rebaseToWindow
-    ? (portfolioSnaps.find((s) => s.returnPct != null)?.returnPct ?? 0)
+    ? (portfolioSnaps[0]?.returnPct ??
+      portfolioSnaps.find((s) => s.returnPct != null)?.returnPct ??
+      0)
     : 0;
 
   const rawPoints: ComparisonPoint[] = benchInRange.map((b, i) => {
     const snap = portfolioSnaps[i];
-    return {
-      date: b.date,
-      sp500: (b.close / baseClose) * 100,
-      portfolio:
-        snap.returnPct != null
-          ? 100 + (snap.returnPct - basePortfolioReturn)
-          : null,
-    };
+    const sp500 = (b.close / baseClose) * 100;
+
+    let portfolio: number | null;
+    if (!rebaseToWindow) {
+      portfolio = snap.returnPct != null ? 100 + snap.returnPct : null;
+    } else if (snap.returnPct != null) {
+      portfolio = 100 + (snap.returnPct - basePortfolioReturn);
+    } else {
+      portfolio = 100;
+    }
+
+    return { date: b.date, sp500, portfolio };
   });
+
+  if (rebaseToWindow && rawPoints.length > 0) {
+    rawPoints[0] = { ...rawPoints[0], sp500: 100, portfolio: 100 };
+  }
 
   const points = downsampleMonthly(rawPoints);
   const lastSnap = [...portfolioSnaps].reverse().find((s) => s.returnPct != null);
