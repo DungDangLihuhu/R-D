@@ -134,7 +134,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            % tăng trưởng tích lũy từng ngày (TWR) — danh mục vs S&P 500, mốc 0% tại ngày bắt đầu
+            Danh mục: TWR (loại bỏ nạp/rút vốn) · S&P 500: % giá chỉ số — cùng mốc 0% tại ngày bắt đầu
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -177,12 +177,12 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Danh mục (tích lũy % ngày)"
+              label="Danh mục (TWR)"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
             />
             <StatCard
-              label="S&P 500 (% ngày)"
+              label="S&P 500"
               value={formatPercent(comparison.sp500Return)}
               trend={comparison.sp500Return >= 0 ? "up" : "down"}
             />
