@@ -31,9 +31,9 @@ const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
   "1h": { interval: "60m", range: "1mo" },
   "4h": { interval: "60m", range: "3mo", aggregate4h: true },
   "1d": { interval: "1d", range: "6mo" },
-  "1w": { interval: "1wk", range: "1y" },
-  "1m": { interval: "1mo", range: "2y" },
-  all: { interval: "1mo", range: "max" },
+  "1w": { interval: "1wk", range: "2y" },
+  "1m": { interval: "1mo", range: "5y" },
+  all: { interval: "3mo", range: "max" },
 };
 
 export function isChartTimeframe(value: string): value is ChartTimeframe {
