@@ -321,38 +321,66 @@ interface RawPoint {
   costNav: number;
   sp500: number;
   netCap: number;
+  spyNetCap: number;
 }
 
-/**
- * Return on net capital deployed (Snowball-style):
- * (Δ profit) / capital at period start, profit = NAV − net capital.
- */
-function returnOnNetCapital(
-  startNav: number,
-  startNetCap: number,
-  endNav: number,
-  endNetCap: number
+/** Daily return stripping net capital flows (TWR-style). */
+function dailyReturnTwr(
+  navPrev: number,
+  navCurr: number,
+  netCapPrev: number,
+  netCapCurr: number
 ): number {
-  if (startNetCap <= 0) return 0;
-  const startProfit = startNav - startNetCap;
-  const endProfit = endNav - endNetCap;
-  return ((endProfit - startProfit) / startNetCap) * 100;
+  if (navPrev <= 0) return 0;
+  const flow = netCapCurr - netCapPrev;
+  return (navCurr - flow) / navPrev - 1;
+}
+
+function buildCumulativeIndex(rawPoints: RawPoint[], firstIdx: number): ComparisonPoint[] {
+  const points: ComparisonPoint[] = [];
+  let portIdx = 100;
+  let spyIdx = 100;
+
+  for (let i = firstIdx; i < rawPoints.length; i++) {
+    const raw = rawPoints[i];
+    if (i === firstIdx) {
+      points.push({ date: raw.date, portfolio: 100, sp500: 100 });
+      continue;
+    }
+    const prev = rawPoints[i - 1];
+    const portDaily = dailyReturnTwr(
+      prev.costNav,
+      raw.costNav,
+      prev.netCap,
+      raw.netCap
+    );
+    const spyDaily = dailyReturnTwr(
+      prev.sp500,
+      raw.sp500,
+      prev.spyNetCap,
+      raw.spyNetCap
+    );
+    portIdx *= 1 + portDaily;
+    spyIdx *= 1 + spyDaily;
+    points.push({ date: raw.date, portfolio: portIdx, sp500: spyIdx });
+  }
+
+  return points;
 }
 
 /**
- * Snowball-style benchmark: portfolio NAV ($) vs SPY with mirrored cash flows.
- * Returns use profit / net capital deployed, not raw NAV start→end.
+ * Benchmark vs S&P 500 using compounded daily % returns (TWR).
+ * Both series start at 100; each day applies portfolio vs SPY daily performance.
  */
 export function buildBenchmarkComparison(
   equityCurve: { date: string; equity: number }[],
   benchmark: HistoryPoint[],
   transactions: Transaction[],
-  currentTradingValue: number,
+  _currentTradingValue: number,
   window?: { from: string; to: string; clampedToHistory?: boolean }
 ): ComparisonResult | null {
   const curve = ensureEquityCurve(equityCurve);
   if (curve.length < 2 || benchmark.length < 1) return null;
-  if (currentTradingValue <= 0) return null;
 
   const sortedBenchmark = [...benchmark].sort((a, b) =>
     a.date.localeCompare(b.date)
@@ -406,42 +434,24 @@ export function buildBenchmarkComparison(
       costNav: portfolioNav(portfolioState),
       sp500: spyState.spyShares * b.close,
       netCap: portfolioState.netCapitalDeployed,
+      spyNetCap: spyState.netCapitalDeployed,
     };
   });
 
-  if (rawPoints.length < 1) return null;
+  if (rawPoints.length < 2) return null;
 
   const firstIdx = rawPoints.findIndex((p) => p.netCap > 0);
-  if (firstIdx < 0) return null;
+  if (firstIdx < 0 || firstIdx >= rawPoints.length - 1) return null;
 
+  const dailyPoints = buildCumulativeIndex(rawPoints, firstIdx);
   const firstRaw = rawPoints[firstIdx];
   const lastRaw = rawPoints[rawPoints.length - 1];
-  const scale =
-    lastRaw.costNav > 0 ? currentTradingValue / lastRaw.costNav : 1;
-
-  const dailyPoints: ComparisonPoint[] = rawPoints.map((p) => ({
-    date: p.date,
-    portfolio: p.costNav * scale,
-    sp500: p.sp500,
-  }));
-
-  const first = dailyPoints[firstIdx];
   const last = dailyPoints[dailyPoints.length - 1];
 
-  const portfolioReturn = returnOnNetCapital(
-    first.portfolio,
-    firstRaw.netCap,
-    last.portfolio,
-    lastRaw.netCap
-  );
-  const sp500Return = returnOnNetCapital(
-    first.sp500,
-    firstRaw.netCap,
-    last.sp500,
-    lastRaw.netCap
-  );
+  const portfolioReturn = last.portfolio - 100;
+  const sp500Return = last.sp500 - 100;
 
-  const points = downsampleMonthly(dailyPoints.slice(firstIdx));
+  const points = downsampleMonthly(dailyPoints);
   const comparisonFrom =
     firstRaw.date < portfolioStart ? portfolioStart : firstRaw.date;
 
