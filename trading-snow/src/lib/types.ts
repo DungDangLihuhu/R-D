@@ -38,6 +38,7 @@ export interface MarketQuote {
   change: number;
   changePercent: number;
   name?: string;
+  logo?: string;
   /** pre / post / regular / closed — extended hours when pre or post */
   marketSession?: MarketSession;
 }

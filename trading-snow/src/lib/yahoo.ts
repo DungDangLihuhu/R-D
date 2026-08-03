@@ -21,6 +21,7 @@ export interface QuoteResult {
   yahooSymbol?: string;
   exchangeName?: string;
   shortName?: string;
+  logo?: string;
   source?: "yahoo" | "finnhub" | "yahoo-search" | "twelve-data";
   marketSession?: MarketSession;
 }
