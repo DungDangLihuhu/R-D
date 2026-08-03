@@ -167,7 +167,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            S&P 500 & danh mục cùng xuất phát 0% tại ngày đầu kỳ · &quot;Tất cả&quot;: lãi tích lũy từ trade đầu
+            S&P 500: 0% tại đầu kỳ · Danh mục: trừ lãi đã chốt tại đầu kỳ, giữ float · &quot;Tất cả&quot;: tích lũy
             {comparison?.clampedToHistory && (
               <> · Từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}

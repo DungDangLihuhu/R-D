@@ -58,6 +58,13 @@ function AnalysisSkeleton() {
   );
 }
 
+function insiderActionLabel(code: string, change: number): string {
+  const c = code.toUpperCase();
+  if (c === "P" || c === "A") return "Mua";
+  if (c === "S" || c === "D") return "Bán";
+  return change < 0 ? "Bán" : "Mua";
+}
+
 export function StockAnalysisView({ symbol }: { symbol: string }) {
   const router = useRouter();
   const { stats } = useApp();
@@ -591,6 +598,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                       <th className="pb-2 pr-4">Ngày</th>
                       <th className="pb-2 pr-4">Người</th>
                       <th className="pb-2 pr-4">Chức vụ</th>
+                      <th className="pb-2 pr-4">Loại</th>
+                      <th className="pb-2 pr-4 text-right">Giá</th>
                       <th className="pb-2 pr-4 text-right">Thay đổi CP</th>
                       <th className="pb-2 pr-4 text-right">Số tiền</th>
                       <th className="pb-2 text-right">Còn lại</th>
@@ -603,6 +612,22 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                         <td className="py-2 pr-4">{t.name}</td>
                         <td className="py-2 pr-4 text-gray-600">
                           {t.relationship ?? "—"}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={
+                              t.change < 0
+                                ? "text-rose-600"
+                                : "text-emerald-600"
+                            }
+                          >
+                            {insiderActionLabel(t.transactionCode, t.change)}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-right tabular-nums">
+                          {t.transactionPrice != null && t.transactionPrice > 0
+                            ? formatMoney(t.transactionPrice, data.currency)
+                            : "—"}
                         </td>
                         <td
                           className={`py-2 pr-4 text-right tabular-nums ${
