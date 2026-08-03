@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink, Search } from "lucide-react";
 import { StockPriceChart } from "@/components/StockPriceChart";
 import { TradingViewChart } from "@/components/TradingViewChart";
+import { BenDangChart } from "@/components/BenDangChart";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { useApp } from "@/context/AppContext";
 import {
@@ -40,7 +41,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [chartMode, setChartMode] = useState<"tradingview" | "app">("tradingview");
+  const [chartMode, setChartMode] = useState<"tradingview" | "app" | "bendang">("tradingview");
   const searchRef = useRef<HTMLDivElement>(null);
 
   if (symbol !== syncedSymbol) {
@@ -383,6 +384,17 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 >
                   Vốn &amp; kháng cự
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMode("bendang")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                    chartMode === "bendang"
+                      ? "bg-white text-sky-700 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Ben Dang
+                </button>
               </div>
               {chartMode === "tradingview" && data.exchange && (
                 <span className="text-xs text-gray-500">
@@ -396,6 +408,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 symbol={data.symbol}
                 exchange={data.exchange}
               />
+            ) : chartMode === "bendang" ? (
+              <BenDangChart symbol={data.symbol} currency={data.currency} />
             ) : (
               <StockPriceChart
                 symbol={data.symbol}

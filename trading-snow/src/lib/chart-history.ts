@@ -17,6 +17,7 @@ export interface OhlcPoint {
   high: number;
   low: number;
   close: number;
+  volume: number;
 }
 
 interface TimeframeSpec {
@@ -85,6 +86,7 @@ function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {
         high: Math.max(...bars.map((b) => b.high)),
         low: Math.min(...bars.map((b) => b.low)),
         close: bars[bars.length - 1].close,
+        volume: bars.reduce((sum, b) => sum + b.volume, 0),
       };
     });
 }
@@ -98,6 +100,7 @@ function parseYahooOhlc(
         high?: (number | null)[];
         low?: (number | null)[];
         close?: (number | null)[];
+        volume?: (number | null)[];
       }[];
     };
   },
@@ -109,6 +112,7 @@ function parseYahooOhlc(
   const highs = quote?.high ?? [];
   const lows = quote?.low ?? [];
   const closes = quote?.close ?? [];
+  const volumes = quote?.volume ?? [];
 
   const points: OhlcPoint[] = [];
   for (let i = 0; i < timestamps.length; i++) {
@@ -128,6 +132,7 @@ function parseYahooOhlc(
       continue;
     }
     const date = new Date(timestamps[i] * 1000);
+    const volume = volumes[i] ?? 0;
     points.push({
       date: date.toISOString(),
       label: formatChartLabel(date, timeframe),
@@ -135,6 +140,7 @@ function parseYahooOhlc(
       high,
       low,
       close,
+      volume: volume > 0 ? volume : 0,
     });
   }
   return points;
