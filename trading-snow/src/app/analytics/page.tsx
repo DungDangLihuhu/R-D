@@ -55,9 +55,9 @@ export default function AnalyticsPage() {
       </div>
 
       <BenchmarkComparison
-        equityCurve={stats.tradingEquityCurve}
+        equityCurve={stats.equityCurve}
         transactions={transactions}
-        tradingValue={stats.tradingValue}
+        portfolioValue={stats.portfolioValue}
       />
     </div>
   );
