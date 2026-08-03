@@ -228,6 +228,112 @@ interface YahooChartMeta {
   currency?: string;
 }
 
+interface YahooV7Quote {
+  symbol?: string;
+  marketState?: string;
+  regularMarketPrice?: number;
+  regularMarketTime?: number;
+  regularMarketPreviousClose?: number;
+  preMarketPrice?: number;
+  preMarketChange?: number;
+  preMarketChangePercent?: number;
+  postMarketPrice?: number;
+  postMarketChange?: number;
+  postMarketChangePercent?: number;
+  fullExchangeName?: string;
+  exchange?: string;
+  shortName?: string;
+  longName?: string;
+  currency?: string;
+}
+
+function v7QuoteToMeta(q: YahooV7Quote): YahooChartMeta {
+  return {
+    marketState: q.marketState,
+    regularMarketPrice: q.regularMarketPrice,
+    regularMarketTime: q.regularMarketTime,
+    preMarketPrice: q.preMarketPrice,
+    preMarketChange: q.preMarketChange,
+    preMarketChangePercent: q.preMarketChangePercent,
+    postMarketPrice: q.postMarketPrice,
+    postMarketChange: q.postMarketChange,
+    postMarketChangePercent: q.postMarketChangePercent,
+    chartPreviousClose: q.regularMarketPreviousClose,
+    previousClose: q.regularMarketPreviousClose,
+    symbol: q.symbol,
+    fullExchangeName: q.fullExchangeName,
+    exchangeName: q.exchange,
+    shortName: q.shortName ?? q.longName,
+    currency: q.currency,
+  };
+}
+
+function quoteResultFromMeta(
+  meta: YahooChartMeta,
+  requestedSymbol: string,
+  source: QuoteResult["source"] = "yahoo"
+): QuoteResult | null {
+  const resolved = resolveExtendedQuote(meta);
+  if (!resolved) return null;
+
+  return {
+    symbol: requestedSymbol,
+    yahooSymbol: meta.symbol,
+    exchangeName: meta.fullExchangeName ?? meta.exchangeName,
+    shortName: meta.shortName ?? meta.longName,
+    price: resolved.price,
+    change: resolved.change,
+    changePercent: resolved.changePercent,
+    currency: meta.currency ?? "USD",
+    marketSession: resolved.marketSession,
+    source,
+  };
+}
+
+/** Yahoo v7 quote API (authenticated) — includes reliable pre/post market data. */
+async function fetchYahooQuotesV7(
+  requestedSymbols: string[],
+  yahooSymbols: string[]
+): Promise<Map<string, QuoteResult>> {
+  const out = new Map<string, QuoteResult>();
+  if (yahooSymbols.length === 0) return out;
+
+  const session = await getYahooSession();
+  if (!session) return out;
+
+  const yahooToRequested = new Map<string, string>();
+  for (let i = 0; i < yahooSymbols.length; i++) {
+    const yahoo = yahooSymbols[i].toUpperCase();
+    const requested = requestedSymbols[i]?.toUpperCase() ?? yahoo;
+    if (!yahooToRequested.has(yahoo)) yahooToRequested.set(yahoo, requested);
+  }
+
+  const hosts = ["query2.finance.yahoo.com", "query1.finance.yahoo.com"];
+  for (const host of hosts) {
+    const url = `https://${host}/v7/finance/quote?symbols=${encodeURIComponent(
+      [...yahooToRequested.keys()].join(",")
+    )}&crumb=${encodeURIComponent(session.crumb)}`;
+    const res = await fetch(url, {
+      headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
+      cache: "no-store",
+    });
+    if (!res.ok) continue;
+
+    const json = (await res.json()) as { quoteResponse?: { result?: YahooV7Quote[] } };
+    const rows = json.quoteResponse?.result ?? [];
+    for (const row of rows) {
+      const yahooSym = row.symbol?.toUpperCase();
+      if (!yahooSym) continue;
+      const requested = yahooToRequested.get(yahooSym) ?? yahooSym;
+      const quote = quoteResultFromMeta(v7QuoteToMeta(row), requested, "yahoo");
+      if (quote) out.set(requested, quote);
+    }
+    if (out.size > 0) return out;
+  }
+
+  return out;
+}
+
 /** Pick live price + session from Yahoo chart meta (pre / regular / post). */
 export function resolveExtendedQuote(meta: YahooChartMeta): {
   price: number;
@@ -269,6 +375,15 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
     return { ...fromPrevClose(regular), marketSession: "regular" };
   }
 
+  // Chart API often omits marketState — prefer pre when live and no post quote
+  if (pre && pre > 0 && pre !== regular && !(post && post > 0)) {
+    const change = meta.preMarketChange ?? pre - prevClose;
+    const changePercent =
+      meta.preMarketChangePercent ??
+      (prevClose > 0 ? (change / prevClose) * 100 : 0);
+    return { price: pre, change, changePercent, marketSession: "pre" };
+  }
+
   // CLOSED — use latest extended quote if still from current session day
   if (post && post > 0 && postTime && regularTime && postTime >= regularTime) {
     return { ...fromPrevClose(post), marketSession: "post" };
@@ -293,28 +408,19 @@ async function fetchQuoteOne(
 
   for (const host of hosts) {
     const url = `https://${host}/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=1d&range=1d&includePrePost=true`;
-    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 60 } });
+    const res = await fetch(url, { headers: YAHOO_HEADERS, cache: "no-store" });
     if (!res.ok) continue;
 
     const json = await res.json();
     const meta = json?.chart?.result?.[0]?.meta as YahooChartMeta | undefined;
     if (!meta) continue;
 
-    const resolved = resolveExtendedQuote(meta);
-    if (!resolved) continue;
-
-    return {
-      symbol: requestedSymbol,
-      yahooSymbol: meta.symbol ?? yahooSymbol,
-      exchangeName: meta.fullExchangeName ?? meta.exchangeName,
-      shortName: meta.shortName ?? meta.longName,
-      price: resolved.price,
-      change: resolved.change,
-      changePercent: resolved.changePercent,
-      currency: meta.currency ?? "USD",
-      marketSession: resolved.marketSession,
-      source,
-    };
+    const quote = quoteResultFromMeta(
+      { ...meta, symbol: meta.symbol ?? yahooSymbol },
+      requestedSymbol,
+      source
+    );
+    if (quote) return quote;
   }
 
   return null;
@@ -371,6 +477,10 @@ export async function fetchQuoteForSymbol(requested: string): Promise<QuoteResul
   const candidates = resolveYahooSymbolCandidates(requested);
 
   for (const yahoo of candidates) {
+    const v7 = await fetchYahooQuotesV7([requested], [yahoo]);
+    const hit = v7.get(requested.toUpperCase());
+    if (hit) return hit;
+
     const quote = await fetchQuoteOne(yahoo, requested, "yahoo");
     if (quote) return quote;
   }
@@ -384,6 +494,10 @@ export async function fetchQuoteForSymbol(requested: string): Promise<QuoteResul
   for (const query of searchQueries) {
     const searched = await searchYahooSymbol(query);
     if (searched && !candidates.includes(searched)) {
+      const v7 = await fetchYahooQuotesV7([requested], [searched]);
+      const hit = v7.get(requested.toUpperCase());
+      if (hit) return { ...hit, source: "yahoo-search" };
+
       const quote = await fetchQuoteOne(searched, requested, "yahoo-search");
       if (quote) return quote;
     }
@@ -398,8 +512,25 @@ export async function fetchQuotes(symbols: string[]): Promise<QuoteResult[]> {
   );
   if (unique.length === 0) return [];
 
-  const results = await Promise.all(unique.map((requested) => fetchQuoteForSymbol(requested)));
-  return results.filter((r): r is QuoteResult => r !== null);
+  const yahooSymbols = unique.map((s) => toYahooSymbol(s));
+  const v7Quotes = await fetchYahooQuotesV7(unique, yahooSymbols);
+
+  const results: QuoteResult[] = [];
+  const missing: string[] = [];
+  for (const requested of unique) {
+    const hit = v7Quotes.get(requested);
+    if (hit) results.push(hit);
+    else missing.push(requested);
+  }
+
+  if (missing.length > 0) {
+    const fallback = await Promise.all(missing.map((requested) => fetchQuoteForSymbol(requested)));
+    for (const q of fallback) {
+      if (q) results.push(q);
+    }
+  }
+
+  return results;
 }
 
 export async function fetchDividends(
