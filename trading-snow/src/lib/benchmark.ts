@@ -293,9 +293,31 @@ function buildPortfolioReturnSeries(
   });
 }
 
+function periodPortfolioIndex(
+  snap: ReplaySnapshot,
+  startSnap: ReplaySnapshot
+): number {
+  const openCost =
+    snap.openCost > 0 ? snap.openCost : startSnap.openCost > 0 ? startSnap.openCost : 0;
+  if (openCost <= 0) return 100;
+
+  const realizedInPeriod = snap.realizedPnl - startSnap.realizedPnl;
+  const unrealizedInPeriod = snap.unrealizedPnl - startSnap.unrealizedPnl;
+  const profit = realizedInPeriod + unrealizedInPeriod;
+  return 100 + (profit / openCost) * 100;
+}
+
+function periodPortfolioReturnPct(
+  snap: ReplaySnapshot,
+  startSnap: ReplaySnapshot
+): number {
+  return periodPortfolioIndex(snap, startSnap) - 100;
+}
+
 /**
  * S&P 500: % tăng chỉ số theo timeframe.
  * Danh mục: (lãi đã chốt + lãi đang hold) / cost CP đang mở tại từng ngày.
+ * Khung ngắn: (Δ lãi chốt + Δ float trong kỳ) / cost mở — mốc đầu = 0%.
  */
 export function buildBenchmarkComparison(
   portfolio: PortfolioBenchmarkInput,
@@ -331,11 +353,6 @@ export function buildBenchmarkComparison(
     portfolioSnaps[0]?.returnPct != null
       ? portfolioSnaps[0]
       : portfolioSnaps.find((s) => s.returnPct != null);
-  /** Chỉ trừ lãi đã chốt tại mốc đầu kỳ — giữ phần float đang hold */
-  const baseRealizedReturn =
-    rebaseToWindow && startSnap && startSnap.openCost > 0
-      ? (startSnap.realizedPnl / startSnap.openCost) * 100
-      : 0;
 
   const rawPoints: ComparisonPoint[] = benchInRange.map((b, i) => {
     const snap = portfolioSnaps[i];
@@ -344,8 +361,8 @@ export function buildBenchmarkComparison(
     let portfolio: number | null;
     if (!rebaseToWindow) {
       portfolio = snap.returnPct != null ? 100 + snap.returnPct : null;
-    } else if (snap.returnPct != null) {
-      portfolio = 100 + (snap.returnPct - baseRealizedReturn);
+    } else if (startSnap) {
+      portfolio = periodPortfolioIndex(snap, startSnap);
     } else {
       portfolio = 100;
     }
@@ -361,9 +378,10 @@ export function buildBenchmarkComparison(
   const lastSnap = [...portfolioSnaps].reverse().find((s) => s.returnPct != null);
   const lastPoint = rawPoints[rawPoints.length - 1];
   const sp500Return = lastPoint.sp500 - 100;
-  const portfolioReturn = rebaseToWindow
-    ? (lastSnap?.returnPct ?? 0) - baseRealizedReturn
-    : lastSnap?.returnPct ?? 0;
+  const portfolioReturn =
+    rebaseToWindow && lastSnap && startSnap
+      ? periodPortfolioReturnPct(lastSnap, startSnap)
+      : lastSnap?.returnPct ?? 0;
 
   return {
     points,
