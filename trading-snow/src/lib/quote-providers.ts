@@ -1,4 +1,5 @@
 import { getFinnhubApiKey, getTwelveDataApiKey } from "./quote-config";
+import { enrichQuotesWithProfiles } from "./symbol-profile";
 import { resolveYahooSymbolCandidates } from "./symbol";
 import { fetchQuotes, type QuoteResult } from "./yahoo";
 
@@ -172,6 +173,8 @@ export async function fetchQuotesForSymbols(
   for (const q of quoteBySymbol.values()) {
     quotes.push(q);
   }
+
+  await enrichQuotesWithProfiles(quotes);
 
   const unresolved = list.filter((s) => !prices[s]);
 

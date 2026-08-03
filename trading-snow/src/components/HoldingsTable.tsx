@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { SymbolAvatar } from "@/components/SymbolAvatar";
+import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { Pagination } from "@/components/Pagination";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
@@ -118,7 +118,6 @@ function HoldingRow({
       ? quote.marketSession
       : undefined;
   const extendedPct = extendedSession ? dailyPct : null;
-  const displayName = quote?.name ?? holding.symbol;
 
   const priceSecondary = (align: "left" | "center" | "right") => {
     const items =
@@ -180,15 +179,16 @@ function HoldingRow({
             href={`/stock/${encodeURIComponent(holding.symbol)}`}
             className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
           >
-            <SymbolAvatar symbol={holding.symbol} />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold leading-tight text-sky-800">
-                {displayName}
-              </p>
-              {hidden && (
-                <p className="text-[10px] font-medium text-amber-600">Đang ẩn</p>
-              )}
-            </div>
+            <SymbolIdentity
+              symbol={holding.symbol}
+              name={quote?.name}
+              logo={quote?.logo}
+              extra={
+                hidden ? (
+                  <p className="text-[10px] font-medium text-amber-600">Đang ẩn</p>
+                ) : undefined
+              }
+            />
           </Link>
           <div className="flex shrink-0 items-center gap-1">
             <p className="text-sm font-semibold tabular-nums">
@@ -254,15 +254,16 @@ function HoldingRow({
           href={`/stock/${encodeURIComponent(holding.symbol)}`}
           className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
         >
-          <SymbolAvatar symbol={holding.symbol} />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold leading-tight text-sky-800">
-              {displayName}
-            </p>
-            {hidden && (
-              <p className="text-[10px] font-medium text-amber-600">Đang ẩn</p>
-            )}
-          </div>
+          <SymbolIdentity
+            symbol={holding.symbol}
+            name={quote?.name}
+            logo={quote?.logo}
+            extra={
+              hidden ? (
+                <p className="text-[10px] font-medium text-amber-600">Đang ẩn</p>
+              ) : undefined
+            }
+          />
         </Link>
 
         <p className="text-right text-sm font-medium tabular-nums">

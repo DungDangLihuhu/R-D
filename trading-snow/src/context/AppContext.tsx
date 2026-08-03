@@ -220,6 +220,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         change?: number;
         changePercent?: number;
         shortName?: string;
+        logo?: string;
         marketSession?: MarketSession;
       }[] = [];
       let mergedUnresolved: string[] = [];
@@ -255,6 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               change: q.change ?? 0,
               changePercent: q.changePercent ?? 0,
               name: q.shortName,
+              logo: q.logo,
               marketSession: q.marketSession,
             };
           }

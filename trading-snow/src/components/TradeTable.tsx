@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { StickyNote, Trash2 } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
-import { SymbolAvatar } from "@/components/SymbolAvatar";
+import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
 import {
@@ -94,30 +94,39 @@ function TradeRow({
   tx,
   portfolioName,
   companyName,
+  companyLogo,
   pnl,
   onDelete,
 }: {
   tx: Transaction;
   portfolioName: string;
   companyName: string;
+  companyLogo?: string;
   pnl?: { pnl: number; pnlPercent: number };
   onDelete: () => void;
 }) {
   const cash = isCashSymbol(tx.symbol);
-  const displayName = cash ? "Tiền mặt" : companyName;
 
   return (
     <div className="border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5">
       <div className="md:hidden">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            {!cash && <SymbolAvatar symbol={tx.symbol} size="sm" />}
-            <div className="min-w-0">
-              <p className={`text-sm font-semibold ${typeTone(tx.type)}`}>
-                {typeLabels[tx.type]}
-              </p>
-              <p className="truncate text-sm font-medium">{displayName}</p>
-            </div>
+          <div className="min-w-0">
+            <p className={`text-sm font-semibold ${typeTone(tx.type)}`}>
+              {typeLabels[tx.type]}
+            </p>
+            {cash ? (
+              <p className="text-sm font-medium">Tiền mặt</p>
+            ) : (
+              <SymbolIdentity
+                symbol={tx.symbol}
+                name={companyName}
+                logo={companyLogo}
+                size="sm"
+                nameClassName="truncate text-sm font-medium text-gray-900"
+                className="mt-1"
+              />
+            )}
           </div>
           <div className="shrink-0 text-right">
             <p className="text-xs text-gray-500">{formatDate(tx.date)}</p>
@@ -187,10 +196,17 @@ function TradeRow({
         </p>
 
         <div className="flex min-w-0 items-center gap-2">
-          {!cash && <SymbolAvatar symbol={tx.symbol} size="sm" />}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{displayName}</p>
-          </div>
+          {cash ? (
+            <p className="truncate text-sm font-medium">Tiền mặt</p>
+          ) : (
+            <SymbolIdentity
+              symbol={tx.symbol}
+              name={companyName}
+              logo={companyLogo}
+              size="sm"
+              nameClassName="truncate text-sm font-medium text-gray-900"
+            />
+          )}
         </div>
 
         <p className="text-right text-sm tabular-nums">{formatDate(tx.date)}</p>
@@ -296,6 +312,7 @@ export function TradeTable() {
               tx={tx}
               portfolioName={portfolioName}
               companyName={state.marketQuotes?.[tx.symbol]?.name ?? tx.symbol}
+              companyLogo={state.marketQuotes?.[tx.symbol]?.logo}
               pnl={pnlByTxId.get(tx.id)}
               onDelete={() => deleteTransaction(tx.id)}
             />

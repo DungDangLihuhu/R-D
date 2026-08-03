@@ -7,6 +7,7 @@ import { ExternalLink, Search } from "lucide-react";
 import { StockPriceChart } from "@/components/StockPriceChart";
 import { BenDangChart } from "@/components/BenDangChart";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
+import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
 import {
   formatDate,
@@ -231,10 +232,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                         onMouseEnter={() => setActiveIndex(i)}
                         onClick={() => goToSymbol(s.symbol)}
                       >
-                        <SymbolAvatar symbol={s.symbol} size="sm" />
-                        <span className="min-w-0 flex-1 truncate text-gray-700">
-                          {s.name}
-                        </span>
+                        <SymbolIdentity
+                          symbol={s.symbol}
+                          name={s.name}
+                          size="sm"
+                          nameClassName="min-w-0 flex-1 truncate text-sm text-gray-700"
+                          className="flex-1"
+                        />
                         {s.source === "portfolio" ? (
                           <span className="shrink-0 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700">
                             DM
@@ -299,21 +303,23 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 <img
                   src={data.logo}
                   alt=""
-                  className="h-12 w-12 rounded-lg border border-gray-100 object-contain"
+                  className="h-12 w-12 rounded-lg border border-gray-100 object-contain bg-white p-0.5"
                 />
               ) : (
-                <SymbolAvatar symbol={data.symbol} />
+                <SymbolAvatar symbol={data.symbol} logo={data.logo} />
               )}
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-bold">{data.symbol}</h2>
+                <h2 className="text-xl font-bold leading-tight">{data.name}</h2>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-gray-500 tabular-nums">
+                    {data.symbol}
+                  </p>
                   {data.exchange && (
                     <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                       {data.exchange}
                     </span>
                   )}
                 </div>
-                <p className="text-gray-600">{data.name}</p>
                 <div className="mt-2 flex flex-wrap items-baseline gap-3">
                   <span className="text-2xl font-semibold tabular-nums">
                     {formatMoney(data.price, data.currency)}
