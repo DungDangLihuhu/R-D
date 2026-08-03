@@ -133,7 +133,8 @@ export function BenchmarkComparison({
         const result = buildBenchmarkComparison(
           portfolioInput,
           data.points ?? [],
-          benchmarkWindow
+          benchmarkWindow,
+          range
         );
         setComparison(result);
         if (!result) {
@@ -166,7 +167,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            S&P 500: % tăng theo khoảng · Danh mục: (lãi đã chốt + lãi đang hold) / cost CP đang mở tại từng thời điểm
+            S&P 500 & danh mục: % trong khoảng (mốc đầu = 0%) · &quot;Tất cả&quot;: lãi tích lũy từ trade đầu
             {comparison?.clampedToHistory && (
               <> · Từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}

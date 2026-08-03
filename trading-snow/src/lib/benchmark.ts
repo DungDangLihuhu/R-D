@@ -300,7 +300,8 @@ function buildPortfolioReturnSeries(
 export function buildBenchmarkComparison(
   portfolio: PortfolioBenchmarkInput,
   benchmark: HistoryPoint[],
-  window: { from: string; to: string; clampedToHistory?: boolean }
+  window: { from: string; to: string; clampedToHistory?: boolean },
+  range: BenchmarkRange = "all"
 ): ComparisonResult | null {
   if (benchmark.length < 1) return null;
   if (portfolio.transactions.length === 0) return null;
@@ -325,13 +326,20 @@ export function buildBenchmarkComparison(
   const hasPortfolioData = portfolioSnaps.some((s) => s.returnPct != null);
   if (!hasPortfolioData) return null;
 
+  const rebaseToWindow = range !== "all";
+  const basePortfolioReturn = rebaseToWindow
+    ? (portfolioSnaps.find((s) => s.returnPct != null)?.returnPct ?? 0)
+    : 0;
+
   const rawPoints: ComparisonPoint[] = benchInRange.map((b, i) => {
     const snap = portfolioSnaps[i];
     return {
       date: b.date,
       sp500: (b.close / baseClose) * 100,
       portfolio:
-        snap.returnPct != null ? 100 + snap.returnPct : null,
+        snap.returnPct != null
+          ? 100 + (snap.returnPct - basePortfolioReturn)
+          : null,
     };
   });
 
@@ -339,7 +347,9 @@ export function buildBenchmarkComparison(
   const lastSnap = [...portfolioSnaps].reverse().find((s) => s.returnPct != null);
   const lastPoint = rawPoints[rawPoints.length - 1];
   const sp500Return = lastPoint.sp500 - 100;
-  const portfolioReturn = lastSnap?.returnPct ?? 0;
+  const portfolioReturn = rebaseToWindow
+    ? (lastSnap?.returnPct ?? 0) - basePortfolioReturn
+    : lastSnap?.returnPct ?? 0;
 
   return {
     points,
