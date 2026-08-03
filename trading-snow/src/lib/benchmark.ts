@@ -6,17 +6,18 @@ export type BenchmarkRange = "ytd" | "6m" | "1y" | "5y" | "all";
 
 export interface ComparisonPoint {
   date: string;
-  portfolio: number;
+  portfolio: number | null;
   sp500: number;
 }
 
 export interface ComparisonResult {
   points: ComparisonPoint[];
-  /** Lợi nhuận ròng đang hold / cost CP đang hold × 100 */
+  /** (lãi đã chốt + lãi đang hold) / cost CP đang mở × 100 tại cuối kỳ */
   portfolioReturn: number;
   sp500Return: number;
   outperformance: number;
   holdingsCost: number;
+  realizedPnl: number;
   from: string;
   to: string;
   clampedToHistory: boolean;
@@ -38,6 +39,10 @@ function addMonths(date: Date, months: number): Date {
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+function txDay(date: string): string {
+  return date.slice(0, 10);
 }
 
 export function ensureEquityCurve(
@@ -147,25 +152,150 @@ function pickBenchmarkSeries(
 }
 
 export interface PortfolioBenchmarkInput {
-  unrealizedPnl: number;
-  holdingsCost: number;
+  transactions: Transaction[];
+  marketPrices: Record<string, number>;
 }
 
-function computePortfolioReturn(input: PortfolioBenchmarkInput): {
-  portfolioReturn: number;
-  holdingsCost: number;
-} | null {
-  if (input.holdingsCost <= 0) return null;
+interface PositionState {
+  quantity: number;
+  totalCost: number;
+}
+
+interface ReplaySnapshot {
+  openCost: number;
+  realizedPnl: number;
+  unrealizedPnl: number;
+  returnPct: number | null;
+}
+
+function applyTrade(
+  tx: Transaction,
+  positions: Map<string, PositionState>,
+  lastPrices: Map<string, number>,
+  realizedPnl: { value: number }
+): void {
+  const gross = tx.quantity * tx.price;
+
+  switch (tx.type) {
+    case "BUY": {
+      const cost = gross + tx.fee;
+      const pos = positions.get(tx.symbol) ?? { quantity: 0, totalCost: 0 };
+      pos.quantity += tx.quantity;
+      pos.totalCost += cost;
+      positions.set(tx.symbol, pos);
+      lastPrices.set(tx.symbol, tx.price);
+      break;
+    }
+    case "SELL": {
+      const pos = positions.get(tx.symbol) ?? { quantity: 0, totalCost: 0 };
+      const avgCost = pos.quantity > 0 ? pos.totalCost / pos.quantity : 0;
+      const costBasis = avgCost * tx.quantity;
+      const proceeds = gross - tx.fee;
+      realizedPnl.value += proceeds - costBasis;
+
+      pos.quantity = Math.max(0, pos.quantity - tx.quantity);
+      pos.totalCost = Math.max(0, pos.totalCost - costBasis);
+      positions.set(tx.symbol, pos);
+      lastPrices.set(tx.symbol, tx.price);
+      break;
+    }
+  }
+}
+
+function snapshotAtDate(
+  positions: Map<string, PositionState>,
+  lastPrices: Map<string, number>,
+  realizedPnl: number,
+  marketPrices: Record<string, number>,
+  useMarket: boolean,
+  lastValidReturn: number
+): ReplaySnapshot {
+  let openCost = 0;
+  let holdingsValue = 0;
+
+  for (const [symbol, pos] of positions) {
+    if (pos.quantity <= 0.000001) continue;
+    openCost += pos.totalCost;
+    const avgCost = pos.totalCost / pos.quantity;
+    const price =
+      useMarket && marketPrices[symbol] != null
+        ? marketPrices[symbol]
+        : lastPrices.get(symbol) ?? avgCost;
+    holdingsValue += pos.quantity * price;
+  }
+
+  const unrealizedPnl = holdingsValue - openCost;
+
+  if (openCost > 0) {
+    const returnPct = ((realizedPnl + unrealizedPnl) / openCost) * 100;
+    return {
+      openCost,
+      realizedPnl,
+      unrealizedPnl,
+      returnPct,
+    };
+  }
+
+  if (realizedPnl !== 0) {
+    return {
+      openCost: 0,
+      realizedPnl,
+      unrealizedPnl: 0,
+      returnPct: lastValidReturn,
+    };
+  }
 
   return {
-    portfolioReturn: (input.unrealizedPnl / input.holdingsCost) * 100,
-    holdingsCost: input.holdingsCost,
+    openCost: 0,
+    realizedPnl,
+    unrealizedPnl: 0,
+    returnPct: null,
   };
+}
+
+function buildPortfolioReturnSeries(
+  transactions: Transaction[],
+  dates: string[],
+  marketPrices: Record<string, number>
+): ReplaySnapshot[] {
+  const sorted = [...transactions]
+    .filter((t) => t.type === "BUY" || t.type === "SELL")
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const positions = new Map<string, PositionState>();
+  const lastPrices = new Map<string, number>();
+  const realized = { value: 0 };
+  let txIdx = 0;
+  let lastValidReturn = 0;
+
+  const lastDate = dates[dates.length - 1] ?? "";
+
+  return dates.map((date) => {
+    while (txIdx < sorted.length && txDay(sorted[txIdx].date) <= date) {
+      applyTrade(sorted[txIdx], positions, lastPrices, realized);
+      txIdx++;
+    }
+
+    const snap = snapshotAtDate(
+      positions,
+      lastPrices,
+      realized.value,
+      marketPrices,
+      date === lastDate,
+      lastValidReturn
+    );
+
+    if (snap.returnPct != null) {
+      lastValidReturn = snap.returnPct;
+    }
+
+    return snap;
+  });
 }
 
 /**
  * S&P 500: % tăng chỉ số theo timeframe.
- * Danh mục: lợi nhuận ròng đang hold / cost CP đang hold × 100.
+ * Danh mục: (lãi đã chốt + lãi đang hold) / cost CP đang mở tại từng ngày.
  */
 export function buildBenchmarkComparison(
   portfolio: PortfolioBenchmarkInput,
@@ -173,9 +303,7 @@ export function buildBenchmarkComparison(
   window: { from: string; to: string; clampedToHistory?: boolean }
 ): ComparisonResult | null {
   if (benchmark.length < 1) return null;
-
-  const metrics = computePortfolioReturn(portfolio);
-  if (!metrics) return null;
+  if (portfolio.transactions.length === 0) return null;
 
   const benchInRange = pickBenchmarkSeries(
     benchmark,
@@ -187,24 +315,39 @@ export function buildBenchmarkComparison(
   const baseClose = benchInRange[0].close;
   if (baseClose <= 0) return null;
 
-  const portfolioIndex = 100 + metrics.portfolioReturn;
+  const dates = benchInRange.map((b) => b.date);
+  const portfolioSnaps = buildPortfolioReturnSeries(
+    portfolio.transactions,
+    dates,
+    portfolio.marketPrices
+  );
 
-  const rawPoints: ComparisonPoint[] = benchInRange.map((b) => ({
-    date: b.date,
-    sp500: (b.close / baseClose) * 100,
-    portfolio: portfolioIndex,
-  }));
+  const hasPortfolioData = portfolioSnaps.some((s) => s.returnPct != null);
+  if (!hasPortfolioData) return null;
+
+  const rawPoints: ComparisonPoint[] = benchInRange.map((b, i) => {
+    const snap = portfolioSnaps[i];
+    return {
+      date: b.date,
+      sp500: (b.close / baseClose) * 100,
+      portfolio:
+        snap.returnPct != null ? 100 + snap.returnPct : null,
+    };
+  });
 
   const points = downsampleMonthly(rawPoints);
-  const last = rawPoints[rawPoints.length - 1];
-  const sp500Return = last.sp500 - 100;
+  const lastSnap = [...portfolioSnaps].reverse().find((s) => s.returnPct != null);
+  const lastPoint = rawPoints[rawPoints.length - 1];
+  const sp500Return = lastPoint.sp500 - 100;
+  const portfolioReturn = lastSnap?.returnPct ?? 0;
 
   return {
     points,
-    portfolioReturn: metrics.portfolioReturn,
+    portfolioReturn,
     sp500Return,
-    outperformance: metrics.portfolioReturn - sp500Return,
-    holdingsCost: metrics.holdingsCost,
+    outperformance: portfolioReturn - sp500Return,
+    holdingsCost: lastSnap?.openCost ?? 0,
+    realizedPnl: lastSnap?.realizedPnl ?? 0,
     from: benchInRange[0].date,
     to: window.to,
     clampedToHistory: window.clampedToHistory ?? false,
@@ -215,4 +358,8 @@ export function extendBenchmarkFrom(from: string, days = 14): string {
   const d = new Date(from);
   d.setDate(d.getDate() - days);
   return toDateStr(d);
+}
+
+export function hasBenchmarkTradingData(transactions: Transaction[]): boolean {
+  return transactions.some((t) => t.type === "BUY" || t.type === "SELL");
 }

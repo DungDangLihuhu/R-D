@@ -6,7 +6,6 @@ import {
   Legend,
   Line,
   LineChart,
-  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,6 +17,7 @@ import {
   buildBenchmarkComparison,
   ensureEquityCurve,
   extendBenchmarkFrom,
+  hasBenchmarkTradingData,
   resolveBenchmarkWindow,
   type BenchmarkRange,
   type ComparisonResult,
@@ -56,13 +56,11 @@ function formatIndexedReturn(value: number): string {
 export function BenchmarkComparison({
   equityCurve,
   transactions,
-  unrealizedPnl,
-  holdingsCost,
+  marketPrices,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
   transactions: Transaction[];
-  unrealizedPnl: number;
-  holdingsCost: number;
+  marketPrices: Record<string, number>;
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
@@ -72,11 +70,11 @@ export function BenchmarkComparison({
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
   const portfolioInput = useMemo<PortfolioBenchmarkInput>(
-    () => ({ unrealizedPnl, holdingsCost }),
-    [unrealizedPnl, holdingsCost]
+    () => ({ transactions, marketPrices }),
+    [transactions, marketPrices]
   );
 
-  const hasData = holdingsCost > 0;
+  const hasData = hasBenchmarkTradingData(transactions);
 
   useEffect(() => {
     if (!hasData) return;
@@ -136,7 +134,7 @@ export function BenchmarkComparison({
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="mb-2 font-semibold">So sánh với S&P 500</h2>
         <p className="text-sm text-gray-500">
-          Cần vị thế đang hold để so sánh benchmark
+          Cần ít nhất một lệnh mua/bán để so sánh benchmark
         </p>
       </div>
     );
@@ -148,7 +146,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            S&P 500: % tăng theo khoảng · Danh mục: lợi nhuận ròng / cost CP đang hold
+            S&P 500: % tăng theo khoảng · Danh mục: (lãi đã chốt + lãi đang hold) / cost CP đang mở tại từng thời điểm
             {comparison?.clampedToHistory && (
               <> · Từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -191,10 +189,16 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Danh mục đang hold"
+              label="Danh mục"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
-              sub={`Cost: ${formatMoney(comparison.holdingsCost)}`}
+              sub={
+                comparison.holdingsCost > 0
+                  ? `Cost mở: ${formatMoney(comparison.holdingsCost)}`
+                  : comparison.realizedPnl !== 0
+                    ? `Đã chốt: ${formatMoney(comparison.realizedPnl)}`
+                    : undefined
+              }
             />
             <StatCard
               label="S&P 500"
@@ -235,10 +239,13 @@ export function BenchmarkComparison({
                 />
                 <Tooltip
                   contentStyle={TOOLTIP}
-                  formatter={(v, name) => [
-                    formatIndexedReturn(Number(v ?? 100)),
-                    name === "portfolio" ? "Danh mục" : "S&P 500",
-                  ]}
+                  formatter={(v, name) => {
+                    if (v == null) return ["—", name === "portfolio" ? "Danh mục" : "S&P 500"];
+                    return [
+                      formatIndexedReturn(Number(v)),
+                      name === "portfolio" ? "Danh mục" : "S&P 500",
+                    ];
+                  }}
                   labelFormatter={(_, payload) => {
                     const date = payload?.[0]?.payload?.date as string | undefined;
                     return date ? formatDate(date) : "";
@@ -249,16 +256,14 @@ export function BenchmarkComparison({
                     value === "portfolio" ? "Danh mục" : "S&P 500"
                   }
                 />
-                <ReferenceLine
-                  y={100 + comparison.portfolioReturn}
+                <Line
+                  type="monotone"
+                  dataKey="portfolio"
                   stroke="#0ea5e9"
-                  strokeDasharray="6 4"
-                  label={{
-                    value: `Danh mục ${formatPercent(comparison.portfolioReturn)}`,
-                    position: "insideTopRight",
-                    fill: "#0ea5e9",
-                    fontSize: 11,
-                  }}
+                  strokeWidth={2}
+                  dot={false}
+                  name="portfolio"
+                  connectNulls
                 />
                 <Line
                   type="monotone"
