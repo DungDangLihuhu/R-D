@@ -20,6 +20,7 @@ import {
   computeBenDangIndicators,
   type BenDangIndicators,
   type BenDangLayers,
+  type SrLevel,
 } from "@/lib/indicators/ben-dang";
 
 const GRID = "#e2e5ea";
@@ -76,6 +77,11 @@ function chartYDomain(points: OhlcPoint[], indicators: BenDangIndicators): [numb
 
   let min = Math.min(...all);
   let max = Math.max(...all);
+  if (min === max) {
+    const bump = min * 0.05 || 1;
+    min -= bump;
+    max += bump;
+  }
   const pad = (max - min) * 0.06 || max * 0.05;
   return [Math.max(0, min - pad), max + pad];
 }
@@ -116,7 +122,7 @@ function Candlesticks({ data }: { data: OhlcPoint[] }) {
         const bodyHeight = Math.max(Math.abs(yClose - yOpen), 1);
 
         return (
-          <g key={point.date}>
+          <g key={`${point.date}-${point.label}`}>
             <line x1={xCenter} y1={yHigh} x2={xCenter} y2={yLow} stroke={color} strokeWidth={1} />
             <rect
               x={xCenter - bodyWidth / 2}
@@ -158,6 +164,8 @@ function IndicatorOverlays({
 
   const lastX = plotArea ? plotArea.x + plotArea.width : 0;
 
+  const plotRight = plotArea ? plotArea.x + plotArea.width : lastX;
+
   return (
     <g className="ben-dang-overlays">
       {layers.smc && indicators.smc.premiumDiscount && (
@@ -169,13 +177,16 @@ function IndicatorOverlays({
             const yBot = yAt(z.bottom);
             const yEq = yAt(z.equilibrium);
             if (yTop == null || yBot == null) return null;
+            const rectY = Math.min(yTop, yBot);
+            const rectH = Math.abs(yBot - yTop);
+            const rectW = Math.max(plotRight - x1, 0);
             return (
               <>
                 <rect
                   x={x1}
-                  y={yTop}
-                  width={lastX - x1}
-                  height={yBot - yTop}
+                  y={rectY}
+                  width={rectW}
+                  height={rectH}
                   fill={COLORS.premium}
                   stroke="none"
                 />
@@ -183,7 +194,7 @@ function IndicatorOverlays({
                   <line
                     x1={x1}
                     y1={yEq}
-                    x2={lastX}
+                    x2={plotRight}
                     y2={yEq}
                     stroke={COLORS.equilibrium}
                     strokeDasharray="4 4"
@@ -332,16 +343,16 @@ function IndicatorOverlays({
           {(() => {
             const tr = indicators.wyckoff.tradingRange!;
             const x1 = xAt(tr.startIndex) ?? plotArea?.x ?? 0;
-            const x2 = xAt(tr.endIndex) ?? lastX;
+            const x2 = xAt(tr.endIndex) ?? plotRight;
             const yTop = yAt(tr.top);
             const yBot = yAt(tr.bottom);
             if (yTop == null || yBot == null) return null;
             return (
               <rect
                 x={x1}
-                y={yTop}
-                width={Math.max((x2 ?? x1) - x1, 10)}
-                height={yBot - yTop}
+                y={Math.min(yTop, yBot)}
+                width={Math.max(x2 - x1, 10)}
+                height={Math.abs(yBot - yTop)}
                 fill={COLORS.wyckoffRange}
                 stroke="#3b82f6"
                 strokeWidth={1}
@@ -407,6 +418,79 @@ function ChartTooltip({
             <span>{p.volume.toLocaleString("vi-VN")}</span>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function SrLevelsPanel({
+  levels,
+  currency,
+  currentPrice,
+}: {
+  levels: SrLevel[];
+  currency: string;
+  currentPrice: number;
+}) {
+  const supports = levels
+    .filter((l) => l.type === "support")
+    .sort((a, b) => b.price - a.price);
+  const resistances = levels
+    .filter((l) => l.type === "resistance")
+    .sort((a, b) => a.price - b.price);
+
+  if (!supports.length && !resistances.length) {
+    return (
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <p className="text-xs text-gray-500">Chưa đủ dữ liệu để xác định hỗ trợ/kháng cự.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
+      <h4 className="text-sm font-semibold">Mức hỗ trợ &amp; kháng cự</h4>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {resistances.map((level, i) => {
+          const dist = ((level.price - currentPrice) / currentPrice) * 100;
+          return (
+            <div
+              key={`r-${level.price}-${i}`}
+              className="rounded-lg border border-rose-100 bg-rose-50/60 px-3 py-2"
+            >
+              <p className="text-xs font-medium text-rose-800">
+                Kháng cự {resistances.length > 1 ? `#${i + 1}` : ""}
+              </p>
+              <p className="text-sm font-semibold tabular-nums text-rose-900">
+                {formatMoney(level.price, currency)}
+              </p>
+              <p className="text-xs tabular-nums text-rose-700">
+                {dist >= 0 ? "+" : ""}
+                {dist.toFixed(2)}% so với giá hiện tại
+              </p>
+            </div>
+          );
+        })}
+        {supports.map((level, i) => {
+          const dist = ((level.price - currentPrice) / currentPrice) * 100;
+          return (
+            <div
+              key={`s-${level.price}-${i}`}
+              className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2"
+            >
+              <p className="text-xs font-medium text-emerald-800">
+                Hỗ trợ {supports.length > 1 ? `#${i + 1}` : ""}
+              </p>
+              <p className="text-sm font-semibold tabular-nums text-emerald-900">
+                {formatMoney(level.price, currency)}
+              </p>
+              <p className="text-xs tabular-nums text-emerald-700">
+                {dist >= 0 ? "+" : ""}
+                {dist.toFixed(2)}% so với giá hiện tại
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -564,9 +648,11 @@ export function BenDangChart({
   }, [symbol, timeframe]);
 
   const indicators = useMemo(
-    () => (points.length > 10 ? computeBenDangIndicators(points) : null),
+    () => (points.length > 5 ? computeBenDangIndicators(points) : null),
     [points]
   );
+
+  const currentPrice = points.length ? points[points.length - 1].close : 0;
 
   const yDomain = useMemo(
     () => (indicators ? chartYDomain(points, indicators) : [0, 100] as [number, number]),
@@ -644,6 +730,14 @@ export function BenDangChart({
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+
+          {layers.sr && (
+            <SrLevelsPanel
+              levels={indicators.sr.levels}
+              currency={currency}
+              currentPrice={currentPrice}
+            />
+          )}
 
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-500">
             <span className="inline-flex items-center gap-1">

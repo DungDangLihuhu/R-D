@@ -6,14 +6,15 @@ export function computeSupportResistance(
   period = 10,
   maxLevels = 5
 ): SrResult {
-  if (bars.length < period * 2 + 1) return { levels: [] };
+  const effectivePeriod = Math.max(2, Math.min(period, Math.floor((bars.length - 1) / 2)));
+  if (bars.length < effectivePeriod * 2 + 1) return { levels: [] };
 
   const atrValues = atr(bars);
   const lastAtr = atrValues[atrValues.length - 1] || 1;
   const tolerance = lastAtr * 0.4;
 
-  const pivotHighs = findPivotHighs(bars, period, period);
-  const pivotLows = findPivotLows(bars, period, period);
+  const pivotHighs = findPivotHighs(bars, effectivePeriod, effectivePeriod);
+  const pivotLows = findPivotLows(bars, effectivePeriod, effectivePeriod);
 
   const resistanceClusters = clusterPrices(
     pivotHighs.map((p) => p.price),
@@ -56,9 +57,9 @@ export function computeSupportResistance(
   }
 
   const sorted = [...unique.values()].sort((a, b) => {
-    const distA = Math.abs(a.price - currentPrice);
-    const distB = Math.abs(b.price - currentPrice);
-    return distA - distB;
+    if (a.type !== b.type) return a.type === "support" ? -1 : 1;
+    if (a.type === "support") return b.price - a.price;
+    return a.price - b.price;
   });
 
   return { levels: sorted.slice(0, maxLevels) };

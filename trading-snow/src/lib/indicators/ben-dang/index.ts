@@ -1,7 +1,7 @@
 import type { BenDangIndicators, BenDangOptions } from "./types";
 import { computeSmc } from "./smc";
 import { computeSupportResistance } from "./support-resistance";
-import { toBars } from "./utils";
+import { adaptivePivotPeriod, adaptiveSwingLength, toBars } from "./utils";
 import { computeWyckoff } from "./wyckoff";
 
 export type {
@@ -34,8 +34,9 @@ export function computeBenDangIndicators(
   options: BenDangOptions = {}
 ): BenDangIndicators {
   const bars = toBars(points);
-  const swingLength = options.smcSwingLength ?? 5;
-  const srPeriod = options.srPeriod ?? 10;
+  const swingLength =
+    options.smcSwingLength ?? adaptiveSwingLength(bars.length);
+  const srPeriod = options.srPeriod ?? adaptivePivotPeriod(bars.length);
   const srMaxLevels = options.srMaxLevels ?? 5;
 
   return {

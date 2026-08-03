@@ -27,7 +27,7 @@ export function computeWyckoff(bars: Bar[]): WyckoffResult {
       recommendation: "Cần thêm dữ liệu",
     },
   };
-  if (bars.length < 30) return empty;
+  if (bars.length < 15) return empty;
 
   const lookback = Math.min(80, bars.length);
   const slice = bars.slice(-lookback);
