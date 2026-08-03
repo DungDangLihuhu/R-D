@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchPriceHistory } from "@/lib/yahoo";
 
-const BENCHMARK = "^GSPC";
+const BENCHMARK = "SPY";
 
 export async function GET(req: NextRequest) {
   const from = req.nextUrl.searchParams.get("from");
@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
   try {
     let points = await fetchPriceHistory(BENCHMARK, fromDate, toDate);
     if (points.length === 0) {
-      points = await fetchPriceHistory("SPY", fromDate, toDate);
+      points = await fetchPriceHistory("^GSPC", fromDate, toDate);
     }
     return NextResponse.json({
-      symbol: points.length > 0 ? BENCHMARK : "SPY",
+      symbol: points.length > 0 ? BENCHMARK : "^GSPC",
       label: "S&P 500",
       points,
       updatedAt: new Date().toISOString(),

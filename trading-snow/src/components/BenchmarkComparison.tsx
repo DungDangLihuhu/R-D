@@ -54,11 +54,11 @@ function formatIndexedReturn(value: number): string {
 export function BenchmarkComparison({
   equityCurve,
   transactions,
-  tradingValue,
+  portfolioValue,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
   transactions: Transaction[];
-  tradingValue: number;
+  portfolioValue: number;
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
@@ -96,7 +96,7 @@ export function BenchmarkComparison({
           curve,
           data.points ?? [],
           transactions,
-          tradingValue,
+          portfolioValue,
           benchmarkWindow
         );
         setComparison(result);
@@ -115,7 +115,7 @@ export function BenchmarkComparison({
       cancelled = true;
       globalThis.clearTimeout(tid);
     };
-  }, [curve, transactions, range, tradingValue]);
+  }, [curve, transactions, range, portfolioValue]);
 
   if (curve.length < 2) {
     return (
@@ -134,7 +134,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            Cùng vốn bỏ ra — mỗi lần mua/bán trade mirror sang S&P 500 (100 = hoà vốn)
+            Cùng vốn bỏ ra — nếu mua S&P 500 thay vì trade (100 = hoà vốn, gồm tiền mặt từ bán)
             {comparison?.clampedToHistory && (
               <> · So sánh từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
