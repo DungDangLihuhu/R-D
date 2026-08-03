@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { formatMoney } from "@/lib/format";
 import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
-import { CHART_TIMEFRAMES } from "@/lib/chart-history";
+import { TECHNICAL_CHART_TIMEFRAMES } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
 import {
   computeBenDangIndicators,
@@ -499,7 +499,7 @@ export function BenDangChart({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 p-0.5">
-            {CHART_TIMEFRAMES.map((tf) => (
+            {TECHNICAL_CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 type="button"
