@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonCached } from "@/lib/api-response";
+import { cacheKey, cached } from "@/lib/server-cache";
 import { fetchPriceHistory } from "@/lib/yahoo";
 
 const BENCHMARK = "SPY";
@@ -24,16 +26,24 @@ export async function GET(req: NextRequest) {
   toDate.setHours(23, 59, 59, 999);
 
   try {
-    let points = await fetchPriceHistory(BENCHMARK, fromDate, toDate);
+    let points = await cached(cacheKey(["benchmark", BENCHMARK, from, to]), 3600_000, () =>
+      fetchPriceHistory(BENCHMARK, fromDate, toDate)
+    );
     if (points.length === 0) {
-      points = await fetchPriceHistory("^GSPC", fromDate, toDate);
+      points = await cached(cacheKey(["benchmark", "^GSPC", from, to]), 3600_000, () =>
+        fetchPriceHistory("^GSPC", fromDate, toDate)
+      );
     }
-    return NextResponse.json({
-      symbol: points.length > 0 ? BENCHMARK : "^GSPC",
-      label: "S&P 500",
-      points,
-      updatedAt: new Date().toISOString(),
-    });
+    return jsonCached(
+      {
+        symbol: points.length > 0 ? BENCHMARK : "^GSPC",
+        label: "S&P 500",
+        points,
+        updatedAt: new Date().toISOString(),
+      },
+      3600,
+      7200
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
     return NextResponse.json({ error: msg }, { status: 502 });

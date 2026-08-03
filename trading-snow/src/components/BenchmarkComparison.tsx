@@ -29,6 +29,7 @@ import {
   formatMoney,
   formatPercent,
 } from "@/lib/format";
+import { fetchJson } from "@/lib/fetch-cache";
 import type { PortfolioStats, Transaction } from "@/lib/types";
 
 const GRID = "#e2e5ea";
@@ -97,8 +98,10 @@ export function BenchmarkComparison({
     };
     const tid = globalThis.setTimeout(startFetch, 0);
 
-    fetch(`/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`)
-      .then((res) => res.json())
+    fetchJson<{ points?: { date: string; close: number }[]; error?: string }>(
+      `/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`,
+      { ttlMs: 15 * 60 * 1000 }
+    )
       .then((data) => {
         if (cancelled) return;
         if (data.error) {

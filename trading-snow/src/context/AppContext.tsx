@@ -77,6 +77,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function init() {
+      const local = loadState();
+      setState(local);
+      setActivePortfolioId(local.portfolios[0]?.id ?? "default");
+      setHydrated(true);
+
       const configured = await checkCloudConfigured();
       if (cancelled) return;
 
@@ -84,14 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSyncRoom(room);
       setCloudConfigured(configured);
 
-      const local = loadState();
-
-      if (!configured) {
-        setState(local);
-        setActivePortfolioId(local.portfolios[0]?.id ?? "default");
-        setHydrated(true);
-        return;
-      }
+      if (!configured) return;
 
       const remote = await loadRemoteState(room);
       if (cancelled) return;
@@ -101,16 +99,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState(remote.state);
         saveState(remote.state);
         setActivePortfolioId(remote.state.portfolios[0]?.id ?? "default");
-      } else {
-        setState(local);
-        setActivePortfolioId(local.portfolios[0]?.id ?? "default");
-        if (local.transactions.length > 0 || local.portfolios.length > 1) {
-          const ts = await saveRemoteState(room, local);
-          if (ts) lastRemoteUpdatedAt.current = ts;
-        }
+      } else if (local.transactions.length > 0 || local.portfolios.length > 1) {
+        const ts = await saveRemoteState(room, local);
+        if (ts) lastRemoteUpdatedAt.current = ts;
       }
-
-      setHydrated(true);
     }
 
     init();
@@ -180,10 +172,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  const holdingSymbols = useMemo(
-    () => stats.allHoldings.map((h) => h.symbol),
-    [stats.allHoldings]
-  );
+  const holdingSymbols = useMemo(() => {
+    const syms = stats.allHoldings.map((h) => h.symbol);
+    return syms.length ? syms : stats.holdings.map((h) => h.symbol);
+  }, [stats.allHoldings, stats.holdings]);
 
   const isSymbolHidden = useCallback(
     (symbol: string) => hiddenSymbols.has(symbol.toUpperCase()),
@@ -226,16 +218,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let mergedUnresolved: string[] = [];
       let truncated = false;
 
+      const chunks: string[][] = [];
       for (let i = 0; i < list.length; i += QUOTE_BATCH_SIZE) {
-        const chunk = list.slice(i, i + QUOTE_BATCH_SIZE);
-        const res = await fetch(`/api/quotes?symbols=${chunk.join(",")}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const msg = data.error ?? `Không lấy được giá (HTTP ${res.status})`;
-          if (opts?.notify) alert(msg);
-          return;
-        }
+        chunks.push(list.slice(i, i + QUOTE_BATCH_SIZE));
+      }
 
+      const batchResults = await Promise.all(
+        chunks.map(async (chunk) => {
+          const res = await fetch(`/api/quotes?symbols=${chunk.join(",")}`);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error ?? `Không lấy được giá (HTTP ${res.status})`);
+          }
+          return data as {
+            prices?: Record<string, number>;
+            quotes?: {
+              symbol: string;
+              price: number;
+              change?: number;
+              changePercent?: number;
+              shortName?: string;
+              logo?: string;
+              marketSession?: MarketSession;
+            }[];
+            unresolved?: string[];
+            truncated?: boolean;
+          };
+        })
+      );
+
+      for (const data of batchResults) {
         Object.assign(mergedPrices, data.prices ?? {});
         mergedQuotes.push(...(data.quotes ?? []));
         mergedUnresolved = [...mergedUnresolved, ...(data.unresolved ?? [])];
@@ -283,6 +295,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } else {
           alert(`Đã cập nhật ${updated} mã.${truncated ? " (>150 mã — bị cắt bớt)" : ""}`);
         }
+      }
+    } catch (e) {
+      if (opts?.notify) {
+        alert(e instanceof Error ? e.message : "Không lấy được giá");
       }
     } finally {
       setPriceLoading(false);
@@ -399,41 +415,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  if (!hydrated) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#eef0f3] text-gray-500">
-        Đang tải...
-      </div>
-    );
-  }
+  const contextValue = useMemo<AppContextValue>(
+    () => ({
+      state,
+      activePortfolioId,
+      setActivePortfolioId,
+      stats,
+      hiddenSymbols,
+      isSymbolHidden,
+      toggleHiddenSymbol,
+      priceLoading,
+      quoteUnresolved,
+      cloudConfigured,
+      syncRoom,
+      addPortfolio,
+      addTransaction,
+      importTransactions,
+      deleteTransaction,
+      setMarketPrice,
+      setMarketPrices,
+      refreshPrices,
+      exportData,
+      importData,
+      clearAllTransactions,
+      clearPortfolioTransactions,
+    }),
+    [
+      state,
+      activePortfolioId,
+      stats,
+      hiddenSymbols,
+      isSymbolHidden,
+      toggleHiddenSymbol,
+      priceLoading,
+      quoteUnresolved,
+      cloudConfigured,
+      syncRoom,
+      addPortfolio,
+      addTransaction,
+      importTransactions,
+      deleteTransaction,
+      setMarketPrice,
+      setMarketPrices,
+      refreshPrices,
+      exportData,
+      importData,
+      clearAllTransactions,
+      clearPortfolioTransactions,
+    ]
+  );
 
   return (
-    <AppContext.Provider
-      value={{
-        state,
-        activePortfolioId,
-        setActivePortfolioId,
-        stats,
-        hiddenSymbols,
-        isSymbolHidden,
-        toggleHiddenSymbol,
-        priceLoading,
-        quoteUnresolved,
-        cloudConfigured,
-        syncRoom,
-        addPortfolio,
-        addTransaction,
-        importTransactions,
-        deleteTransaction,
-        setMarketPrice,
-        setMarketPrices,
-        refreshPrices,
-        exportData,
-        importData,
-        clearAllTransactions,
-        clearPortfolioTransactions,
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

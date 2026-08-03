@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonCached } from "@/lib/api-response";
+import { cacheKey, cached } from "@/lib/server-cache";
 import { CHART_TIMEFRAMES, fetchChartHistory, isChartTimeframe } from "@/lib/chart-history";
 
 export async function GET(
@@ -20,8 +22,10 @@ export async function GET(
   }
 
   try {
-    const points = await fetchChartHistory(upper, tf);
-    return NextResponse.json({ symbol: upper, timeframe: tf, points });
+    const points = await cached(cacheKey(["chart", upper, tf]), 300_000, () =>
+      fetchChartHistory(upper, tf)
+    );
+    return jsonCached({ symbol: upper, timeframe: tf, points }, 300, 600);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "fetch failed";
     return NextResponse.json({ error: msg }, { status: 502 });

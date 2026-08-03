@@ -61,6 +61,11 @@ export async function enrichQuotesWithProfiles(
   await Promise.all(
     quotes.map(async (q) => {
       if (q.logo && q.shortName) return;
+      if (q.logo && !q.shortName) {
+        const profile = await fetchSymbolProfile(q.symbol);
+        if (profile.name) q.shortName = profile.name;
+        return;
+      }
       const profile = await fetchSymbolProfile(q.symbol);
       if (profile.name && !q.shortName) q.shortName = profile.name;
       if (profile.logo) q.logo = profile.logo;

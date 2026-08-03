@@ -394,35 +394,35 @@ export async function fetchDividendEvents(
 ): Promise<CalendarEvent[]> {
   const fromMs = new Date(from).getTime();
   const toMs = new Date(to).getTime();
-  const events: CalendarEvent[] = [];
 
-  for (const symbol of symbols.slice(0, 40)) {
-    const history = await fetchDividends(symbol);
-    const all = [
-      ...history,
-      ...projectUpcomingDividends(history),
-    ];
+  const perSymbol = await Promise.all(
+    symbols.slice(0, 40).map(async (symbol) => {
+      const events: CalendarEvent[] = [];
+      const history = await fetchDividends(symbol);
+      const all = [...history, ...projectUpcomingDividends(history)];
 
-    for (const d of all) {
-      const t = new Date(d.date).getTime();
-      if (t < fromMs || t > toMs) continue;
-      const isProjected = !history.some(
-        (h) => h.date.slice(0, 10) === d.date.slice(0, 10)
-      );
-      events.push({
-        id: `div-${d.symbol}-${d.date.slice(0, 10)}`,
-        date: toIsoDate(d.date),
-        title: isProjected ? "Cổ tức dự kiến" : "Cổ tức",
-        category: "dividend",
-        symbol: d.symbol,
-        amount: d.amount,
-        subtitle: `$${d.amount.toFixed(4)}/cp${isProjected ? " · ước tính từ lịch sử" : ""}`,
-        impact: isProjected ? "medium" : "low",
-      });
-    }
-  }
+      for (const d of all) {
+        const t = new Date(d.date).getTime();
+        if (t < fromMs || t > toMs) continue;
+        const isProjected = !history.some(
+          (h) => h.date.slice(0, 10) === d.date.slice(0, 10)
+        );
+        events.push({
+          id: `div-${d.symbol}-${d.date.slice(0, 10)}`,
+          date: toIsoDate(d.date),
+          title: isProjected ? "Cổ tức dự kiến" : "Cổ tức",
+          category: "dividend",
+          symbol: d.symbol,
+          amount: d.amount,
+          subtitle: `$${d.amount.toFixed(4)}/cp${isProjected ? " · ước tính từ lịch sử" : ""}`,
+          impact: isProjected ? "medium" : "low",
+        });
+      }
+      return events;
+    })
+  );
 
-  return events;
+  return perSymbol.flat();
 }
 
 export async function fetchPortfolioEvents(

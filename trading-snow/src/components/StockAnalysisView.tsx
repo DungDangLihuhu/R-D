@@ -1,26 +1,36 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Search } from "lucide-react";
-import { StockPriceChart } from "@/components/StockPriceChart";
-import { BenDangChart } from "@/components/BenDangChart";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
+import { fetchJson } from "@/lib/fetch-cache";
 import {
   formatDate,
   formatMoney,
   formatPercent,
   formatShares,
 } from "@/lib/format";
-import type { StockAnalysis } from "@/lib/stock-analysis";
+import type { StockAnalysis, StockAnalysisExtra } from "@/lib/stock-analysis";
 import {
   assessmentBg,
   assessmentColor,
   type StockAssessment,
 } from "@/lib/stock-assessment";
+
+const BenDangChart = dynamic(
+  () => import("@/components/BenDangChart").then((m) => m.BenDangChart),
+  { loading: () => <ChartSkeleton /> }
+);
+
+const StockPriceChart = dynamic(
+  () => import("@/components/StockPriceChart").then((m) => m.StockPriceChart),
+  { loading: () => <ChartSkeleton /> }
+);
 
 interface SearchSuggestion {
   symbol: string;
@@ -29,10 +39,30 @@ interface SearchSuggestion {
   source?: "portfolio" | "yahoo";
 }
 
+function ChartSkeleton() {
+  return (
+    <div className="h-[22rem] animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+  );
+}
+
+function AnalysisSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="h-36 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+      <ChartSkeleton />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="h-48 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+        <div className="h-48 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+      </div>
+    </div>
+  );
+}
+
 export function StockAnalysisView({ symbol }: { symbol: string }) {
   const router = useRouter();
   const { stats } = useApp();
   const [data, setData] = useState<StockAnalysis | null>(null);
+  const [extraLoading, setExtraLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(symbol);
@@ -122,23 +152,15 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     if (!symbol) return;
 
     let cancelled = false;
-    const startFetch = () => {
-      if (!cancelled) {
-        setLoading(true);
-        setError(null);
-      }
-    };
-    const tid = globalThis.setTimeout(startFetch, 0);
+    setLoading(true);
+    setError(null);
+    setData(null);
 
-    fetch(`/api/stock/${encodeURIComponent(symbol)}`)
-      .then((r) => r.json())
+    fetchJson<StockAnalysis>(`/api/stock/${encodeURIComponent(symbol)}`, {
+      ttlMs: 5 * 60 * 1000,
+    })
       .then((json) => {
         if (cancelled) return;
-        if (json.error) {
-          setError(json.error);
-          setData(null);
-          return;
-        }
         setData(json);
       })
       .catch(() => {
@@ -150,9 +172,46 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
     return () => {
       cancelled = true;
-      globalThis.clearTimeout(tid);
     };
   }, [symbol]);
+
+  useEffect(() => {
+    if (!symbol || !data) return;
+
+    let cancelled = false;
+    setExtraLoading(true);
+
+    fetchJson<StockAnalysisExtra>(`/api/stock/${encodeURIComponent(symbol)}/extra`, {
+      ttlMs: 10 * 60 * 1000,
+    })
+      .then((extra) => {
+        if (cancelled) return;
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                peers: extra.peers,
+                insiderTransactions: extra.insiderTransactions,
+                news: extra.news,
+                assessment: extra.assessment,
+              }
+            : prev
+        );
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setExtraLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, data?.symbol]);
+
+  const dailySeed = useMemo(
+    () => data?.priceHistory,
+    [data?.priceHistory]
+  );
 
   const holding = stats.holdings.find((h) => h.symbol === symbol);
 
@@ -286,9 +345,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
         </div>
       )}
 
-      {loading && (
-        <p className="text-sm text-gray-500">Đang tải dữ liệu {symbol}...</p>
-      )}
+      {loading && <AnalysisSkeleton />}
 
       {error && !loading && (
         <p className="text-sm text-rose-600">{error}</p>
@@ -356,6 +413,9 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
               </div>
               </div>
               <AssessmentPanel assessment={data.assessment} currency={data.currency} />
+              {extraLoading && (
+                <p className="mt-2 text-xs text-gray-400">Đang tải tin tức & nội bộ...</p>
+              )}
             </div>
             {data.note && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -393,12 +453,17 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             </div>
 
             {chartMode === "technical" ? (
-              <BenDangChart symbol={data.symbol} currency={data.currency} />
+              <BenDangChart
+                symbol={data.symbol}
+                currency={data.currency}
+                dailySeed={dailySeed}
+              />
             ) : (
               <StockPriceChart
                 symbol={data.symbol}
                 currency={data.currency}
                 priceLevels={data.priceLevels}
+                dailySeed={dailySeed}
               />
             )}
           </div>

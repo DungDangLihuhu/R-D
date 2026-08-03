@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jsonCached } from "@/lib/api-response";
 import { fetchSymbolProfile, tickerLabel } from "@/lib/symbol-profile";
 
 export async function GET(req: NextRequest) {
@@ -8,10 +9,14 @@ export async function GET(req: NextRequest) {
   }
 
   const profile = await fetchSymbolProfile(symbol);
-  return NextResponse.json({
-    symbol,
-    ticker: tickerLabel(symbol),
-    name: profile.name,
-    logo: profile.logo,
-  });
+  return jsonCached(
+    {
+      symbol,
+      ticker: tickerLabel(symbol),
+      name: profile.name,
+      logo: profile.logo,
+    },
+    3600,
+    7200
+  );
 }
