@@ -30,13 +30,8 @@ const TICK = "#6b7280";
 const COLORS = {
   candleUp: "#10b981",
   candleDown: "#ef4444",
-  bos: "#3b82f6",
-  choch: "#f59e0b",
-  bullishOb: "rgba(16, 185, 129, 0.25)",
-  bearishOb: "rgba(239, 68, 68, 0.25)",
-  bullishFvg: "rgba(16, 185, 129, 0.15)",
-  bearishFvg: "rgba(239, 68, 68, 0.15)",
-  premium: "rgba(139, 92, 246, 0.12)",
+  premium: "rgba(239, 68, 68, 0.12)",
+  discount: "rgba(16, 185, 129, 0.12)",
   equilibrium: "#8b5cf6",
   support: "#10b981",
   resistance: "#ef4444",
@@ -150,143 +145,67 @@ function IndicatorOverlays({
         <g>
           {(() => {
             const z = indicators.smc.premiumDiscount!;
-            const x1 = xAt(z.swingLowIndex) ?? plotArea?.x ?? 0;
+            const x1 = Math.min(xAt(z.swingLowIndex) ?? plotArea?.x ?? 0, xAt(z.swingHighIndex) ?? plotArea?.x ?? 0);
             const yTop = yAt(z.top);
             const yBot = yAt(z.bottom);
             const yEq = yAt(z.equilibrium);
-            if (yTop == null || yBot == null) return null;
-            const rectY = Math.min(yTop, yBot);
-            const rectH = Math.abs(yBot - yTop);
+            if (yTop == null || yBot == null || yEq == null) return null;
             const rectW = Math.max(plotRight - x1, 0);
+            const premiumY = Math.min(yTop, yEq);
+            const premiumH = Math.abs(yEq - yTop);
+            const discountY = Math.min(yEq, yBot);
+            const discountH = Math.abs(yBot - yEq);
+            const labelX = x1 + 6;
             return (
               <>
                 <rect
                   x={x1}
-                  y={rectY}
+                  y={premiumY}
                   width={rectW}
-                  height={rectH}
+                  height={premiumH}
                   fill={COLORS.premium}
                   stroke="none"
                 />
-                {yEq != null && (
-                  <line
-                    x1={x1}
-                    y1={yEq}
-                    x2={plotRight}
-                    y2={yEq}
-                    stroke={COLORS.equilibrium}
-                    strokeDasharray="4 4"
-                    strokeWidth={1}
-                  />
-                )}
+                <rect
+                  x={x1}
+                  y={discountY}
+                  width={rectW}
+                  height={discountH}
+                  fill={COLORS.discount}
+                  stroke="none"
+                />
+                <line
+                  x1={x1}
+                  y1={yEq}
+                  x2={plotRight}
+                  y2={yEq}
+                  stroke={COLORS.equilibrium}
+                  strokeDasharray="4 4"
+                  strokeWidth={1}
+                />
+                <text
+                  x={labelX}
+                  y={premiumY + 12}
+                  fontSize={9}
+                  fill="#dc2626"
+                  fontWeight={600}
+                >
+                  Premium
+                </text>
+                <text
+                  x={labelX}
+                  y={discountY + discountH - 4}
+                  fontSize={9}
+                  fill="#059669"
+                  fontWeight={600}
+                >
+                  Discount
+                </text>
               </>
             );
           })()}
         </g>
       )}
-
-      {layers.smc &&
-        indicators.smc.fairValueGaps.map((fvg, i) => {
-          const x1 = xAt(fvg.startIndex);
-          const x2 = xAt(fvg.endIndex) ?? lastX;
-          const yTop = yAt(fvg.top);
-          const yBot = yAt(fvg.bottom);
-          if (x1 == null || yTop == null || yBot == null) return null;
-          return (
-            <rect
-              key={`fvg-${i}`}
-              x={x1}
-              y={Math.min(yTop, yBot)}
-              width={Math.max((x2 ?? x1) - x1, 4)}
-              height={Math.abs(yBot - yTop)}
-              fill={fvg.type === "bullish" ? COLORS.bullishFvg : COLORS.bearishFvg}
-              stroke={fvg.type === "bullish" ? COLORS.candleUp : COLORS.candleDown}
-              strokeWidth={0.5}
-              strokeDasharray="2 2"
-            />
-          );
-        })}
-
-      {layers.smc &&
-        indicators.smc.orderBlocks.map((ob, i) => {
-          const x1 = xAt(ob.startIndex);
-          const x2 = xAt(ob.extendIndex) ?? plotRight;
-          const yTop = yAt(ob.high);
-          const yBot = yAt(ob.low);
-          if (x1 == null || yTop == null || yBot == null) return null;
-          return (
-            <rect
-              key={`ob-${i}`}
-              x={x1}
-              y={Math.min(yTop, yBot)}
-              width={Math.max(x2 - x1, 6)}
-              height={Math.abs(yBot - yTop)}
-              fill={ob.type === "bullish" ? COLORS.bullishOb : COLORS.bearishOb}
-              stroke={ob.type === "bullish" ? COLORS.candleUp : COLORS.candleDown}
-              strokeWidth={1}
-            />
-          );
-        })}
-
-      {layers.smc &&
-        indicators.smc.structureLines.map((line, i) => {
-          const x1 = xAt(line.fromIndex);
-          const x2 = xAt(line.toIndex);
-          const y = yAt(line.price);
-          if (x1 == null || x2 == null || y == null) return null;
-          const isInternal = line.scope === "internal";
-          const color = line.type === "bos" ? COLORS.bos : COLORS.choch;
-          return (
-            <g key={`struct-${i}`} opacity={isInternal ? 0.55 : 1}>
-              <line
-                x1={x1}
-                y1={y}
-                x2={x2}
-                y2={y}
-                stroke={color}
-                strokeWidth={isInternal ? 1 : 1.5}
-                strokeDasharray={line.type === "choch" || isInternal ? "6 3" : undefined}
-              />
-              {!isInternal && (
-                <text
-                  x={(x1 + x2) / 2}
-                  y={y - 4}
-                  textAnchor="middle"
-                  fontSize={9}
-                  fill={color}
-                  fontWeight={600}
-                >
-                  {line.type === "bos" ? "BOS" : "CHoCH"}
-                </text>
-              )}
-            </g>
-          );
-        })}
-
-      {layers.smc &&
-        indicators.smc.equalLevels.map((eq, i) => {
-          const x1 = xAt(eq.index1);
-          const x2 = xAt(eq.index2);
-          const y = yAt(eq.price);
-          if (x1 == null || x2 == null || y == null) return null;
-          return (
-            <g key={`eq-${i}`}>
-              <line
-                x1={x1}
-                y1={y}
-                x2={x2}
-                y2={y}
-                stroke={eq.type === "eqh" ? COLORS.resistance : COLORS.support}
-                strokeWidth={1}
-                strokeDasharray="3 3"
-                opacity={0.7}
-              />
-              <text x={(x1 + x2) / 2} y={y - 3} textAnchor="middle" fontSize={8} fill={TICK}>
-                {eq.type === "eqh" ? "EQH" : "EQL"}
-              </text>
-            </g>
-          );
-        })}
 
       {layers.sr &&
         indicators.sr.levels.map((level, i) => {
@@ -550,7 +469,7 @@ function LayerToggle({
   onChange: (next: BenDangLayers) => void;
 }) {
   const items: { key: keyof BenDangLayers; label: string }[] = [
-    { key: "smc", label: "SMC" },
+    { key: "smc", label: "P/D" },
     { key: "sr", label: "S/R" },
     { key: "wyckoff", label: "Wyckoff" },
   ];
@@ -648,7 +567,7 @@ export function BenDangChart({
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-semibold">Phân tích kĩ thuật</h3>
-          <p className="text-xs text-gray-500">SMC · Hỗ trợ/Kháng cự · Wyckoff</p>
+          <p className="text-xs text-gray-500">Premium/Discount · Hỗ trợ/Kháng cự · Wyckoff</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 p-0.5">
@@ -724,24 +643,33 @@ export function BenDangChart({
           )}
 
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-500">
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-blue-500" /> BOS
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-amber-500" style={{ borderTop: "1px dashed" }} /> CHoCH
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-2 w-3 rounded-sm bg-emerald-200" /> OB tăng
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-2 w-3 rounded-sm bg-rose-200" /> OB giảm
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-emerald-500" style={{ borderTop: "1px dashed" }} /> Hỗ trợ
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-rose-500" style={{ borderTop: "1px dashed" }} /> Kháng cự
-            </span>
+            {layers.smc && (
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm bg-rose-200" /> Premium
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-2 w-3 rounded-sm bg-emerald-200" /> Discount
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span
+                    className="inline-block h-0.5 w-3"
+                    style={{ borderTop: "1px dashed #8b5cf6" }}
+                  />{" "}
+                  Equilibrium
+                </span>
+              </>
+            )}
+            {layers.sr && (
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-0.5 w-3 bg-emerald-500" style={{ borderTop: "1px dashed" }} /> Hỗ trợ
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-0.5 w-3 bg-rose-500" style={{ borderTop: "1px dashed" }} /> Kháng cự
+                </span>
+              </>
+            )}
           </div>
 
           {layers.wyckoff && <WyckoffPanel indicators={indicators} currency={currency} />}

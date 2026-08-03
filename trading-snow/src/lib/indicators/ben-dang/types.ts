@@ -14,39 +14,6 @@ export interface SwingPoint {
   price: number;
 }
 
-export interface SmcStructureLine {
-  fromIndex: number;
-  toIndex: number;
-  price: number;
-  type: "bos" | "choch";
-  direction: "bullish" | "bearish";
-  scope: "swing" | "internal";
-}
-
-export interface OrderBlock {
-  startIndex: number;
-  endIndex: number;
-  extendIndex: number;
-  high: number;
-  low: number;
-  type: "bullish" | "bearish";
-}
-
-export interface FairValueGap {
-  startIndex: number;
-  endIndex: number;
-  top: number;
-  bottom: number;
-  type: "bullish" | "bearish";
-}
-
-export interface EqualLevel {
-  index1: number;
-  index2: number;
-  price: number;
-  type: "eqh" | "eql";
-}
-
 export interface PremiumDiscountZone {
   top: number;
   bottom: number;
@@ -56,13 +23,7 @@ export interface PremiumDiscountZone {
 }
 
 export interface SmcResult {
-  structureLines: SmcStructureLine[];
-  orderBlocks: OrderBlock[];
-  fairValueGaps: FairValueGap[];
-  equalLevels: EqualLevel[];
   premiumDiscount?: PremiumDiscountZone;
-  swingHighs: SwingPoint[];
-  swingLows: SwingPoint[];
 }
 
 export interface SrLevel {
