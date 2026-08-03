@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import { formatMoney } from "@/lib/format";
 import type { ChartStyle, ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
-import { CHART_TIMEFRAMES, showPriceLevelsOnChart } from "@/lib/chart-history";
+import { FUNDAMENTAL_CHART_TIMEFRAMES, showPriceLevelsOnChart } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
 import type { PriceLevels } from "@/lib/stock-analysis";
 
@@ -204,7 +204,7 @@ export function StockPriceChart({
         <h3 className="font-semibold">Phân tích cơ bản</h3>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 p-0.5">
-            {CHART_TIMEFRAMES.map((tf) => (
+            {FUNDAMENTAL_CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 type="button"

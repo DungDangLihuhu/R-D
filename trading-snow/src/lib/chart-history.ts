@@ -8,6 +8,12 @@ const YAHOO_HEADERS = {
 
 export const CHART_TIMEFRAMES = ["1h", "4h", "1d", "1w", "1m", "all"] as const;
 export type ChartTimeframe = (typeof CHART_TIMEFRAMES)[number];
+
+/** Phân tích cơ bản — không có 1H/4H */
+export const FUNDAMENTAL_CHART_TIMEFRAMES = ["1d", "1w", "1m", "all"] as const satisfies readonly ChartTimeframe[];
+
+/** Phân tích kĩ thuật — không có 1M */
+export const TECHNICAL_CHART_TIMEFRAMES = ["1h", "4h", "1d", "1w", "all"] as const satisfies readonly ChartTimeframe[];
 export type ChartStyle = "line" | "candle";
 
 export interface OhlcPoint {
