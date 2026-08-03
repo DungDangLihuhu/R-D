@@ -22,6 +22,7 @@ import {
 import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
 import { defaultState, loadState, saveState } from "@/lib/storage";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
+import { toast } from "@/lib/toast-store";
 import type {
   AppState,
   MarketSession,
@@ -285,20 +286,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (opts?.notify) {
         const updated = Object.keys(mergedPrices).length;
         if (updated === 0) {
-          alert(
-            "Không lấy được giá nào. Mở /api/quotes?check=1 để kiểm tra Yahoo/Finnhub trên server.",
+          toast.error(
+            "Không lấy được giá nào. Mở /api/quotes?check=1 để kiểm tra Yahoo/Finnhub trên server."
           );
         } else if (mergedUnresolved.length > 0) {
-          alert(
-            `Đã cập nhật ${updated}/${list.length} mã.\nChưa có giá: ${mergedUnresolved.join(", ")}${truncated ? "\n(>150 mã — bị cắt bớt)" : ""}`,
+          toast.warning(
+            `Đã cập nhật ${updated}/${list.length} mã. Chưa có giá: ${mergedUnresolved.join(", ")}${truncated ? " (>150 mã — bị cắt bớt)" : ""}`
           );
         } else {
-          alert(`Đã cập nhật ${updated} mã.${truncated ? " (>150 mã — bị cắt bớt)" : ""}`);
+          toast.success(
+            `Đã cập nhật ${updated} mã.${truncated ? " (>150 mã — bị cắt bớt)" : ""}`
+          );
         }
       }
     } catch (e) {
       if (opts?.notify) {
-        alert(e instanceof Error ? e.message : "Không lấy được giá");
+        toast.error(e instanceof Error ? e.message : "Không lấy được giá");
       }
     } finally {
       setPriceLoading(false);
