@@ -23,14 +23,14 @@ export interface OhlcPoint {
   volume: number;
 }
 
-/** Lookback window per button — all use 1D candles. */
+/** Lookback window per button — all 1D candles; range tăng dần trái → phải. */
 const TIMEFRAME_RANGES: Record<ChartTimeframe, string> = {
   "1h": "5d",
   "4h": "1mo",
   "1d": "3mo",
   "1w": "6mo",
-  "1m": "1mo",
-  "1y": "1y",
+  "1m": "1y",
+  "1y": "2y",
   "5y": "5y",
   all: "max",
 };
