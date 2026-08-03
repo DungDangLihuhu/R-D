@@ -104,9 +104,29 @@ export function adaptivePivotPeriod(barCount: number, preferred = 10): number {
   return Math.max(2, Math.min(preferred, Math.floor(barCount / 5)));
 }
 
-export function adaptiveSwingLength(barCount: number, preferred = 5): number {
-  if (barCount < 12) return Math.max(1, Math.floor(barCount / 6));
-  return Math.max(2, Math.min(preferred, Math.floor(barCount / 8)));
+export function adaptiveSwingLength(barCount: number, preferred = 50): number {
+  if (barCount < 20) return Math.max(2, Math.floor(barCount / 6));
+  return Math.max(5, Math.min(preferred, Math.floor(barCount / 3)));
+}
+
+export function isPivotHighAt(bars: Bar[], index: number, left: number, right = left): boolean {
+  if (index < left || index >= bars.length - right) return false;
+  const price = bars[index].high;
+  for (let j = index - left; j <= index + right; j++) {
+    if (j === index) continue;
+    if (bars[j].high >= price) return false;
+  }
+  return true;
+}
+
+export function isPivotLowAt(bars: Bar[], index: number, left: number, right = left): boolean {
+  if (index < left || index >= bars.length - right) return false;
+  const price = bars[index].low;
+  for (let j = index - left; j <= index + right; j++) {
+    if (j === index) continue;
+    if (bars[j].low <= price) return false;
+  }
+  return true;
 }
 
 export function clusterPrices(
