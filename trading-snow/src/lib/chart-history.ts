@@ -23,16 +23,21 @@ export interface OhlcPoint {
   volume: number;
 }
 
+/** 1D × 6mo ≈ 125 daily bars — reference candle density. */
+const CHART_TARGET_BARS = 125;
+
 interface TimeframeSpec {
   range: string;
+  /** Trim tail when Yahoo returns too many 1D bars (keeps candle width ~1D). */
+  maxBars?: number;
 }
 
 const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
-  "1h": { range: "1mo" },
-  "4h": { range: "3mo" },
+  "1h": { range: "3mo" },
+  "4h": { range: "6mo" },
   "1d": { range: "6mo" },
-  "1w": { range: "1y" },
-  "1m": { range: "2y" },
+  "1w": { range: "1y", maxBars: CHART_TARGET_BARS },
+  "1m": { range: "2y", maxBars: CHART_TARGET_BARS },
   all: { range: "max" },
 };
 
@@ -55,6 +60,11 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
     return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
+}
+
+function capBarCount(points: OhlcPoint[], maxBars?: number): OhlcPoint[] {
+  if (!maxBars || points.length <= maxBars) return points;
+  return points.slice(-maxBars);
 }
 
 function parseYahooOhlc(
@@ -125,7 +135,7 @@ async function fetchOhlcOne(
   const result = json?.chart?.result?.[0];
   if (!result) return [];
 
-  return parseYahooOhlc(result, timeframe);
+  return capBarCount(parseYahooOhlc(result, timeframe), spec.maxBars);
 }
 
 export async function fetchChartHistory(
