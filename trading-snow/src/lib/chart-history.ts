@@ -25,16 +25,14 @@ export interface OhlcPoint {
 
 interface TimeframeSpec {
   range: string;
-  /** Yahoo lacks some ranges (e.g. 2w) — trim after fetch. */
-  trimDays?: number;
 }
 
 const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
-  "1h": { range: "1mo", trimDays: 14 },
-  "4h": { range: "2mo" },
+  "1h": { range: "1mo" },
+  "4h": { range: "3mo" },
   "1d": { range: "6mo" },
-  "1w": { range: "2y" },
-  "1m": { range: "5y" },
+  "1w": { range: "1y" },
+  "1m": { range: "2y" },
   all: { range: "max" },
 };
 
@@ -57,13 +55,6 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
     return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
-}
-
-function trimToDays(points: OhlcPoint[], days: number): OhlcPoint[] {
-  if (!points.length || days <= 0) return points;
-  const last = new Date(points[points.length - 1].date).getTime();
-  const cutoff = last - days * 24 * 60 * 60 * 1000;
-  return points.filter((p) => new Date(p.date).getTime() >= cutoff);
 }
 
 function parseYahooOhlc(
@@ -134,11 +125,7 @@ async function fetchOhlcOne(
   const result = json?.chart?.result?.[0];
   if (!result) return [];
 
-  let points = parseYahooOhlc(result, timeframe);
-  if (spec.trimDays) {
-    points = trimToDays(points, spec.trimDays);
-  }
-  return points;
+  return parseYahooOhlc(result, timeframe);
 }
 
 export async function fetchChartHistory(
