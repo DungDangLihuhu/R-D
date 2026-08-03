@@ -138,11 +138,11 @@ export function clusterPrices(
   const clusters: { price: number; count: number; sum: number }[] = [];
 
   for (const p of sorted) {
-    const existing = clusters.find((c) => Math.abs(c.price - p) <= tolerance);
-    if (existing) {
-      existing.count++;
-      existing.sum += p;
-      existing.price = existing.sum / existing.count;
+    const last = clusters[clusters.length - 1];
+    if (last && Math.abs(p - last.price) <= tolerance) {
+      last.count++;
+      last.sum += p;
+      last.price = last.sum / last.count;
     } else {
       clusters.push({ price: p, count: 1, sum: p });
     }
@@ -150,5 +150,5 @@ export function clusterPrices(
 
   return clusters
     .map((c) => ({ price: c.price, count: c.count }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => b.count - a.count || a.price - b.price);
 }
