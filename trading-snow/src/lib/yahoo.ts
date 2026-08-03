@@ -4,6 +4,8 @@ import {
   toYahooSymbol,
 } from "./symbol";
 
+import type { MarketSession } from "./types";
+
 const YAHOO_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -20,6 +22,7 @@ export interface QuoteResult {
   exchangeName?: string;
   shortName?: string;
   source?: "yahoo" | "finnhub" | "yahoo-search" | "twelve-data";
+  marketSession?: MarketSession;
 }
 
 export interface DividendEvent {
@@ -203,6 +206,84 @@ export async function fetchPriceHistory(
   return points;
 }
 
+interface YahooChartMeta {
+  marketState?: string;
+  regularMarketPrice?: number;
+  regularMarketTime?: number;
+  preMarketPrice?: number;
+  preMarketChange?: number;
+  preMarketChangePercent?: number;
+  preMarketTime?: number;
+  postMarketPrice?: number;
+  postMarketChange?: number;
+  postMarketChangePercent?: number;
+  postMarketTime?: number;
+  chartPreviousClose?: number;
+  previousClose?: number;
+  symbol?: string;
+  fullExchangeName?: string;
+  exchangeName?: string;
+  shortName?: string;
+  longName?: string;
+  currency?: string;
+}
+
+/** Pick live price + session from Yahoo chart meta (pre / regular / post). */
+export function resolveExtendedQuote(meta: YahooChartMeta): {
+  price: number;
+  change: number;
+  changePercent: number;
+  marketSession: MarketSession;
+} | null {
+  const regular = meta.regularMarketPrice;
+  if (!regular || regular <= 0) return null;
+
+  const prevClose =
+    meta.chartPreviousClose ?? meta.previousClose ?? regular;
+  const state = String(meta.marketState ?? "").toUpperCase();
+  const pre = meta.preMarketPrice;
+  const post = meta.postMarketPrice;
+  const preTime = meta.preMarketTime;
+  const postTime = meta.postMarketTime;
+  const regularTime = meta.regularMarketTime;
+
+  const fromPrevClose = (price: number) => {
+    const change = price - prevClose;
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+    return { price, change, changePercent };
+  };
+
+  if ((state === "PRE" || state === "PREPRE") && pre && pre > 0) {
+    const change = meta.preMarketChange ?? pre - prevClose;
+    const changePercent =
+      meta.preMarketChangePercent ??
+      (prevClose > 0 ? (change / prevClose) * 100 : 0);
+    return { price: pre, change, changePercent, marketSession: "pre" };
+  }
+
+  if ((state === "POST" || state === "POSTPOST") && post && post > 0) {
+    return { ...fromPrevClose(post), marketSession: "post" };
+  }
+
+  if (state === "REGULAR") {
+    return { ...fromPrevClose(regular), marketSession: "regular" };
+  }
+
+  // CLOSED — use latest extended quote if still from current session day
+  if (post && post > 0 && postTime && regularTime && postTime >= regularTime) {
+    return { ...fromPrevClose(post), marketSession: "post" };
+  }
+  if (pre && pre > 0 && preTime && (!regularTime || preTime > regularTime)) {
+    const change = meta.preMarketChange ?? pre - prevClose;
+    const changePercent =
+      meta.preMarketChangePercent ??
+      (prevClose > 0 ? (change / prevClose) * 100 : 0);
+    return { price: pre, change, changePercent, marketSession: "pre" };
+  }
+
+  return { ...fromPrevClose(regular), marketSession: "closed" };
+}
+
 async function fetchQuoteOne(
   yahooSymbol: string,
   requestedSymbol: string,
@@ -211,28 +292,27 @@ async function fetchQuoteOne(
   const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
 
   for (const host of hosts) {
-    const url = `https://${host}/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=1d&range=1d`;
+    const url = `https://${host}/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=1d&range=1d&includePrePost=true`;
     const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 60 } });
     if (!res.ok) continue;
 
     const json = await res.json();
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta?.regularMarketPrice) continue;
+    const meta = json?.chart?.result?.[0]?.meta as YahooChartMeta | undefined;
+    if (!meta) continue;
 
-    const prev =
-      meta.chartPreviousClose ?? meta.previousClose ?? meta.regularMarketPrice;
-    const change = meta.regularMarketPrice - prev;
-    const changePercent = prev > 0 ? (change / prev) * 100 : 0;
+    const resolved = resolveExtendedQuote(meta);
+    if (!resolved) continue;
 
     return {
       symbol: requestedSymbol,
       yahooSymbol: meta.symbol ?? yahooSymbol,
       exchangeName: meta.fullExchangeName ?? meta.exchangeName,
       shortName: meta.shortName ?? meta.longName,
-      price: meta.regularMarketPrice,
-      change,
-      changePercent,
+      price: resolved.price,
+      change: resolved.change,
+      changePercent: resolved.changePercent,
       currency: meta.currency ?? "USD",
+      marketSession: resolved.marketSession,
       source,
     };
   }
@@ -364,17 +444,20 @@ export async function fetchQuoteFinnhubOne(
       c?: number;
       d?: number;
       dp?: number;
+      pc?: number;
       error?: string;
     };
     if (q.error || !q.c || q.c <= 0) continue;
+    const prevClose = q.pc && q.pc > 0 ? q.pc : q.c - (q.d ?? 0);
     return {
       symbol: requestedSymbol.toUpperCase(),
       yahooSymbol: sym,
       price: q.c,
-      change: q.d ?? 0,
-      changePercent: q.dp ?? 0,
+      change: q.d ?? q.c - prevClose,
+      changePercent: q.dp ?? (prevClose > 0 ? ((q.c - prevClose) / prevClose) * 100 : 0),
       currency: "USD",
       source: "finnhub",
+      marketSession: "regular",
     };
   }
   return null;

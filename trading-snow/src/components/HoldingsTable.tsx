@@ -7,7 +7,7 @@ import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { Pagination } from "@/components/Pagination";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
-import type { Holding, MarketQuote } from "@/lib/types";
+import type { Holding, MarketQuote, MarketSession } from "@/lib/types";
 import {
   formatMoney,
   formatPnlArrow,
@@ -18,6 +18,12 @@ function pnlClass(value: number) {
   if (value > 0) return "text-emerald-600";
   if (value < 0) return "text-rose-600";
   return "text-gray-600";
+}
+
+function sessionLabel(session?: MarketSession): string | null {
+  if (session === "pre") return "Pre-market";
+  if (session === "post") return "After hours";
+  return null;
 }
 
 function MetricStack({
@@ -87,6 +93,7 @@ function HoldingRow({
   const dailyChange =
     quote && holding.marketPrice ? quote.change * holding.quantity : null;
   const dailyPct = quote?.changePercent ?? null;
+  const sessionTag = sessionLabel(quote?.marketSession);
   const displayName = quote?.name ?? holding.symbol;
 
   const priceSecondary = editing ? (
@@ -107,6 +114,11 @@ function HoldingRow({
       className="mt-0.5 block w-full text-[11px] tabular-nums text-sky-600 hover:underline"
     >
       {formatMoney(market)}/cp
+      {sessionTag && (
+        <span className="ml-1 text-[10px] font-medium text-violet-600">
+          ({sessionTag})
+        </span>
+      )}
     </button>
   );
 
@@ -190,7 +202,14 @@ function HoldingRow({
           <>
             <div className="my-2.5 border-t border-gray-100" />
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">Hôm nay</span>
+              <span className="text-gray-500">
+                Hôm nay
+                {sessionTag && (
+                  <span className="ml-1 text-[10px] font-medium text-violet-600">
+                    ({sessionTag})
+                  </span>
+                )}
+              </span>
               <div className="text-right">
                 <span
                   className={`font-medium tabular-nums ${pnlClass(dailyChange)}`}
@@ -329,7 +348,7 @@ export function HoldingsTable() {
       </div>
 
       <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
-        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Bấm tên mã → Phân tích. Bấm giá/cp sửa thủ công. Icon mắt = tạm ẩn mã khỏi chỉ số.
+        Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Pre-market &amp; after-hours khi Yahoo có dữ liệu. Bấm tên mã → Phân tích. Bấm giá/cp sửa thủ công. Icon mắt = tạm ẩn mã khỏi chỉ số.
       </p>
 
       <Pagination

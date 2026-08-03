@@ -15,7 +15,7 @@ export default function PortfolioPage() {
         <div>
           <h1 className="text-2xl font-bold">Danh mục</h1>
           <p className="text-sm text-gray-500">
-            Giá realtime từ Yahoo Finance · tự refresh mỗi 5 phút
+            Giá realtime từ Yahoo Finance (gồm pre-market &amp; after-hours) · tự refresh mỗi 5 phút
           </p>
         </div>
         <PriceRefresh />

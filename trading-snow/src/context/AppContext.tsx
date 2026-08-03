@@ -24,6 +24,7 @@ import { defaultState, loadState, saveState } from "@/lib/storage";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import type {
   AppState,
+  MarketSession,
   Portfolio,
   PortfolioStats,
   Transaction,
@@ -219,6 +220,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         change?: number;
         changePercent?: number;
         shortName?: string;
+        marketSession?: MarketSession;
       }[] = [];
       let mergedUnresolved: string[] = [];
       let truncated = false;
@@ -253,6 +255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               change: q.change ?? 0,
               changePercent: q.changePercent ?? 0,
               name: q.shortName,
+              marketSession: q.marketSession,
             };
           }
         }
