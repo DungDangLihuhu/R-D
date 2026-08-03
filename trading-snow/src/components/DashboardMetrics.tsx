@@ -67,7 +67,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <SnowballStatCard
         label="Giá trị"
-        value={formatMoney(stats.tradingValue)}
+        value={formatMoney(stats.holdingsValue)}
         sub={`${formatMoney(stats.holdingsCost)} đã đầu tư`}
         icon={Wallet}
         iconClassName="bg-sky-100 text-sky-600"
