@@ -56,17 +56,11 @@ function formatIndexedReturn(value: number): string {
 export function BenchmarkComparison({
   equityCurve,
   transactions,
-  closedTrades,
-  holdings,
-  realizedPnl,
   unrealizedPnl,
   holdingsCost,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
   transactions: Transaction[];
-  closedTrades: PortfolioStats["closedTrades"];
-  holdings: PortfolioStats["holdings"];
-  realizedPnl: number;
   unrealizedPnl: number;
   holdingsCost: number;
 }) {
@@ -78,18 +72,11 @@ export function BenchmarkComparison({
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
   const portfolioInput = useMemo<PortfolioBenchmarkInput>(
-    () => ({
-      closedTrades,
-      holdings,
-      realizedPnl,
-      unrealizedPnl,
-      holdingsCost,
-    }),
-    [closedTrades, holdings, realizedPnl, unrealizedPnl, holdingsCost]
+    () => ({ unrealizedPnl, holdingsCost }),
+    [unrealizedPnl, holdingsCost]
   );
 
-  const hasData =
-    closedTrades.length > 0 || holdings.length > 0;
+  const hasData = holdingsCost > 0;
 
   useEffect(() => {
     if (!hasData) return;
@@ -149,7 +136,7 @@ export function BenchmarkComparison({
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="mb-2 font-semibold">So sánh với S&P 500</h2>
         <p className="text-sm text-gray-500">
-          Thêm giao dịch để so sánh benchmark
+          Cần vị thế đang hold để so sánh benchmark
         </p>
       </div>
     );
@@ -161,7 +148,7 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            S&P 500: % tăng theo khoảng thời gian · Danh mục: lợi nhuận ròng / cost × 100
+            S&P 500: % tăng theo khoảng · Danh mục: lợi nhuận ròng / cost CP đang hold
             {comparison?.clampedToHistory && (
               <> · Từ {formatDate(comparison.from)} (ngày trade đầu)</>
             )}
@@ -204,50 +191,10 @@ export function BenchmarkComparison({
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
-              label="Đã đóng (TB % lãi)"
-              value={
-                comparison.closedAvgReturn !== null
-                  ? formatPercent(comparison.closedAvgReturn)
-                  : "—"
-              }
-              trend={
-                comparison.closedAvgReturn !== null &&
-                comparison.closedAvgReturn >= 0
-                  ? "up"
-                  : comparison.closedAvgReturn !== null
-                    ? "down"
-                    : undefined
-              }
-            />
-            <StatCard
-              label="Đang hold (% lãi)"
-              value={
-                comparison.holdReturn !== null
-                  ? formatPercent(comparison.holdReturn)
-                  : "—"
-              }
-              trend={
-                comparison.holdReturn !== null && comparison.holdReturn >= 0
-                  ? "up"
-                  : comparison.holdReturn !== null
-                    ? "down"
-                    : undefined
-              }
-              sub={
-                holdingsCost > 0
-                  ? `Cost: ${formatMoney(holdingsCost)}`
-                  : undefined
-              }
-            />
-            <StatCard
-              label="Danh mục (LN / cost)"
+              label="Danh mục đang hold"
               value={formatPercent(comparison.portfolioReturn)}
               trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
-              sub={
-                comparison.totalCost > 0
-                  ? `Cost: ${formatMoney(comparison.totalCost)}`
-                  : undefined
-              }
+              sub={`Cost: ${formatMoney(comparison.holdingsCost)}`}
             />
             <StatCard
               label="S&P 500"
@@ -290,7 +237,7 @@ export function BenchmarkComparison({
                   contentStyle={TOOLTIP}
                   formatter={(v, name) => [
                     formatIndexedReturn(Number(v ?? 100)),
-                    name === "portfolio" ? "Danh mục (LN/cost)" : "S&P 500",
+                    name === "portfolio" ? "Danh mục" : "S&P 500",
                   ]}
                   labelFormatter={(_, payload) => {
                     const date = payload?.[0]?.payload?.date as string | undefined;
@@ -299,7 +246,7 @@ export function BenchmarkComparison({
                 />
                 <Legend
                   formatter={(value) =>
-                    value === "portfolio" ? "Danh mục (LN/cost)" : "S&P 500"
+                    value === "portfolio" ? "Danh mục" : "S&P 500"
                   }
                 />
                 <ReferenceLine
