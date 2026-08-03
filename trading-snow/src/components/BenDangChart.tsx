@@ -16,6 +16,7 @@ import {
 import { formatMoney } from "@/lib/format";
 import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { CHART_TIMEFRAMES } from "@/lib/chart-history";
+import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
 import {
   computeBenDangIndicators,
   type BenDangIndicators,
@@ -60,38 +61,17 @@ const DEFAULT_LAYERS: BenDangLayers = {
   wyckoff: true,
 };
 
-function chartYDomain(points: OhlcPoint[], indicators: BenDangIndicators): [number, number] {
-  const prices = points.flatMap((p) => [p.high, p.low, p.close]);
+function indicatorExtras(indicators: BenDangIndicators): number[] {
   const extras: number[] = [];
-
   for (const l of indicators.sr.levels) extras.push(l.price);
   if (indicators.smc.premiumDiscount) {
-    extras.push(indicators.smc.premiumDiscount.top, indicators.smc.premiumDiscount.bottom);
+    extras.push(
+      indicators.smc.premiumDiscount.top,
+      indicators.smc.premiumDiscount.bottom,
+      indicators.smc.premiumDiscount.equilibrium
+    );
   }
-  if (indicators.wyckoff.tradingRange) {
-    extras.push(indicators.wyckoff.tradingRange.top, indicators.wyckoff.tradingRange.bottom);
-  }
-
-  const all = [...prices, ...extras].filter((v) => Number.isFinite(v) && v > 0);
-  if (!all.length) return [0, 100];
-
-  let min = Math.min(...all);
-  let max = Math.max(...all);
-  if (min === max) {
-    const bump = min * 0.05 || 1;
-    min -= bump;
-    max += bump;
-  }
-  const pad = (max - min) * 0.06 || max * 0.05;
-  return [Math.max(0, min - pad), max + pad];
-}
-
-function formatChartPrice(value: number): string {
-  if (!Number.isFinite(value)) return "";
-  const abs = Math.abs(value);
-  if (abs >= 10_000) return value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
-  if (abs >= 100) return value.toFixed(1);
-  return value.toFixed(2);
+  return extras;
 }
 
 function Candlesticks({ data }: { data: OhlcPoint[] }) {
@@ -655,7 +635,10 @@ export function BenDangChart({
   const currentPrice = points.length ? points[points.length - 1].close : 0;
 
   const yDomain = useMemo(
-    () => (indicators ? chartYDomain(points, indicators) : [0, 100] as [number, number]),
+    () =>
+      indicators
+        ? computeChartYDomain(points, { extras: indicatorExtras(indicators) })
+        : computeChartYDomain(points),
     [points, indicators]
   );
 

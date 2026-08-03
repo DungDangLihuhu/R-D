@@ -18,6 +18,7 @@ import {
 import { formatMoney } from "@/lib/format";
 import type { ChartStyle, ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { CHART_TIMEFRAMES, showPriceLevelsOnChart } from "@/lib/chart-history";
+import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
 import type { PriceLevels } from "@/lib/stock-analysis";
 
 const GRID = "#e2e5ea";
@@ -43,50 +44,14 @@ const TIMEFRAME_LABELS: Record<ChartTimeframe, string> = {
   all: "All",
 };
 
-function chartYDomain(
-  closes: number[],
-  levels?: PriceLevels
-): [number, number] {
-  const valid = closes.filter((c) => Number.isFinite(c) && c > 0);
-  if (!valid.length) return [0, 100];
-
-  let min = Math.min(...valid);
-  let max = Math.max(...valid);
-  const span = max - min || max * 0.1;
-
-  const includeLevel = (p: number) =>
-    Number.isFinite(p) && p > 0 && p >= min - span * 0.15 && p <= max + span * 0.15;
-
-  if (levels) {
-    const extras: number[] = [];
-    if (levels.targetAnalyst && includeLevel(levels.targetAnalyst.price)) {
-      extras.push(levels.targetAnalyst.price);
-    }
-    if (levels.targetFundamental && includeLevel(levels.targetFundamental.price)) {
-      extras.push(levels.targetFundamental.price);
-    }
-    for (const s of levels.support) {
-      if (includeLevel(s.price)) extras.push(s.price);
-    }
-    for (const r of levels.resistance) {
-      if (includeLevel(r.price)) extras.push(r.price);
-    }
-    if (extras.length) {
-      min = Math.min(min, ...extras);
-      max = Math.max(max, ...extras);
-    }
-  }
-
-  const pad = (max - min) * 0.06 || max * 0.05;
-  return [Math.max(0, min - pad), max + pad];
-}
-
-function formatChartPrice(value: number): string {
-  if (!Number.isFinite(value)) return "";
-  const abs = Math.abs(value);
-  if (abs >= 10_000) return value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
-  if (abs >= 100) return value.toFixed(1);
-  return value.toFixed(2);
+function priceLevelExtras(levels?: PriceLevels): number[] {
+  if (!levels) return [];
+  const extras: number[] = [];
+  if (levels.targetAnalyst) extras.push(levels.targetAnalyst.price);
+  if (levels.targetFundamental) extras.push(levels.targetFundamental.price);
+  for (const s of levels.support) extras.push(s.price);
+  for (const r of levels.resistance) extras.push(r.price);
+  return extras;
 }
 
 function Candlesticks({ data }: { data: OhlcPoint[] }) {
@@ -231,7 +196,7 @@ export function StockPriceChart({
   const levels = showPriceLevelsOnChart(timeframe) ? priceLevels : undefined;
 
   const yDomain = useMemo(
-    () => chartYDomain(points.map((p) => p.close), levels),
+    () => computeChartYDomain(points, { extras: priceLevelExtras(levels) }),
     [points, levels]
   );
 
