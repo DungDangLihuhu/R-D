@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -70,12 +70,36 @@ export function BenchmarkComparison({
 
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
+  const portfolioSignature = useMemo(() => {
+    const txSig = [...transactions]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(
+        (t) =>
+          `${t.id}:${t.date}:${t.type}:${t.symbol}:${t.quantity}:${t.price}:${t.fee}`
+      )
+      .join("|");
+    const priceSig = Object.keys(marketPrices)
+      .sort()
+      .map((k) => `${k}:${marketPrices[k]}`)
+      .join("|");
+    return `${txSig};;${priceSig}`;
+  }, [transactions, marketPrices]);
+
   const portfolioInput = useMemo<PortfolioBenchmarkInput>(
     () => ({ transactions, marketPrices }),
-    [transactions, marketPrices]
+    [portfolioSignature, transactions, marketPrices]
+  );
+
+  const curveSignature = useMemo(
+    () =>
+      curve.length > 0
+        ? `${curve[0].date}:${curve[curve.length - 1].date}:${curve.length}`
+        : "",
+    [curve]
   );
 
   const hasData = hasBenchmarkTradingData(transactions);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (!hasData) return;
@@ -89,21 +113,18 @@ export function BenchmarkComparison({
     if (!benchmarkWindow) return;
 
     const fetchFrom = extendBenchmarkFrom(benchmarkWindow.from);
+    const url = `/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`;
+    const requestId = ++requestIdRef.current;
 
-    let cancelled = false;
-    const startFetch = () => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-    };
-    const tid = globalThis.setTimeout(startFetch, 0);
+    setLoading(true);
+    setError(null);
 
     fetchJson<{ points?: { date: string; close: number }[]; error?: string }>(
-      `/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`,
+      url,
       { ttlMs: 15 * 60 * 1000 }
     )
       .then((data) => {
-        if (cancelled) return;
+        if (requestIdRef.current !== requestId) return;
         if (data.error) {
           setError(data.error);
           setComparison(null);
@@ -120,17 +141,13 @@ export function BenchmarkComparison({
         }
       })
       .catch(() => {
-        if (!cancelled) setError("Không tải được dữ liệu S&P 500");
+        if (requestIdRef.current !== requestId) return;
+        setError("Không tải được dữ liệu S&P 500");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (requestIdRef.current === requestId) setLoading(false);
       });
-
-    return () => {
-      cancelled = true;
-      globalThis.clearTimeout(tid);
-    };
-  }, [curve, transactions, range, portfolioInput, hasData]);
+  }, [curve, curveSignature, range, portfolioInput, portfolioSignature, hasData, transactions]);
 
   if (!hasData) {
     return (
@@ -180,7 +197,7 @@ export function BenchmarkComparison({
         </div>
       </div>
 
-      {loading && (
+      {loading && !comparison && (
         <p className="text-sm text-gray-500">Đang tải dữ liệu S&P 500...</p>
       )}
 
@@ -188,8 +205,11 @@ export function BenchmarkComparison({
         <p className="text-sm text-rose-600">{error}</p>
       )}
 
-      {comparison && !loading && (
-        <>
+      {comparison && (
+        <div className={loading ? "pointer-events-none opacity-60" : undefined}>
+          {loading && (
+            <p className="mb-2 text-xs text-gray-400">Đang cập nhật khoảng thời gian...</p>
+          )}
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
               label="Danh mục"
@@ -279,7 +299,7 @@ export function BenchmarkComparison({
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
