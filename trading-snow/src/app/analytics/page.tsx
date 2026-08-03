@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useMemo } from "react";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
 import { filterHiddenTransactions } from "@/lib/hidden-symbols";
@@ -36,11 +37,15 @@ const MonthlyPnlChart = dynamic(
 
 export default function AnalyticsPage() {
   const { stats, state, activePortfolioId, hiddenSymbols } = useApp();
-  const transactions = filterHiddenTransactions(
-    state.transactions,
-    activePortfolioId,
-    hiddenSymbols
-  ).filter((t) => t.portfolioId === activePortfolioId);
+  const transactions = useMemo(
+    () =>
+      filterHiddenTransactions(
+        state.transactions,
+        activePortfolioId,
+        hiddenSymbols
+      ).filter((t) => t.portfolioId === activePortfolioId),
+    [state.transactions, activePortfolioId, hiddenSymbols]
+  );
 
   return (
     <div className="space-y-6">
