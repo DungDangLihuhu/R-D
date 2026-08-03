@@ -32,13 +32,15 @@ function SessionBadge({
   const label = session === "pre" ? "Pre-market" : "After hours";
   if (changePercent == null || !Number.isFinite(changePercent)) {
     return (
-      <span className="ml-1 text-[10px] font-medium text-violet-600">
+      <span className="mt-0.5 block text-[10px] font-medium text-violet-600">
         ({label})
       </span>
     );
   }
   return (
-    <span className={`ml-1 text-[10px] font-semibold tabular-nums ${pnlClass(changePercent)}`}>
+    <span
+      className={`mt-0.5 block text-[10px] font-semibold tabular-nums whitespace-nowrap ${pnlClass(changePercent)}`}
+    >
       ({label} {formatPercent(changePercent)})
     </span>
   );
@@ -133,9 +135,9 @@ function HoldingRow({
     <button
       type="button"
       onClick={onEditStart}
-      className="mt-0.5 block w-full text-[11px] tabular-nums text-sky-600 hover:underline"
+      className="mx-auto mt-0.5 block w-full max-w-[7.5rem] text-center text-[11px] tabular-nums text-sky-600 hover:underline"
     >
-      {formatMoney(market)}/cp
+      <span className="block">{formatMoney(market)}/cp</span>
       <SessionBadge session={extendedSession} changePercent={extendedPct} />
     </button>
   );
@@ -220,10 +222,7 @@ function HoldingRow({
           <>
             <div className="my-2.5 border-t border-gray-100" />
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">
-                Hôm nay
-                <SessionBadge session={extendedSession} changePercent={extendedPct} />
-              </span>
+              <span className="text-gray-500">Hôm nay</span>
               <div className="text-right">
                 <span
                   className={`font-medium tabular-nums ${pnlClass(dailyChange)}`}
