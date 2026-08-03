@@ -667,7 +667,9 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
         earningsCalendar?: StockAnalysis["earningsUpcoming"];
       };
       if (data.earningsCalendar?.length) {
-        earningsUpcoming = data.earningsCalendar;
+        earningsUpcoming = data.earningsCalendar.sort((a, b) =>
+          a.date.localeCompare(b.date)
+        );
         break;
       }
     }
