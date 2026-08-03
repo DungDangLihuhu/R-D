@@ -1,4 +1,4 @@
-import type { ClosedTrade, Holding, Transaction } from "./types";
+import type { Transaction } from "./types";
 import type { HistoryPoint } from "./yahoo";
 import { downsampleMonthly } from "./format";
 
@@ -12,15 +12,11 @@ export interface ComparisonPoint {
 
 export interface ComparisonResult {
   points: ComparisonPoint[];
-  /** (lợi nhuận ròng / tổng cost) × 100 */
+  /** Lợi nhuận ròng đang hold / cost CP đang hold × 100 */
   portfolioReturn: number;
   sp500Return: number;
   outperformance: number;
-  /** TB % lãi các lệnh đã đóng trong khoảng */
-  closedAvgReturn: number | null;
-  /** % lãi vị thế đang hold: unrealized / cost × 100 */
-  holdReturn: number | null;
-  totalCost: number;
+  holdingsCost: number;
   from: string;
   to: string;
   clampedToHistory: boolean;
@@ -151,86 +147,25 @@ function pickBenchmarkSeries(
 }
 
 export interface PortfolioBenchmarkInput {
-  closedTrades: ClosedTrade[];
-  holdings: Holding[];
-  realizedPnl: number;
   unrealizedPnl: number;
   holdingsCost: number;
 }
 
-function computePortfolioMetrics(
-  input: PortfolioBenchmarkInput,
-  from: string,
-  to: string
-): {
-  closedAvgReturn: number | null;
-  holdReturn: number | null;
+function computePortfolioReturn(input: PortfolioBenchmarkInput): {
   portfolioReturn: number;
-  totalCost: number;
+  holdingsCost: number;
 } | null {
-  const closedInRange = input.closedTrades.filter((t) => {
-    const d = t.date.slice(0, 10);
-    return d >= from && d <= to;
-  });
+  if (input.holdingsCost <= 0) return null;
 
-  const closedAvgReturn =
-    closedInRange.length > 0
-      ? closedInRange.reduce((sum, t) => sum + t.pnlPercent, 0) /
-        closedInRange.length
-      : null;
-
-  const holdReturn =
-    input.holdingsCost > 0
-      ? (input.unrealizedPnl / input.holdingsCost) * 100
-      : null;
-
-  const closedCost = closedInRange.reduce((sum, t) => sum + t.costBasis, 0);
-  const realizedInRange = closedInRange.reduce((sum, t) => sum + t.pnl, 0);
-  const totalCost = closedCost + input.holdingsCost;
-  const totalPnl = realizedInRange + input.unrealizedPnl;
-
-  if (totalCost > 0) {
-    return {
-      closedAvgReturn,
-      holdReturn,
-      portfolioReturn: (totalPnl / totalCost) * 100,
-      totalCost,
-    };
-  }
-
-  if (closedAvgReturn !== null && holdReturn !== null) {
-    return {
-      closedAvgReturn,
-      holdReturn,
-      portfolioReturn: (closedAvgReturn + holdReturn) / 2,
-      totalCost: 0,
-    };
-  }
-
-  if (closedAvgReturn !== null) {
-    return {
-      closedAvgReturn,
-      holdReturn,
-      portfolioReturn: closedAvgReturn,
-      totalCost: 0,
-    };
-  }
-
-  if (holdReturn !== null) {
-    return {
-      closedAvgReturn,
-      holdReturn,
-      portfolioReturn: holdReturn,
-      totalCost: input.holdingsCost,
-    };
-  }
-
-  return null;
+  return {
+    portfolioReturn: (input.unrealizedPnl / input.holdingsCost) * 100,
+    holdingsCost: input.holdingsCost,
+  };
 }
 
 /**
  * S&P 500: % tăng chỉ số theo timeframe.
- * Portfolio: TB % lệnh đóng + % lãi hold (lợi nhuận ròng / cost × 100).
+ * Danh mục: lợi nhuận ròng đang hold / cost CP đang hold × 100.
  */
 export function buildBenchmarkComparison(
   portfolio: PortfolioBenchmarkInput,
@@ -239,11 +174,7 @@ export function buildBenchmarkComparison(
 ): ComparisonResult | null {
   if (benchmark.length < 1) return null;
 
-  const metrics = computePortfolioMetrics(
-    portfolio,
-    window.from,
-    window.to
-  );
+  const metrics = computePortfolioReturn(portfolio);
   if (!metrics) return null;
 
   const benchInRange = pickBenchmarkSeries(
@@ -273,9 +204,7 @@ export function buildBenchmarkComparison(
     portfolioReturn: metrics.portfolioReturn,
     sp500Return,
     outperformance: metrics.portfolioReturn - sp500Return,
-    closedAvgReturn: metrics.closedAvgReturn,
-    holdReturn: metrics.holdReturn,
-    totalCost: metrics.totalCost,
+    holdingsCost: metrics.holdingsCost,
     from: benchInRange[0].date,
     to: window.to,
     clampedToHistory: window.clampedToHistory ?? false,
