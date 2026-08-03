@@ -20,11 +20,13 @@ export interface SmcStructureLine {
   price: number;
   type: "bos" | "choch";
   direction: "bullish" | "bearish";
+  scope: "swing" | "internal";
 }
 
 export interface OrderBlock {
   startIndex: number;
   endIndex: number;
+  extendIndex: number;
   high: number;
   low: number;
   type: "bullish" | "bearish";

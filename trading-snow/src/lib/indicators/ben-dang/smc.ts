@@ -8,9 +8,18 @@ import type {
   SmcStructureLine,
   SwingPoint,
 } from "./types";
-import { atr, bodySize, findPivotHighs, findPivotLows, isBullish } from "./utils";
+import {
+  atr,
+  findPivotHighs,
+  findPivotLows,
+  isBullish,
+  isPivotHighAt,
+  isPivotLowAt,
+} from "./utils";
 
-export function computeSmc(bars: Bar[], swingLength = 5): SmcResult {
+const INTERNAL_SWING = 5;
+
+export function computeSmc(bars: Bar[], swingLength = 50): SmcResult {
   const empty: SmcResult = {
     structureLines: [],
     orderBlocks: [],
@@ -21,13 +30,20 @@ export function computeSmc(bars: Bar[], swingLength = 5): SmcResult {
   };
   if (bars.length < swingLength * 2 + 5) return empty;
 
-  const atrValues = atr(bars);
-  const swingHighs = findPivotHighs(bars, swingLength, swingLength);
-  const swingLows = findPivotLows(bars, swingLength, swingLength);
+  const swingLen = Math.max(5, Math.min(swingLength, Math.floor(bars.length / 3)));
+  const swingHighs = findPivotHighs(bars, swingLen, swingLen);
+  const swingLows = findPivotLows(bars, swingLen, swingLen);
 
-  const structureLines = detectStructure(bars, swingHighs, swingLows);
-  const orderBlocks = detectOrderBlocks(bars, atrValues);
+  const swingStructure = detectStructureBreaks(bars, swingLen, "swing");
+  const internalStructure =
+    swingLen > INTERNAL_SWING
+      ? detectStructureBreaks(bars, INTERNAL_SWING, "internal")
+      : [];
+
+  const structureLines = [...swingStructure, ...internalStructure];
+  const orderBlocks = detectOrderBlocks(bars, swingStructure);
   const fairValueGaps = detectFairValueGaps(bars);
+  const atrValues = atr(bars);
   const equalLevels = detectEqualLevels(swingHighs, swingLows, atrValues);
   const premiumDiscount = detectPremiumDiscount(swingHighs, swingLows);
 
@@ -42,108 +58,132 @@ export function computeSmc(bars: Bar[], swingLength = 5): SmcResult {
   };
 }
 
-function detectStructure(
+/** BOS/CHoCH when price breaks prior swing level (ICT-style wick break). */
+function detectStructureBreaks(
   bars: Bar[],
-  swingHighs: SwingPoint[],
-  swingLows: SwingPoint[]
+  swingLen: number,
+  scope: "swing" | "internal"
 ): SmcStructureLine[] {
   const lines: SmcStructureLine[] = [];
-  const swings = [
-    ...swingHighs.map((s) => ({ ...s, kind: "high" as const })),
-    ...swingLows.map((s) => ({ ...s, kind: "low" as const })),
-  ].sort((a, b) => a.index - b.index);
+  let trend: -1 | 0 | 1 = 0;
+  let lastSwingHigh: SwingPoint | null = null;
+  let lastSwingLow: SwingPoint | null = null;
 
-  if (swings.length < 2) return lines;
-  if (!swingHighs.length || !swingLows.length) return lines;
-
-  let trend: "bullish" | "bearish" | null = null;
-  let lastHigh: SwingPoint | undefined = swingHighs[0];
-  let lastLow: SwingPoint | undefined = swingLows[0];
-
-  for (let i = 1; i < swings.length; i++) {
-    const s = swings[i];
-    if (s.kind === "high") {
-      if (lastHigh && s.price > lastHigh.price) {
-        const type = trend === "bearish" ? "choch" : "bos";
-        lines.push({
-          fromIndex: lastHigh.index,
-          toIndex: s.index,
-          price: lastHigh.price,
-          type,
-          direction: "bullish",
-        });
-        trend = "bullish";
-      } else if (lastHigh && s.price < lastHigh.price && trend === "bullish") {
-        lines.push({
-          fromIndex: lastHigh.index,
-          toIndex: s.index,
-          price: lastHigh.price,
-          type: "choch",
-          direction: "bearish",
-        });
-        trend = "bearish";
+  for (let i = 1; i < bars.length; i++) {
+    const pivotIdx = i - swingLen;
+    if (pivotIdx >= swingLen && pivotIdx < bars.length - swingLen) {
+      if (isPivotHighAt(bars, pivotIdx, swingLen)) {
+        lastSwingHigh = { index: pivotIdx, price: bars[pivotIdx].high };
       }
-      lastHigh = s;
-    } else {
-      if (lastLow && s.price < lastLow.price) {
-        const type = trend === "bullish" ? "choch" : "bos";
-        lines.push({
-          fromIndex: lastLow.index,
-          toIndex: s.index,
-          price: lastLow.price,
-          type,
-          direction: "bearish",
-        });
-        trend = "bearish";
-      } else if (lastLow && s.price > lastLow.price && trend === "bearish") {
-        lines.push({
-          fromIndex: lastLow.index,
-          toIndex: s.index,
-          price: lastLow.price,
-          type: "choch",
-          direction: "bullish",
-        });
-        trend = "bullish";
+      if (isPivotLowAt(bars, pivotIdx, swingLen)) {
+        lastSwingLow = { index: pivotIdx, price: bars[pivotIdx].low };
       }
-      lastLow = s;
     }
-  }
 
-  return lines.slice(-12);
-}
-
-function detectOrderBlocks(bars: Bar[], atrValues: number[]): OrderBlock[] {
-  const blocks: OrderBlock[] = [];
-  const minBody = 1.2;
-
-  for (let i = 2; i < bars.length; i++) {
     const bar = bars[i];
     const prev = bars[i - 1];
-    const atrVal = atrValues[i] || atrValues[i - 1] || 1;
-    const displacement = bodySize(bar) > atrVal * minBody;
 
-    if (!displacement) continue;
+    if (
+      lastSwingHigh &&
+      bar.high > lastSwingHigh.price &&
+      prev.high <= lastSwingHigh.price
+    ) {
+      const type: "bos" | "choch" = trend === -1 ? "choch" : "bos";
+      lines.push({
+        fromIndex: lastSwingHigh.index,
+        toIndex: i,
+        price: lastSwingHigh.price,
+        type,
+        direction: "bullish",
+        scope,
+      });
+      trend = 1;
+      lastSwingHigh = { index: i, price: bar.high };
+    }
 
-    if (isBullish(bar) && !isBullish(prev)) {
-      blocks.push({
-        startIndex: i - 1,
-        endIndex: i,
-        high: prev.high,
-        low: prev.low,
-        type: "bullish",
+    if (
+      lastSwingLow &&
+      bar.low < lastSwingLow.price &&
+      prev.low >= lastSwingLow.price
+    ) {
+      const type: "bos" | "choch" = trend === 1 ? "choch" : "bos";
+      lines.push({
+        fromIndex: lastSwingLow.index,
+        toIndex: i,
+        price: lastSwingLow.price,
+        type,
+        direction: "bearish",
+        scope,
       });
-    } else if (!isBullish(bar) && isBullish(prev)) {
-      blocks.push({
-        startIndex: i - 1,
-        endIndex: i,
-        high: prev.high,
-        low: prev.low,
-        type: "bearish",
-      });
+      trend = -1;
+      lastSwingLow = { index: i, price: bar.low };
     }
   }
 
-  return blocks.slice(-8);
+  const limit = scope === "swing" ? 10 : 14;
+  return lines.slice(-limit);
+}
+
+function detectOrderBlocks(bars: Bar[], breaks: SmcStructureLine[]): OrderBlock[] {
+  const blocks: OrderBlock[] = [];
+
+  for (const brk of breaks) {
+    const ob = findOrderBlockBeforeBreak(bars, brk.toIndex, brk.direction);
+    if (!ob) continue;
+    const extendIndex = findMitigationIndex(bars, ob, brk.toIndex);
+    blocks.push({
+      ...ob,
+      endIndex: brk.toIndex,
+      extendIndex,
+    });
+  }
+
+  const unique = new Map<string, OrderBlock>();
+  for (const b of blocks) {
+    const key = `${b.type}-${b.startIndex}`;
+    unique.set(key, b);
+  }
+  return [...unique.values()].slice(-6);
+}
+
+function findOrderBlockBeforeBreak(
+  bars: Bar[],
+  breakIndex: number,
+  direction: "bullish" | "bearish"
+): Omit<OrderBlock, "endIndex" | "extendIndex"> | null {
+  for (let i = breakIndex - 1; i >= Math.max(0, breakIndex - 20); i--) {
+    const bar = bars[i];
+    if (direction === "bullish" && !isBullish(bar)) {
+      return {
+        startIndex: i,
+        high: bar.high,
+        low: bar.low,
+        type: "bullish",
+      };
+    }
+    if (direction === "bearish" && isBullish(bar)) {
+      return {
+        startIndex: i,
+        high: bar.high,
+        low: bar.low,
+        type: "bearish",
+      };
+    }
+  }
+  return null;
+}
+
+function findMitigationIndex(
+  bars: Bar[],
+  ob: Pick<OrderBlock, "high" | "low" | "type" | "startIndex">,
+  fromIndex: number
+): number {
+  for (let i = fromIndex + 1; i < bars.length; i++) {
+    const bar = bars[i];
+    if (ob.type === "bullish" && bar.low < ob.low) return i;
+    if (ob.type === "bearish" && bar.high > ob.high) return i;
+  }
+  return bars.length - 1;
 }
 
 function detectFairValueGaps(bars: Bar[]): FairValueGap[] {
@@ -182,32 +222,33 @@ function detectEqualLevels(
   atrValues: number[]
 ): EqualLevel[] {
   const levels: EqualLevel[] = [];
-  const avgAtr = atrValues.filter((v) => v > 0).reduce((a, b) => a + b, 0) / (atrValues.length || 1);
-  const tolerance = avgAtr * 0.15;
+  const avgAtr =
+    atrValues.filter((v) => v > 0).reduce((a, b) => a + b, 0) / (atrValues.length || 1);
+  const tolerance = avgAtr * 0.1;
 
-  for (let i = 0; i < swingHighs.length - 1; i++) {
-    for (let j = i + 1; j < swingHighs.length; j++) {
-      if (Math.abs(swingHighs[i].price - swingHighs[j].price) <= tolerance) {
-        levels.push({
-          index1: swingHighs[i].index,
-          index2: swingHighs[j].index,
-          price: (swingHighs[i].price + swingHighs[j].price) / 2,
-          type: "eqh",
-        });
-      }
+  for (let i = 1; i < swingHighs.length; i++) {
+    const a = swingHighs[i - 1];
+    const b = swingHighs[i];
+    if (Math.abs(a.price - b.price) <= tolerance) {
+      levels.push({
+        index1: a.index,
+        index2: b.index,
+        price: (a.price + b.price) / 2,
+        type: "eqh",
+      });
     }
   }
 
-  for (let i = 0; i < swingLows.length - 1; i++) {
-    for (let j = i + 1; j < swingLows.length; j++) {
-      if (Math.abs(swingLows[i].price - swingLows[j].price) <= tolerance) {
-        levels.push({
-          index1: swingLows[i].index,
-          index2: swingLows[j].index,
-          price: (swingLows[i].price + swingLows[j].price) / 2,
-          type: "eql",
-        });
-      }
+  for (let i = 1; i < swingLows.length; i++) {
+    const a = swingLows[i - 1];
+    const b = swingLows[i];
+    if (Math.abs(a.price - b.price) <= tolerance) {
+      levels.push({
+        index1: a.index,
+        index2: b.index,
+        price: (a.price + b.price) / 2,
+        type: "eql",
+      });
     }
   }
 
@@ -220,20 +261,17 @@ function detectPremiumDiscount(
 ): PremiumDiscountZone | undefined {
   if (!swingHighs.length || !swingLows.length) return undefined;
 
-  const recentHighs = swingHighs.slice(-3);
-  const recentLows = swingLows.slice(-3);
-  const top = Math.max(...recentHighs.map((s) => s.price));
-  const bottom = Math.min(...recentLows.map((s) => s.price));
+  const lastHigh = swingHighs[swingHighs.length - 1];
+  const lastLow = swingLows[swingLows.length - 1];
+  const top = lastHigh.price;
+  const bottom = lastLow.price;
   if (top <= bottom) return undefined;
-
-  const swingHigh = recentHighs.find((s) => s.price === top)!;
-  const swingLow = recentLows.find((s) => s.price === bottom)!;
 
   return {
     top,
     bottom,
     equilibrium: (top + bottom) / 2,
-    swingHighIndex: swingHigh.index,
-    swingLowIndex: swingLow.index,
+    swingHighIndex: lastHigh.index,
+    swingLowIndex: lastLow.index,
   };
 }

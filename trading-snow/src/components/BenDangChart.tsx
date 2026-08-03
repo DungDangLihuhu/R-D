@@ -210,7 +210,7 @@ function IndicatorOverlays({
       {layers.smc &&
         indicators.smc.orderBlocks.map((ob, i) => {
           const x1 = xAt(ob.startIndex);
-          const x2 = xAt(ob.endIndex) ?? lastX;
+          const x2 = xAt(ob.extendIndex) ?? plotRight;
           const yTop = yAt(ob.high);
           const yBot = yAt(ob.low);
           if (x1 == null || yTop == null || yBot == null) return null;
@@ -219,7 +219,7 @@ function IndicatorOverlays({
               key={`ob-${i}`}
               x={x1}
               y={Math.min(yTop, yBot)}
-              width={Math.max((x2 ?? x1) - x1 + 20, 6)}
+              width={Math.max(x2 - x1, 6)}
               height={Math.abs(yBot - yTop)}
               fill={ob.type === "bullish" ? COLORS.bullishOb : COLORS.bearishOb}
               stroke={ob.type === "bullish" ? COLORS.candleUp : COLORS.candleDown}
@@ -234,28 +234,31 @@ function IndicatorOverlays({
           const x2 = xAt(line.toIndex);
           const y = yAt(line.price);
           if (x1 == null || x2 == null || y == null) return null;
+          const isInternal = line.scope === "internal";
           const color = line.type === "bos" ? COLORS.bos : COLORS.choch;
           return (
-            <g key={`struct-${i}`}>
+            <g key={`struct-${i}`} opacity={isInternal ? 0.55 : 1}>
               <line
                 x1={x1}
                 y1={y}
                 x2={x2}
                 y2={y}
                 stroke={color}
-                strokeWidth={1.5}
-                strokeDasharray={line.type === "choch" ? "6 3" : undefined}
+                strokeWidth={isInternal ? 1 : 1.5}
+                strokeDasharray={line.type === "choch" || isInternal ? "6 3" : undefined}
               />
-              <text
-                x={(x1 + x2) / 2}
-                y={y - 4}
-                textAnchor="middle"
-                fontSize={9}
-                fill={color}
-                fontWeight={600}
-              >
-                {line.type === "bos" ? "BOS" : "CHoCH"}
-              </text>
+              {!isInternal && (
+                <text
+                  x={(x1 + x2) / 2}
+                  y={y - 4}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fill={color}
+                  fontWeight={600}
+                >
+                  {line.type === "bos" ? "BOS" : "CHoCH"}
+                </text>
+              )}
             </g>
           );
         })}
