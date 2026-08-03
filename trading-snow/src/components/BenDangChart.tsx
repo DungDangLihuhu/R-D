@@ -577,7 +577,7 @@ export function BenDangChart({
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="font-semibold">Ben Dang Indicators</h3>
+          <h3 className="font-semibold">Phân tích kĩ thuật</h3>
           <p className="text-xs text-gray-500">SMC · Hỗ trợ/Kháng cự · Wyckoff</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
