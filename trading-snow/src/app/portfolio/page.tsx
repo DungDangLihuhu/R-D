@@ -31,13 +31,13 @@ export default function PortfolioPage() {
         </div>
       )}
       <div className="grid gap-4 sm:grid-cols-3">
-        <Mini label="Giá trị CP" value={formatMoney(
+        <Mini label="Tổng giá trị" value={formatMoney(
           stats.holdings.reduce(
             (s, h) => s + h.quantity * (h.marketPrice ?? h.avgCost),
             0
           )
         )} />
-        <Mini label="Tiền mặt" value={formatMoney(stats.cashBalance)} />
+        <Mini label="Tiền vốn" value={formatMoney(stats.cashBalance)} />
         <Mini label="Lợi nhuận ròng" value={formatMoney(stats.totalProfit)} />
       </div>
       <HoldingsTable />
