@@ -6,7 +6,10 @@ const YAHOO_HEADERS = {
   Accept: "application/json,text/plain,*/*",
 };
 
-export const CHART_TIMEFRAMES = ["1h", "4h", "1d", "1w", "1m", "1y", "5y", "all"] as const;
+/** All chart timeframes use daily (1D) candles; range controls the window. */
+const CHART_INTERVAL = "1d";
+
+export const CHART_TIMEFRAMES = ["1h", "4h", "1d", "1w", "1m", "all"] as const;
 export type ChartTimeframe = (typeof CHART_TIMEFRAMES)[number];
 export type ChartStyle = "line" | "candle";
 
@@ -21,20 +24,18 @@ export interface OhlcPoint {
 }
 
 interface TimeframeSpec {
-  interval: string;
   range: string;
-  aggregate4h?: boolean;
+  /** Yahoo lacks some ranges (e.g. 2w) — trim after fetch. */
+  trimDays?: number;
 }
 
 const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
-  "1h": { interval: "60m", range: "5d" },
-  "4h": { interval: "60m", range: "1mo", aggregate4h: true },
-  "1d": { interval: "1d", range: "3mo" },
-  "1w": { interval: "1wk", range: "2y" },
-  "1m": { interval: "1d", range: "3mo" },
-  "1y": { interval: "1d", range: "1y" },
-  "5y": { interval: "1wk", range: "5y" },
-  all: { interval: "1mo", range: "max" },
+  "1h": { range: "1mo", trimDays: 14 },
+  "4h": { range: "2mo" },
+  "1d": { range: "6mo" },
+  "1w": { range: "2y" },
+  "1m": { range: "5y" },
+  all: { range: "max" },
 };
 
 export function isChartTimeframe(value: string): value is ChartTimeframe {
@@ -42,15 +43,7 @@ export function isChartTimeframe(value: string): value is ChartTimeframe {
 }
 
 function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
-  if (timeframe === "1h" || timeframe === "4h") {
-    return date.toLocaleString("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-  if (timeframe === "1d" || timeframe === "1m") {
+  if (timeframe === "1h" || timeframe === "4h" || timeframe === "1d") {
     return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
   }
   if (timeframe === "1w") {
@@ -60,39 +53,17 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
       year: "2-digit",
     });
   }
-  if (timeframe === "5y" || timeframe === "all" || timeframe === "1y") {
+  if (timeframe === "1m" || timeframe === "all") {
     return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
 }
 
-function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {
-  if (!points.length) return [];
-  const bucketMs = 4 * 60 * 60 * 1000;
-  const buckets = new Map<number, OhlcPoint[]>();
-
-  for (const p of points) {
-    const t = new Date(p.date).getTime();
-    const key = Math.floor(t / bucketMs) * bucketMs;
-    const arr = buckets.get(key) ?? [];
-    arr.push(p);
-    buckets.set(key, arr);
-  }
-
-  return [...buckets.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([key, bars]) => {
-      const date = new Date(key);
-      return {
-        date: date.toISOString(),
-        label: formatChartLabel(date, "4h"),
-        open: bars[0].open,
-        high: Math.max(...bars.map((b) => b.high)),
-        low: Math.min(...bars.map((b) => b.low)),
-        close: bars[bars.length - 1].close,
-        volume: bars.reduce((sum, b) => sum + b.volume, 0),
-      };
-    });
+function trimToDays(points: OhlcPoint[], days: number): OhlcPoint[] {
+  if (!points.length || days <= 0) return points;
+  const last = new Date(points[points.length - 1].date).getTime();
+  const cutoff = last - days * 24 * 60 * 60 * 1000;
+  return points.filter((p) => new Date(p.date).getTime() >= cutoff);
 }
 
 function parseYahooOhlc(
@@ -155,7 +126,7 @@ async function fetchOhlcOne(
   timeframe: ChartTimeframe
 ): Promise<OhlcPoint[]> {
   const spec = TIMEFRAME_SPECS[timeframe];
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=${spec.interval}&range=${spec.range}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahooSymbol)}?interval=${CHART_INTERVAL}&range=${spec.range}`;
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 300 } });
   if (!res.ok) return [];
 
@@ -164,8 +135,8 @@ async function fetchOhlcOne(
   if (!result) return [];
 
   let points = parseYahooOhlc(result, timeframe);
-  if (spec.aggregate4h) {
-    points = aggregateTo4h(points);
+  if (spec.trimDays) {
+    points = trimToDays(points, spec.trimDays);
   }
   return points;
 }
@@ -184,6 +155,6 @@ export async function fetchChartHistory(
   return [];
 }
 
-export function showPriceLevelsOnChart(timeframe: ChartTimeframe): boolean {
-  return timeframe !== "1h" && timeframe !== "4h";
+export function showPriceLevelsOnChart(_timeframe: ChartTimeframe): boolean {
+  return true;
 }

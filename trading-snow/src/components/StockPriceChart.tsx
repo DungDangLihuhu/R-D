@@ -39,8 +39,6 @@ const TIMEFRAME_LABELS: Record<ChartTimeframe, string> = {
   "1d": "1D",
   "1w": "1W",
   "1m": "1M",
-  "1y": "1Y",
-  "5y": "5Y",
   all: "All",
 };
 
@@ -147,7 +145,7 @@ export function StockPriceChart({
   currency: string;
   priceLevels?: PriceLevels;
 }) {
-  const [timeframe, setTimeframe] = useState<ChartTimeframe>("1y");
+  const [timeframe, setTimeframe] = useState<ChartTimeframe>("1d");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("line");
   const [points, setPoints] = useState<OhlcPoint[]>([]);
   const [loading, setLoading] = useState(true);
