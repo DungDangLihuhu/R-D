@@ -31,11 +31,15 @@ export interface Holding {
   marketPrice?: number;
 }
 
+export type MarketSession = "pre" | "regular" | "post" | "closed";
+
 export interface MarketQuote {
   price: number;
   change: number;
   changePercent: number;
   name?: string;
+  /** pre / post / regular / closed — extended hours when pre or post */
+  marketSession?: MarketSession;
 }
 
 export interface ClosedTrade {
