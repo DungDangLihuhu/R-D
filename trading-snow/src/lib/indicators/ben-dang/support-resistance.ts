@@ -1,58 +1,17 @@
 import type { Bar, SrLevel, SrResult } from "./types";
 import { atr, clusterPrices, findPivotHighs, findPivotLows } from "./utils";
 
-function dedupeLevels(levels: SrLevel[]): SrLevel[] {
-  const unique = new Map<number, SrLevel>();
-  for (const l of levels) {
-    const key = Math.round(l.price * 100);
-    const existing = unique.get(key);
-    if (!existing || l.touches > existing.touches) {
-      unique.set(key, l);
-    }
-  }
-  return [...unique.values()];
-}
-
-function clustersToLevels(
-  clusters: { price: number; count: number }[],
-  origin: "high" | "low",
-  currentPrice: number,
-  minGap: number
-): SrLevel[] {
-  return clusters
-    .map((c): SrLevel => ({
-      price: c.price,
-      type:
-        origin === "high"
-          ? c.price >= currentPrice
-            ? "resistance"
-            : "support"
-          : c.price <= currentPrice
-            ? "support"
-            : "resistance",
-      strength: Math.min(c.count / 3, 1),
-      touches: c.count,
-    }))
-    .filter((l) => Math.abs(l.price - currentPrice) >= minGap);
-}
-
-/** Nearest levels first (TradingView-style), stronger clusters as tie-break. */
-function pickNearest(
-  levels: SrLevel[],
+function toLevel(
+  price: number,
   type: SrLevel["type"],
-  currentPrice: number,
-  limit: number
-): SrLevel[] {
-  return levels
-    .filter((l) => l.type === type)
-    .sort((a, b) => {
-      const distA = Math.abs(a.price - currentPrice);
-      const distB = Math.abs(b.price - currentPrice);
-      if (distA !== distB) return distA - distB;
-      if (b.touches !== a.touches) return b.touches - a.touches;
-      return type === "support" ? b.price - a.price : a.price - b.price;
-    })
-    .slice(0, limit);
+  touches: number
+): SrLevel {
+  return {
+    price,
+    type,
+    strength: Math.min(touches / 3, 1),
+    touches,
+  };
 }
 
 export function computeSupportResistance(
@@ -65,10 +24,13 @@ export function computeSupportResistance(
 
   const atrValues = atr(bars);
   const lastAtr = atrValues[atrValues.length - 1] || 1;
-  const tolerance = lastAtr * 0.4;
+  const tolerance = lastAtr * 0.35;
 
   const pivotHighs = findPivotHighs(bars, effectivePeriod, effectivePeriod);
   const pivotLows = findPivotLows(bars, effectivePeriod, effectivePeriod);
+  const currentPrice = bars[bars.length - 1].close;
+  const minGap = Math.max(lastAtr * 0.08, currentPrice * 0.0008);
+  const perSide = Math.max(1, Math.ceil(maxLevels / 2));
 
   const resistanceClusters = clusterPrices(
     pivotHighs.map((p) => p.price),
@@ -79,17 +41,33 @@ export function computeSupportResistance(
     tolerance
   );
 
-  const currentPrice = bars[bars.length - 1].close;
-  const minGap = Math.max(lastAtr * 0.1, currentPrice * 0.001);
-  const perSide = Math.max(1, Math.ceil(maxLevels / 2));
+  const resistances = resistanceClusters
+    .map((c) => toLevel(c.price, "resistance", c.count))
+    .filter((l) => l.price > currentPrice + minGap)
+    .sort((a, b) => a.price - b.price)
+    .slice(0, perSide);
 
-  const merged = dedupeLevels([
-    ...clustersToLevels(resistanceClusters, "high", currentPrice, minGap),
-    ...clustersToLevels(supportClusters, "low", currentPrice, minGap),
-  ]);
+  const supports = supportClusters
+    .map((c) => toLevel(c.price, "support", c.count))
+    .filter((l) => l.price < currentPrice - minGap)
+    .sort((a, b) => b.price - a.price)
+    .slice(0, perSide);
 
-  const supports = pickNearest(merged, "support", currentPrice, perSide);
-  const resistances = pickNearest(merged, "resistance", currentPrice, perSide);
+  if (!resistances.length) {
+    const fallback = resistanceClusters
+      .map((c) => toLevel(c.price, "resistance", c.count))
+      .sort((a, b) => Math.abs(a.price - currentPrice) - Math.abs(b.price - currentPrice))
+      .slice(0, 1);
+    resistances.push(...fallback);
+  }
+
+  if (!supports.length) {
+    const fallback = supportClusters
+      .map((c) => toLevel(c.price, "support", c.count))
+      .sort((a, b) => Math.abs(a.price - currentPrice) - Math.abs(b.price - currentPrice))
+      .slice(0, 1);
+    supports.push(...fallback);
+  }
 
   return {
     levels: [
