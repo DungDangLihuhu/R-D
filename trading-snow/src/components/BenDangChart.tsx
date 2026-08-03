@@ -30,13 +30,13 @@ const TICK = "#6b7280";
 const COLORS = {
   candleUp: "#10b981",
   candleDown: "#ef4444",
-  premium: "rgba(239, 68, 68, 0.12)",
-  discount: "rgba(16, 185, 129, 0.12)",
+  premium: "rgba(239, 68, 68, 0.24)",
+  premiumBorder: "rgba(239, 68, 68, 0.45)",
+  discount: "rgba(16, 185, 129, 0.24)",
+  discountBorder: "rgba(16, 185, 129, 0.45)",
   equilibrium: "#8b5cf6",
   support: "#10b981",
   resistance: "#ef4444",
-  wyckoffRange: "rgba(59, 130, 246, 0.08)",
-  wyckoffEvent: "#6366f1",
 } as const;
 
 const TIMEFRAME_LABELS: Record<ChartTimeframe, string> = {
@@ -113,178 +113,120 @@ function Candlesticks({ data }: { data: OhlcPoint[] }) {
   );
 }
 
-function IndicatorOverlays({
-  data,
-  indicators,
-  layers,
+function PremiumDiscountZones({
+  zone,
+  visible,
 }: {
-  data: OhlcPoint[];
-  indicators: BenDangIndicators;
-  layers: BenDangLayers;
+  zone?: BenDangIndicators["smc"]["premiumDiscount"];
+  visible: boolean;
 }) {
-  const xScale = useXAxisScale();
   const yScale = useYAxisScale();
   const plotArea = usePlotArea();
 
-  if (!xScale || !yScale || !data.length) return null;
+  if (!visible || !zone || !yScale || !plotArea) return null;
 
-  const dateAt = (index: number) => data[index]?.date;
-  const xAt = (index: number) => {
-    const d = dateAt(index);
-    return d != null ? xScale(d, { position: "middle" }) : null;
-  };
-  const yAt = (price: number) => yScale(price);
+  const yTop = yScale(zone.top);
+  const yBot = yScale(zone.bottom);
+  const yEq = yScale(zone.equilibrium);
+  if (yTop == null || yBot == null || yEq == null) return null;
 
-  const lastX = plotArea ? plotArea.x + plotArea.width : 0;
-
-  const plotRight = plotArea ? plotArea.x + plotArea.width : lastX;
+  const x = plotArea.x;
+  const width = plotArea.width;
+  const premiumY = Math.min(yTop, yEq);
+  const premiumH = Math.max(Math.abs(yEq - yTop), 2);
+  const discountY = Math.min(yEq, yBot);
+  const discountH = Math.max(Math.abs(yBot - yEq), 2);
 
   return (
-    <g className="ben-dang-overlays">
-      {layers.smc && indicators.smc.premiumDiscount && (
-        <g>
-          {(() => {
-            const z = indicators.smc.premiumDiscount!;
-            const x1 = Math.min(xAt(z.swingLowIndex) ?? plotArea?.x ?? 0, xAt(z.swingHighIndex) ?? plotArea?.x ?? 0);
-            const yTop = yAt(z.top);
-            const yBot = yAt(z.bottom);
-            const yEq = yAt(z.equilibrium);
-            if (yTop == null || yBot == null || yEq == null) return null;
-            const rectW = Math.max(plotRight - x1, 0);
-            const premiumY = Math.min(yTop, yEq);
-            const premiumH = Math.abs(yEq - yTop);
-            const discountY = Math.min(yEq, yBot);
-            const discountH = Math.abs(yBot - yEq);
-            const labelX = x1 + 6;
-            return (
-              <>
-                <rect
-                  x={x1}
-                  y={premiumY}
-                  width={rectW}
-                  height={premiumH}
-                  fill={COLORS.premium}
-                  stroke="none"
-                />
-                <rect
-                  x={x1}
-                  y={discountY}
-                  width={rectW}
-                  height={discountH}
-                  fill={COLORS.discount}
-                  stroke="none"
-                />
-                <line
-                  x1={x1}
-                  y1={yEq}
-                  x2={plotRight}
-                  y2={yEq}
-                  stroke={COLORS.equilibrium}
-                  strokeDasharray="4 4"
-                  strokeWidth={1}
-                />
-                <text
-                  x={labelX}
-                  y={premiumY + 12}
-                  fontSize={9}
-                  fill="#dc2626"
-                  fontWeight={600}
-                >
-                  Premium
-                </text>
-                <text
-                  x={labelX}
-                  y={discountY + discountH - 4}
-                  fontSize={9}
-                  fill="#059669"
-                  fontWeight={600}
-                >
-                  Discount
-                </text>
-              </>
-            );
-          })()}
-        </g>
-      )}
+    <g className="premium-discount-zones">
+      <rect
+        x={x}
+        y={premiumY}
+        width={width}
+        height={premiumH}
+        fill={COLORS.premium}
+        stroke={COLORS.premiumBorder}
+        strokeWidth={1}
+      />
+      <rect
+        x={x}
+        y={discountY}
+        width={width}
+        height={discountH}
+        fill={COLORS.discount}
+        stroke={COLORS.discountBorder}
+        strokeWidth={1}
+      />
+      <line
+        x1={x}
+        y1={yEq}
+        x2={x + width}
+        y2={yEq}
+        stroke={COLORS.equilibrium}
+        strokeDasharray="5 4"
+        strokeWidth={1.5}
+      />
+      <text x={x + 8} y={premiumY + 14} fontSize={10} fill="#b91c1c" fontWeight={700}>
+        Premium
+      </text>
+      <text
+        x={x + 8}
+        y={discountY + discountH - 6}
+        fontSize={10}
+        fill="#047857"
+        fontWeight={700}
+      >
+        Discount
+      </text>
+    </g>
+  );
+}
 
-      {layers.sr &&
-        indicators.sr.levels.map((level, i) => {
-          const y = yAt(level.price);
-          if (y == null || !plotArea) return null;
-          const color = level.type === "support" ? COLORS.support : COLORS.resistance;
-          return (
-            <g key={`sr-${i}`}>
-              <line
-                x1={plotArea.x}
-                y1={y}
-                x2={plotArea.x + plotArea.width}
-                y2={y}
-                stroke={color}
-                strokeWidth={1 + level.strength}
-                strokeDasharray="8 4"
-                opacity={0.6 + level.strength * 0.4}
-              />
-              <text
-                x={plotArea.x + plotArea.width - 4}
-                y={y - 3}
-                textAnchor="end"
-                fontSize={9}
-                fill={color}
-                fontWeight={500}
-              >
-                {level.type === "support" ? "S" : "R"} {formatChartPrice(level.price)}
-              </text>
-            </g>
-          );
-        })}
+function SrLines({
+  levels,
+  visible,
+}: {
+  levels: SrLevel[];
+  visible: boolean;
+}) {
+  const yScale = useYAxisScale();
+  const plotArea = usePlotArea();
 
-      {layers.wyckoff && indicators.wyckoff.tradingRange && (
-        <g>
-          {(() => {
-            const tr = indicators.wyckoff.tradingRange!;
-            const x1 = xAt(tr.startIndex) ?? plotArea?.x ?? 0;
-            const x2 = xAt(tr.endIndex) ?? plotRight;
-            const yTop = yAt(tr.top);
-            const yBot = yAt(tr.bottom);
-            if (yTop == null || yBot == null) return null;
-            return (
-              <rect
-                x={x1}
-                y={Math.min(yTop, yBot)}
-                width={Math.max(x2 - x1, 10)}
-                height={Math.abs(yBot - yTop)}
-                fill={COLORS.wyckoffRange}
-                stroke="#3b82f6"
-                strokeWidth={1}
-                strokeDasharray="6 4"
-                rx={2}
-              />
-            );
-          })()}
-        </g>
-      )}
+  if (!visible || !yScale || !plotArea) return null;
 
-      {layers.wyckoff &&
-        indicators.wyckoff.events.map((ev, i) => {
-          const x = xAt(ev.index);
-          const y = yAt(ev.price);
-          if (x == null || y == null) return null;
-          return (
-            <g key={`wy-${i}`}>
-              <circle cx={x} cy={y} r={4} fill={COLORS.wyckoffEvent} />
-              <text
-                x={x}
-                y={y - 8}
-                textAnchor="middle"
-                fontSize={8}
-                fill={COLORS.wyckoffEvent}
-                fontWeight={700}
-              >
-                {ev.event}
-              </text>
-            </g>
-          );
-        })}
+  const yAt = (price: number) => yScale(price);
+
+  return (
+    <g className="sr-lines">
+      {levels.map((level, i) => {
+        const y = yAt(level.price);
+        if (y == null) return null;
+        const color = level.type === "support" ? COLORS.support : COLORS.resistance;
+        return (
+          <g key={`sr-${i}`}>
+            <line
+              x1={plotArea.x}
+              y1={y}
+              x2={plotArea.x + plotArea.width}
+              y2={y}
+              stroke={color}
+              strokeWidth={1.5 + level.strength}
+              strokeDasharray="8 4"
+              opacity={0.85}
+            />
+            <text
+              x={plotArea.x + plotArea.width - 4}
+              y={y - 4}
+              textAnchor="end"
+              fontSize={10}
+              fill={color}
+              fontWeight={600}
+            >
+              {level.type === "support" ? "S" : "R"} {formatChartPrice(level.price)}
+            </text>
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -443,20 +385,6 @@ function WyckoffPanel({ indicators, currency }: { indicators: BenDangIndicators;
           <dd className="font-medium">{w.summary.recommendation}</dd>
         </div>
       </dl>
-
-      {w.events.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {w.events.map((ev, i) => (
-            <span
-              key={`${ev.event}-${ev.index}-${i}`}
-              className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700"
-              title={ev.label}
-            >
-              {ev.event}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -628,8 +556,12 @@ export function BenDangChart({
                 />
                 <Tooltip content={<ChartTooltip currency={currency} />} />
                 <Bar dataKey="close" fill="transparent" isAnimationActive={false} />
-                <IndicatorOverlays data={points} indicators={indicators} layers={layers} />
+                <PremiumDiscountZones
+                  zone={indicators.smc.premiumDiscount}
+                  visible={layers.smc}
+                />
                 <Candlesticks data={points} />
+                <SrLines levels={indicators.sr.levels} visible={layers.sr} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

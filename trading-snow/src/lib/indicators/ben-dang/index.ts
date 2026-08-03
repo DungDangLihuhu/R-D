@@ -32,13 +32,14 @@ export function computeBenDangIndicators(
   options: BenDangOptions = {}
 ): BenDangIndicators {
   const bars = toBars(points);
-  const swingLength =
-    options.smcSwingLength ?? adaptiveSwingLength(bars.length);
   const srPeriod = options.srPeriod ?? adaptivePivotPeriod(bars.length);
   const srMaxLevels = options.srMaxLevels ?? 5;
+  const pdSwing =
+    options.smcSwingLength ??
+    Math.min(adaptiveSwingLength(bars.length), Math.max(srPeriod * 2, 12));
 
   return {
-    smc: computeSmc(bars, swingLength),
+    smc: computeSmc(bars, pdSwing),
     sr: computeSupportResistance(bars, srPeriod, srMaxLevels),
     wyckoff: computeWyckoff(bars),
   };
