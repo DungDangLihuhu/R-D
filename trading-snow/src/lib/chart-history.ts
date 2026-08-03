@@ -31,7 +31,7 @@ const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
   "4h": { interval: "60m", range: "1mo", aggregate4h: true },
   "1d": { interval: "1d", range: "3mo" },
   "1w": { interval: "1wk", range: "2y" },
-  "1m": { interval: "1d", range: "1mo" },
+  "1m": { interval: "1d", range: "3mo" },
   "1y": { interval: "1d", range: "1y" },
   "5y": { interval: "1wk", range: "5y" },
   all: { interval: "1mo", range: "max" },
@@ -50,13 +50,17 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
       minute: "2-digit",
     });
   }
+  if (timeframe === "1d" || timeframe === "1m") {
+    return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  }
+  if (timeframe === "1w") {
+    return date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    });
+  }
   if (timeframe === "5y" || timeframe === "all" || timeframe === "1y") {
-    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
-  }
-  if (timeframe === "1w" || timeframe === "1m") {
-    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
-  }
-  if (timeframe === "1d") {
     return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
   }
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });

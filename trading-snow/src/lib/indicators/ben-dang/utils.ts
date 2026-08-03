@@ -99,6 +99,16 @@ export function isBullish(bar: Bar): boolean {
   return bar.close >= bar.open;
 }
 
+export function adaptivePivotPeriod(barCount: number, preferred = 10): number {
+  if (barCount < 9) return Math.max(1, Math.floor(barCount / 3));
+  return Math.max(2, Math.min(preferred, Math.floor(barCount / 5)));
+}
+
+export function adaptiveSwingLength(barCount: number, preferred = 5): number {
+  if (barCount < 12) return Math.max(1, Math.floor(barCount / 6));
+  return Math.max(2, Math.min(preferred, Math.floor(barCount / 8)));
+}
+
 export function clusterPrices(
   prices: number[],
   tolerance: number

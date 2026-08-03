@@ -53,11 +53,12 @@ function detectStructure(
     ...swingLows.map((s) => ({ ...s, kind: "low" as const })),
   ].sort((a, b) => a.index - b.index);
 
-  if (swings.length < 3) return lines;
+  if (swings.length < 2) return lines;
+  if (!swingHighs.length || !swingLows.length) return lines;
 
   let trend: "bullish" | "bearish" | null = null;
-  let lastHigh = swingHighs[0];
-  let lastLow = swingLows[0];
+  let lastHigh: SwingPoint | undefined = swingHighs[0];
+  let lastLow: SwingPoint | undefined = swingLows[0];
 
   for (let i = 1; i < swings.length; i++) {
     const s = swings[i];
@@ -219,17 +220,20 @@ function detectPremiumDiscount(
 ): PremiumDiscountZone | undefined {
   if (!swingHighs.length || !swingLows.length) return undefined;
 
-  const recentHigh = swingHighs[swingHighs.length - 1];
-  const recentLow = swingLows[swingLows.length - 1];
-  const top = recentHigh.price;
-  const bottom = recentLow.price;
+  const recentHighs = swingHighs.slice(-3);
+  const recentLows = swingLows.slice(-3);
+  const top = Math.max(...recentHighs.map((s) => s.price));
+  const bottom = Math.min(...recentLows.map((s) => s.price));
   if (top <= bottom) return undefined;
+
+  const swingHigh = recentHighs.find((s) => s.price === top)!;
+  const swingLow = recentLows.find((s) => s.price === bottom)!;
 
   return {
     top,
     bottom,
     equilibrium: (top + bottom) / 2,
-    swingHighIndex: recentHigh.index,
-    swingLowIndex: recentLow.index,
+    swingHighIndex: swingHigh.index,
+    swingLowIndex: swingLow.index,
   };
 }
