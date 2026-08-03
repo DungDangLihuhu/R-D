@@ -57,7 +57,11 @@ export default function AnalyticsPage() {
       <BenchmarkComparison
         equityCurve={stats.equityCurve}
         transactions={transactions}
-        portfolioValue={stats.portfolioValue}
+        closedTrades={stats.closedTrades}
+        holdings={stats.holdings}
+        realizedPnl={stats.realizedPnl}
+        unrealizedPnl={stats.unrealizedPnl}
+        holdingsCost={stats.holdingsCost}
       />
     </div>
   );
