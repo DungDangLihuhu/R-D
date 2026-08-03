@@ -238,7 +238,7 @@ export function StockPriceChart({
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="font-semibold">Biểu đồ giá</h3>
+        <h3 className="font-semibold">Phân tích cơ bản</h3>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 p-0.5">
             {CHART_TIMEFRAMES.map((tf) => (
