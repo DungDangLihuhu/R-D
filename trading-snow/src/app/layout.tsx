@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppProvider } from "@/context/AppContext";
 import { AppShell } from "@/components/AppShell";
+import { ToastViewport } from "@/components/ToastViewport";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +32,7 @@ export default function RootLayout({
       >
         <AppProvider>
           <AppShell>{children}</AppShell>
+          <ToastViewport />
         </AppProvider>
       </body>
     </html>

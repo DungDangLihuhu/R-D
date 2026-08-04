@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { toast } from "@/lib/toast-store";
 import { toYahooSymbol } from "@/lib/symbol";
 import type { AssetType, TransactionType } from "@/lib/types";
 
@@ -32,7 +33,6 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
-  const [msg, setMsg] = useState("");
 
   const isCash = type === "DEPOSIT" || type === "WITHDRAW";
 
@@ -42,7 +42,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
     const p = parseFloat(price);
     const f = parseFloat(fee) || 0;
     if (isNaN(q) || q <= 0 || isNaN(p) || p <= 0) {
-      setMsg("Nhập số lượng và giá hợp lệ");
+      toast.error("Nhập số lượng và giá hợp lệ");
       return;
     }
     addTransaction({
@@ -56,7 +56,8 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       date: new Date(date).toISOString(),
       notes: notes || undefined,
     });
-    setMsg("Đã lưu giao dịch");
+    const label = types.find((t) => t.value === type)?.label ?? type;
+    toast.success(`Đã lưu giao dịch ${label}${isCash ? "" : ` ${toYahooSymbol(symbol, exchange || undefined)}`}`);
     setSymbol("");
     setExchange("");
     setQuantity("");
@@ -182,7 +183,6 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
           placeholder="Tùy chọn"
         />
       </label>
-      {msg && <p className="text-sm text-sky-600">{msg}</p>}
       <button
         type="submit"
         className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-sky-400"

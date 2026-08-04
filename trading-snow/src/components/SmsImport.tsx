@@ -10,6 +10,7 @@ import {
 } from "@/lib/sms-import";
 import { formatMoney } from "@/lib/format";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
+import { toast } from "@/lib/toast-store";
 
 const EXAMPLE = `StanChart: Order filled:  Sell   600  shares of  MSFT   MICROSOFT ORD  on  NMS  at  USD 450.35. Total Filled Qty:  600, O/S Qty:  0, Avg. Filled Price:  450.4015. Ref.  OSCBF7U41696860`;
 
@@ -49,7 +50,7 @@ export function SmsImport() {
 
     const parts = [`Đã thêm ${added} giao dịch từ SMS`];
     if (skipped > 0) parts.push(`bỏ qua ${skipped} trùng`);
-    alert(parts.join(", "));
+    toast.success(parts.join(", "));
   };
 
   if (!open) {

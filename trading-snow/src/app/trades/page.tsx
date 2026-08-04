@@ -7,6 +7,7 @@ import { SmsImport } from "@/components/SmsImport";
 import { TradeForm } from "@/components/TradeForm";
 import { TradeTable } from "@/components/TradeTable";
 import { useApp } from "@/context/AppContext";
+import { toast } from "@/lib/toast-store";
 
 export default function TradesPage() {
   const [showManualForm, setShowManualForm] = useState(false);
@@ -18,7 +19,7 @@ export default function TradesPage() {
 
   const handleClearAll = () => {
     if (portfolioTxCount === 0) {
-      alert("Không có giao dịch để xóa");
+      toast.info("Không có giao dịch để xóa");
       return;
     }
 
@@ -28,7 +29,7 @@ export default function TradesPage() {
     if (!ok) return;
 
     clearPortfolioTransactions(activePortfolioId);
-    alert("Đã xóa toàn bộ lịch sử giao dịch");
+    toast.success(`Đã xóa ${portfolioTxCount} giao dịch`);
   };
 
   return (

@@ -13,6 +13,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { NotificationWatcher } from "@/components/NotificationWatcher";
 import { SyncBadge } from "@/components/SyncPanel";
 
 const nav = [
@@ -76,6 +77,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
       <main className="mx-auto max-w-6xl min-w-0 px-4 py-6">{children}</main>
+      <NotificationWatcher />
     </div>
   );
 }

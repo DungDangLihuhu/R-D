@@ -12,6 +12,7 @@ import {
 } from "@/lib/csv-import";
 import { formatDate, formatMoney } from "@/lib/format";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
+import { toast } from "@/lib/toast-store";
 
 const FORMATS: { value: CsvFormat; label: string }[] = [
   { value: "auto", label: "Tự nhận diện" },
@@ -72,7 +73,7 @@ export function CsvImport() {
     setParseResult(null);
     setErrors([]);
     setOpen(false);
-    alert(parts.join(", "));
+    toast.success(parts.join(", "));
   };
 
   if (!open) {
