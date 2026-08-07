@@ -1,7 +1,17 @@
 @import "tailwindcss";
 
+@theme inline {
+  --color-app-bg: #e8ecf1;
+  --color-app-surface: #ffffff;
+  --color-app-border: #e2e5ea;
+  --color-app-text: #1a1d21;
+  --color-app-muted: #6b7280;
+  --color-brand: #0284c7;
+  --color-brand-hover: #0369a1;
+}
+
 :root {
-  --app-bg: #eef0f3;
+  --app-bg: #e8ecf1;
   --app-surface: #ffffff;
   --app-border: #e2e5ea;
   --app-text: #1a1d21;
@@ -17,4 +27,55 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   background-color: var(--app-bg);
   color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer components {
+  .app-card {
+    @apply rounded-xl border border-app-border bg-app-surface p-4 shadow-sm;
+  }
+
+  .app-card-section-title {
+    @apply mb-4 font-semibold text-gray-900;
+  }
+
+  .app-page-title {
+    @apply text-2xl font-bold tracking-tight text-gray-900;
+  }
+
+  .app-page-desc {
+    @apply max-w-2xl text-sm leading-relaxed text-gray-500;
+  }
+
+  .app-btn-primary {
+    @apply rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-50;
+  }
+
+  .app-btn-secondary {
+    @apply rounded-lg border border-app-border bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-50;
+  }
+
+  .app-input {
+    @apply rounded-lg border border-app-border bg-white px-3 py-2 text-sm shadow-sm transition-colors focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100;
+  }
+
+  .app-alert-warning {
+    @apply rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900;
+  }
+
+  .app-skeleton {
+    @apply animate-pulse rounded-xl border border-app-border bg-gray-50;
+  }
+}
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }

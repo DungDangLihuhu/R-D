@@ -13,6 +13,7 @@ import {
 import { vi } from "date-fns/locale";
 import { ExternalLink } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
+import { PageHeader } from "@/components/PageHeader";
 import { PriceRefresh } from "@/components/PriceRefresh";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
@@ -167,16 +168,11 @@ export function EventsCalendar() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Sự kiện</h1>
-          <p className="text-sm text-gray-500">
-            Cổ tức · báo cáo tài chính · tin tức mã trong danh mục · vĩ mô USD ·
-            nghỉ lễ NYSE/Nasdaq
-          </p>
-        </div>
-        <PriceRefresh />
-      </div>
+      <PageHeader
+        title="Sự kiện"
+        description="Cổ tức · báo cáo tài chính · tin tức mã trong danh mục · vĩ mô USD · nghỉ lễ NYSE/Nasdaq"
+        actions={<PriceRefresh />}
+      />
 
       {symbols.length === 0 && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">

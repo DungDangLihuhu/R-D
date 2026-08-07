@@ -18,8 +18,8 @@ export function PriceRefresh({ compact }: { compact?: boolean }) {
       <button
         onClick={() => refreshPrices(undefined, { notify: true })}
         disabled={priceLoading}
-        className={`flex items-center gap-2 rounded-lg border border-gray-200 text-sm hover:bg-gray-50 disabled:opacity-50 ${
-          compact ? "px-2 py-1" : "px-3 py-2"
+        className={`app-btn-secondary flex items-center gap-2 ${
+          compact ? "px-2 py-1" : ""
         }`}
         title={
           quoteUnresolved.length > 0

@@ -46,7 +46,7 @@ function ToastCard({ item }: { item: ToastItem }) {
 
   const body = (
     <div
-      className={`pointer-events-auto flex w-full max-w-sm gap-3 rounded-xl border bg-white p-3 shadow-lg ${style.border}`}
+      className={`pointer-events-auto flex w-full max-w-sm gap-3 rounded-xl border bg-white/95 p-3 shadow-xl backdrop-blur-sm ${style.border}`}
     >
       <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${style.icon}`} />
       <div className="min-w-0 flex-1">

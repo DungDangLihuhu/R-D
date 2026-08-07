@@ -6,6 +6,7 @@ import { CsvImport } from "@/components/CsvImport";
 import { SmsImport } from "@/components/SmsImport";
 import { TradeForm } from "@/components/TradeForm";
 import { TradeTable } from "@/components/TradeTable";
+import { PageHeader } from "@/components/PageHeader";
 import { useApp } from "@/context/AppContext";
 import { toast } from "@/lib/toast-store";
 
@@ -34,22 +35,20 @@ export default function TradesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Giao dịch</h1>
-          <p className="text-sm text-gray-500">
-            Import CSV, tin nhắn ngân hàng hoặc thêm thủ công
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleClearAll}
-          className="flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm text-rose-600 shadow-sm hover:bg-rose-50"
-        >
-          <Trash2 className="h-4 w-4" />
-          Xóa tất cả giao dịch
-        </button>
-      </div>
+      <PageHeader
+        title="Giao dịch"
+        description="Import CSV, tin nhắn ngân hàng hoặc thêm thủ công"
+        actions={
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-600 shadow-sm transition-colors hover:bg-rose-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            Xóa tất cả giao dịch
+          </button>
+        }
+      />
 
       <div className="flex flex-wrap gap-2">
         <CsvImport />

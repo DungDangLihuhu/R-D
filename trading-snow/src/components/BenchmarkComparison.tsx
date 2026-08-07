@@ -152,7 +152,7 @@ export function BenchmarkComparison({
 
   if (!hasData) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="app-card">
         <h2 className="mb-2 font-semibold">So sánh với S&P 500</h2>
         <p className="text-sm text-gray-500">
           Cần ít nhất một lệnh mua/bán để so sánh benchmark
@@ -162,7 +162,7 @@ export function BenchmarkComparison({
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+    <div className="app-card space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>

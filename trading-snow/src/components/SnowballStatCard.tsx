@@ -21,7 +21,7 @@ export function SnowballStatCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="app-card min-w-0">
       <div className="flex items-center gap-2">
         <span
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconClassName}`}
