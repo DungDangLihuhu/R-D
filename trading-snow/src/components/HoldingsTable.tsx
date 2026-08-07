@@ -331,7 +331,7 @@ export function HoldingsTable() {
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div className="app-card overflow-hidden p-0">
       {hiddenCount > 0 && (
         <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
           {hiddenCount} mã đang ẩn — không tính vào chỉ số trên các trang khác.

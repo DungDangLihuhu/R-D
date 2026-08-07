@@ -21,7 +21,7 @@ export function ClosedTradesTable({
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-500">
+      <div className="app-card px-4 py-12 text-center text-sm text-gray-500">
         Chưa có lệnh đã đóng. Lãi/lỗ hiện khi bạn bán cổ phiếu đã mua trước đó.
       </div>
     );
@@ -30,7 +30,7 @@ export function ClosedTradesTable({
   const totalPnl = sorted.reduce((s, t) => s + t.pnl, 0);
 
   return (
-    <div className="rounded-xl border border-gray-200">
+    <div className="app-card overflow-hidden p-0">
       <div className="space-y-3 p-3 sm:hidden">
         {pageItems.map((t, i) => {
           const quote = state.marketQuotes?.[t.symbol];

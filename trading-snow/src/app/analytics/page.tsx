@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
 import { StatCard } from "@/components/StatCard";
+import { PageHeader } from "@/components/PageHeader";
 import { useApp } from "@/context/AppContext";
 import { filterHiddenTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
@@ -11,27 +12,21 @@ const BenchmarkComparison = dynamic(
   () =>
     import("@/components/BenchmarkComparison").then((m) => m.BenchmarkComparison),
   {
-    loading: () => (
-      <div className="h-80 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
-    ),
+    loading: () => <div className="app-skeleton h-80" />,
   }
 );
 
 const EquityChart = dynamic(
   () => import("@/components/Charts").then((m) => m.EquityChart),
   {
-    loading: () => (
-      <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-    ),
+    loading: () => <div className="app-skeleton h-64" />,
   }
 );
 
 const MonthlyPnlChart = dynamic(
   () => import("@/components/Charts").then((m) => m.MonthlyPnlChart),
   {
-    loading: () => (
-      <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-    ),
+    loading: () => <div className="app-skeleton h-64" />,
   }
 );
 
@@ -49,12 +44,10 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Thống kê</h1>
-        <p className="text-sm text-gray-500">
-          P&L theo tháng, so sánh S&P 500
-        </p>
-      </div>
+      <PageHeader
+        title="Thống kê"
+        description="P&L theo tháng, so sánh S&P 500"
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Lệnh đã chốt" value={String(stats.totalTrades)} />
@@ -69,19 +62,19 @@ export default function AnalyticsPage() {
           trend="down"
         />
         <StatCard
-          label="Realized P&L"
+          label="Lãi đã chốt"
           value={formatMoney(stats.realizedPnl)}
           trend={stats.realizedPnl >= 0 ? "up" : "down"}
         />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-4 font-semibold">P&L theo tháng</h2>
+        <div className="app-card min-w-0">
+          <h2 className="app-card-section-title">P&L theo tháng</h2>
           <MonthlyPnlChart data={stats.monthlyPnl} />
         </div>
-        <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-4 font-semibold">Lợi nhuận ròng</h2>
+        <div className="app-card min-w-0">
+          <h2 className="app-card-section-title">Lợi nhuận ròng</h2>
           <EquityChart data={stats.equityCurve} />
         </div>
       </div>

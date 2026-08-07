@@ -70,7 +70,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
   return (
     <form
       onSubmit={submit}
-      className="space-y-4 rounded-xl border border-gray-200 bg-white p-5"
+      className="space-y-4 app-card p-5"
     >
       <h2 className="text-lg font-semibold">Thêm giao dịch</h2>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -185,7 +185,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       </label>
       <button
         type="submit"
-        className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-sky-400"
+        className="app-btn-primary"
       >
         Lưu giao dịch
       </button>

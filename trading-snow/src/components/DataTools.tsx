@@ -13,7 +13,7 @@ export function DataTools() {
         <input
           ref={nameRef}
           placeholder="Tên portfolio mới"
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
+          className="app-input"
         />
         <button
           onClick={() => {
@@ -23,7 +23,7 @@ export function DataTools() {
               if (nameRef.current) nameRef.current.value = "";
             }
           }}
-          className="rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm hover:bg-gray-200"
+          className="app-btn-secondary"
         >
           + Portfolio
         </button>

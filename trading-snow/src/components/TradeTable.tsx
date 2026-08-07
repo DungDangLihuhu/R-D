@@ -291,7 +291,7 @@ export function TradeTable() {
     <div className="space-y-4">
       <TradeSummaryCard {...summary} />
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="app-card overflow-hidden p-0">
         <div className="hidden border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 md:grid md:grid-cols-[0.7fr_minmax(0,1.4fr)_0.85fr_0.65fr_0.75fr_0.65fr_0.85fr_0.9fr_0.55fr_0.45fr] md:gap-2">
           <span>Loại</span>
           <span>Vị thế</span>

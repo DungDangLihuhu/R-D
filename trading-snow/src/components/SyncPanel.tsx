@@ -39,7 +39,7 @@ export function SyncPanel() {
   if (configured === null) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="app-card shadow-sm">
       <div className="flex items-center gap-2">
         {configured ? (
           <Cloud className="h-4 w-4 text-sky-600" />
@@ -65,14 +65,14 @@ export function SyncPanel() {
             <button
               type="button"
               onClick={applyRoom}
-              className="rounded-lg bg-sky-500 px-3 py-1.5 text-sm text-white hover:bg-sky-400"
+              className="app-btn-primary py-1.5"
             >
               Đổi phòng
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+              className="app-btn-secondary py-1.5"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Tải lại
