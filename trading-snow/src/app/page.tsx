@@ -42,7 +42,7 @@ export default function DashboardPage() {
           <EquityChart data={stats.equityCurve} />
         </div>
         <div className="app-card space-y-3">
-          <h2 className="font-semibold text-gray-900">Tóm tắt</h2>
+          <h2 className="app-card-section-title">Tóm tắt</h2>
           <Row label="Win rate" value={`${stats.winRate.toFixed(1)}%`} />
           <Row
             label="Hệ số lợi nhuận"
@@ -69,7 +69,7 @@ export default function DashboardPage() {
 function Row({
   label,
   value,
-  color = "text-gray-800",
+  color = "text-app-text",
 }: {
   label: string;
   value: string;

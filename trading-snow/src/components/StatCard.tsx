@@ -14,7 +14,7 @@ export function StatCard({
       ? "text-emerald-600 glow-profit"
       : trend === "down"
         ? "text-rose-600 glow-loss"
-        : "text-slate-900";
+        : "text-app-text";
 
   return (
     <div className="app-card">
