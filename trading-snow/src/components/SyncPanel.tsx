@@ -60,7 +60,7 @@ export function SyncPanel() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="mã-phòng-chung"
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              className="app-input py-1.5"
             />
             <button
               type="button"
