@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppProvider } from "@/context/AppContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 import { AppShell } from "@/components/AppShell";
 import { ToastViewport } from "@/components/ToastViewport";
 import "./globals.css";
@@ -20,20 +21,27 @@ export const metadata: Metadata = {
   description: "Web app thống kê trading kiểu Snowball",
 };
 
+const themeInitScript = `(function(){try{var t=localStorage.getItem('trading-snow-theme');if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';}else{document.documentElement.classList.remove('dark');document.documentElement.dataset.theme='light';}}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi">
+    <html lang="vi" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AppProvider>
-          <AppShell>{children}</AppShell>
-          <ToastViewport />
-        </AppProvider>
+        <ThemeProvider>
+          <AppProvider>
+            <AppShell>{children}</AppShell>
+            <ToastViewport />
+          </AppProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

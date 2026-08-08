@@ -191,7 +191,7 @@ export function EventsCalendar() {
             className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-all ${
               tab === t.id
                 ? "app-pill-active"
-                : "bg-white/70 text-slate-600 shadow-sm hover:bg-white"
+                : "app-pill-inactive shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium"
             }`}
           >
             {t.label}
