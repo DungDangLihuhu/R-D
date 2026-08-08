@@ -186,10 +186,10 @@ export function BenchmarkComparison({
               key={item.value}
               type="button"
               onClick={() => setRange(item.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
                 range === item.value
-                  ? "bg-sky-600 text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  ? "app-pill-active"
+                  : "bg-white/70 text-slate-600 shadow-sm hover:bg-white"
               }`}
             >
               {item.label}

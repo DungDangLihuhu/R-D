@@ -114,7 +114,7 @@ export function SyncBadge({ configured }: { configured: boolean }) {
   }
   return (
     <span
-      className="hidden items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-700 sm:inline-flex"
+      className="app-badge-cloud"
       title={`Đồng bộ cloud · phòng ${room}`}
     >
       <Cloud className="h-3 w-3" />

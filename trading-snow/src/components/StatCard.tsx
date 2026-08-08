@@ -11,14 +11,14 @@ export function StatCard({
 }) {
   const trendColor =
     trend === "up"
-      ? "text-emerald-600"
+      ? "text-emerald-600 glow-profit"
       : trend === "down"
-        ? "text-rose-600"
-        : "text-gray-900";
+        ? "text-rose-600 glow-loss"
+        : "text-slate-900";
 
   return (
     <div className="app-card">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${trendColor}`}>
         {value}
       </p>
