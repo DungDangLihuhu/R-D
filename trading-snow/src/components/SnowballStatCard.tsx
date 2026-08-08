@@ -41,8 +41,8 @@ export function SnowballStatCard({
           <span
             className={`inline-flex w-fit max-w-full shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-medium ${
               badge.positive
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-rose-50 text-rose-700"
+                ? "bg-emerald-50/90 text-emerald-700 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
+                : "bg-rose-50/90 text-rose-700 shadow-[0_0_12px_rgba(244,63,94,0.2)]"
             }`}
           >
             {badge.positive ? (

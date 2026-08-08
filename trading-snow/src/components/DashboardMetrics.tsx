@@ -70,7 +70,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         value={formatMoney(stats.holdingsValue)}
         sub={`${formatMoney(stats.holdingsCost)} đã đầu tư`}
         icon={Wallet}
-        iconClassName="bg-sky-100 text-sky-600"
+        iconClassName="app-icon-sky"
       />
       <SnowballStatCard
         label="Lợi nhuận"
@@ -81,9 +81,9 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
             : `Đã chốt: ${formatMoney(stats.realizedPnl)}`
         }
         icon={TrendingUp}
-        iconClassName="bg-emerald-100 text-emerald-600"
+        iconClassName="app-icon-emerald"
         valueClassName={
-          stats.totalProfit >= 0 ? "text-emerald-600" : "text-rose-600"
+          stats.totalProfit >= 0 ? "text-emerald-600 glow-profit" : "text-rose-600 glow-loss"
         }
         badge={{
           text: formatSignedPercent(stats.totalProfitPercent),
@@ -97,14 +97,14 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         }
         sub={`${formatSignedPercent(stats.profitExDivSalesPercent)} vị thế hiện tại`}
         icon={Calendar}
-        iconClassName="bg-violet-100 text-violet-600"
+        iconClassName="app-icon-violet"
       />
       <SnowballStatCard
         label="Thu nhập thụ động"
         value={`${passiveIncome.yieldPercent.toFixed(1)}%`}
         sub={`${formatMoney(passiveIncome.annualIncome)} / năm`}
         icon={PiggyBank}
-        iconClassName="bg-emerald-100 text-emerald-600"
+        iconClassName="app-icon-emerald"
       />
     </div>
   );

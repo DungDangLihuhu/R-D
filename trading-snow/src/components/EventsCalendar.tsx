@@ -188,10 +188,10 @@ export function EventsCalendar() {
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-all ${
               tab === t.id
-                ? "bg-sky-600 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                ? "app-pill-active"
+                : "bg-white/70 text-slate-600 shadow-sm hover:bg-white"
             }`}
           >
             {t.label}

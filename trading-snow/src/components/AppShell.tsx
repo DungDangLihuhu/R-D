@@ -31,17 +31,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { state, activePortfolioId, setActivePortfolioId, cloudConfigured } = useApp();
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-app-bg text-gray-900">
-      <header className="sticky top-0 z-50 border-b border-app-border bg-white/90 shadow-sm backdrop-blur-md">
+    <div className="app-bg-mesh min-h-screen overflow-x-hidden text-slate-900">
+      <header className="app-header">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link
             href="/"
-            className="flex items-center gap-2.5 font-semibold text-gray-900 transition-opacity hover:opacity-80"
+            className="group flex items-center gap-2.5 font-semibold text-slate-900 transition-opacity hover:opacity-90"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-sky-700 shadow-sm">
-              <Snowflake className="h-4 w-4 text-white" />
+            <span className="app-logo-glow transition-transform duration-300 group-hover:scale-105">
+              <Snowflake className="h-4 w-4" />
             </span>
-            <span className="tracking-tight">Trading Snow</span>
+            <span className="bg-gradient-to-r from-slate-900 to-sky-800 bg-clip-text tracking-tight text-transparent">
+              Trading Snow
+            </span>
           </Link>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -58,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <SyncBadge configured={cloudConfigured} />
           </div>
         </div>
-        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-2.5 scrollbar-none">
+        <nav className="mx-auto flex max-w-6xl gap-1.5 overflow-x-auto px-4 pb-3 scrollbar-none">
           {nav.map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href ||
@@ -68,10 +70,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={href}
                 href={href}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-sky-600 text-white shadow-sm"
-                    : "text-gray-600 hover:bg-white hover:text-gray-900"
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                  active ? "app-nav-active" : "app-nav-inactive"
                 }`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
