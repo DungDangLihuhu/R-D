@@ -15,6 +15,7 @@ import {
 import { useApp } from "@/context/AppContext";
 import { NotificationWatcher } from "@/components/NotificationWatcher";
 import { SyncBadge } from "@/components/SyncPanel";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const nav = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
@@ -31,17 +32,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { state, activePortfolioId, setActivePortfolioId, cloudConfigured } = useApp();
 
   return (
-    <div className="app-bg-mesh min-h-screen overflow-x-hidden text-slate-900">
+    <div className="app-bg-mesh min-h-screen overflow-x-hidden text-app-text">
       <header className="app-header">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link
             href="/"
-            className="group flex items-center gap-2.5 font-semibold text-slate-900 transition-opacity hover:opacity-90"
+            className="group flex items-center gap-2.5 font-semibold text-app-text transition-opacity hover:opacity-90"
           >
             <span className="app-logo-glow transition-transform duration-300 group-hover:scale-105">
               <Snowflake className="h-4 w-4" />
             </span>
-            <span className="bg-gradient-to-r from-slate-900 to-sky-800 bg-clip-text tracking-tight text-transparent">
+            <span className="app-brand-text tracking-tight">
               Trading Snow
             </span>
           </Link>
@@ -57,6 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </option>
               ))}
             </select>
+            <ThemeToggle />
             <SyncBadge configured={cloudConfigured} />
           </div>
         </div>

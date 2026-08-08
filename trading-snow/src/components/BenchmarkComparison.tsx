@@ -189,7 +189,7 @@ export function BenchmarkComparison({
               className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
                 range === item.value
                   ? "app-pill-active"
-                  : "bg-white/70 text-slate-600 shadow-sm hover:bg-white"
+                  : "app-pill-inactive rounded-full px-3 py-1 text-xs font-medium"
               }`}
             >
               {item.label}
