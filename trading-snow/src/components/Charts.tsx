@@ -19,20 +19,14 @@ import {
   formatMonthKey,
   formatMoney,
 } from "@/lib/format";
-
-const GRID = "#e2e5ea";
-const TICK = "#6b7280";
-const TOOLTIP = {
-  background: "#ffffff",
-  border: "1px solid #e2e5ea",
-  borderRadius: "8px",
-  color: "#1a1d21",
-};
+import { useChartTheme } from "@/lib/chart-theme";
 
 export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
+  const theme = useChartTheme();
+
   if (data.length < 2) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-gray-500">
+      <div className="flex h-64 items-center justify-center text-sm text-app-muted">
         Cần thêm giao dịch để vẽ lợi nhuận ròng
       </div>
     );
@@ -55,19 +49,19 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
             <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <CartesianGrid stroke={theme.grid} strokeDasharray="3 3" />
         <XAxis
           dataKey="label"
-          tick={{ fill: TICK, fontSize: 11 }}
+          tick={{ fill: theme.tick, fontSize: 11 }}
           interval="preserveStartEnd"
           minTickGap={28}
         />
         <YAxis
-          tick={{ fill: TICK, fontSize: 11 }}
+          tick={{ fill: theme.tick, fontSize: 11 }}
           tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
         />
         <Tooltip
-          contentStyle={TOOLTIP}
+          contentStyle={theme.tooltip}
           formatter={(v) => [formatMoney(Number(v ?? 0)), "Lợi nhuận ròng"]}
           labelFormatter={(_, payload) => {
             const date = payload?.[0]?.payload?.date as string | undefined;
@@ -88,9 +82,11 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
 }
 
 export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }) {
+  const theme = useChartTheme();
+
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-gray-500">
+      <div className="flex h-64 items-center justify-center text-sm text-app-muted">
         Chưa có P&L theo tháng
       </div>
     );
@@ -105,19 +101,19 @@ export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }
     <div className="min-w-0 w-full">
       <ResponsiveContainer width="100%" height={280}>
       <BarChart data={chartData}>
-        <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+        <CartesianGrid stroke={theme.grid} strokeDasharray="3 3" />
         <XAxis
           dataKey="label"
-          tick={{ fill: TICK, fontSize: 11 }}
+          tick={{ fill: theme.tick, fontSize: 11 }}
           interval="preserveStartEnd"
           minTickGap={20}
         />
         <YAxis
-          tick={{ fill: TICK, fontSize: 11 }}
+          tick={{ fill: theme.tick, fontSize: 11 }}
           tickFormatter={(v) => `$${v}`}
         />
         <Tooltip
-          contentStyle={TOOLTIP}
+          contentStyle={theme.tooltip}
           formatter={(v) => [formatMoney(Number(v ?? 0)), "P&L"]}
           labelFormatter={(label) => `Tháng ${label}`}
         />

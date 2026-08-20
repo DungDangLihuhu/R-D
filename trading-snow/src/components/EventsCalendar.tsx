@@ -11,7 +11,8 @@ import {
   subMonths,
 } from "date-fns";
 import { vi } from "date-fns/locale";
-import { ExternalLink } from "lucide-react";
+import { CalendarDays, ExternalLink } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 import { Pagination } from "@/components/Pagination";
 import { PageHeader } from "@/components/PageHeader";
 import { PriceRefresh } from "@/components/PriceRefresh";
@@ -189,9 +190,7 @@ export function EventsCalendar() {
             type="button"
             onClick={() => setTab(t.id)}
             className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-all ${
-              tab === t.id
-                ? "app-pill-active"
-                : "app-pill-inactive shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium"
+              tab === t.id ? "app-pill-active" : "app-pill-inactive"
             }`}
           >
             {t.label}
@@ -204,7 +203,7 @@ export function EventsCalendar() {
         <button
           type="button"
           onClick={() => setMonth(subMonths(month, 1))}
-          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+          className="app-btn-secondary px-3 py-1.5"
         >
           ←
         </button>
@@ -214,13 +213,20 @@ export function EventsCalendar() {
         <button
           type="button"
           onClick={() => setMonth(addMonths(month, 1))}
-          className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+          className="app-btn-secondary px-3 py-1.5"
         >
           →
         </button>
         {loading && (
-          <span className="text-sm text-gray-500">Đang tải...</span>
+          <span className="text-sm text-app-muted">Đang tải...</span>
         )}
+        <button
+          type="button"
+          onClick={() => setMonth(new Date())}
+          className="app-btn-secondary px-3 py-1.5 text-xs"
+        >
+          Tháng này
+        </button>
       </div>
 
       {error && (
@@ -228,15 +234,21 @@ export function EventsCalendar() {
       )}
 
       {inMonth.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
-          {loading
-            ? "Đang tải sự kiện..."
-            : tab === "holiday"
-              ? "Không có nghỉ lễ NYSE/Nasdaq trong tháng này"
-              : "Không có sự kiện trong tháng này cho bộ lọc đã chọn"}
-        </div>
+        <EmptyState
+          icon={CalendarDays}
+          title={
+            loading
+              ? "Đang tải sự kiện..."
+              : tab === "holiday"
+                ? "Không có nghỉ lễ NYSE/Nasdaq trong tháng này"
+                : "Không có sự kiện trong tháng này"
+          }
+          description={
+            loading ? undefined : "Thử tháng khác hoặc đổi bộ lọc phía trên."
+          }
+        />
       ) : (
-        <div className="rounded-xl border border-gray-200">
+        <div className="app-table-wrap">
           <div className="space-y-3 p-3 sm:hidden">
             {pageItems.map((e) => (
               <EventCard key={e.id} event={e} qtyMap={qtyMap} />
@@ -245,7 +257,7 @@ export function EventsCalendar() {
 
           <div className="hidden sm:block">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-500">
+              <thead className="app-table-head text-left">
                 <tr>
                   <th className="px-4 py-3">Ngày</th>
                   <th className="px-4 py-3">Loại</th>
@@ -256,7 +268,7 @@ export function EventsCalendar() {
               </thead>
               <tbody>
                 {pageItems.map((e) => (
-                  <tr key={e.id} className="border-t border-gray-200">
+                  <tr key={e.id} className="app-row border-t border-gray-200">
                     <td className="px-4 py-3 whitespace-nowrap">
                       {formatDate(e.date)}
                     </td>

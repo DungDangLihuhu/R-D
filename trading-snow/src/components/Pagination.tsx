@@ -21,8 +21,8 @@ export function Pagination({
   const to = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex flex-col gap-3 border-t border-gray-200 bg-gray-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-xs text-gray-500">
+    <div className="flex flex-col gap-3 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--app-border)" }}>
+      <p className="text-xs text-app-muted">
         {from}–{to} / {total} mục
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -30,16 +30,16 @@ export function Pagination({
           type="button"
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          className="app-btn-secondary px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
           ← Trước
         </button>
-        <label className="flex items-center gap-1.5 text-sm text-gray-600">
+        <label className="flex items-center gap-1.5 text-sm text-app-muted">
           <span className="sr-only">Chọn trang</span>
           <select
             value={page}
             onChange={(e) => onPageChange(Number(e.target.value))}
-            className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm"
+            className="app-input px-2 py-1.5"
           >
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
               <option key={p} value={p}>
@@ -52,7 +52,7 @@ export function Pagination({
           type="button"
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+          className="app-btn-secondary px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Sau →
         </button>

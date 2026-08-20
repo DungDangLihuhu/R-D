@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LineChart } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { Pagination } from "@/components/Pagination";
 import { useApp } from "@/context/AppContext";
@@ -169,7 +170,7 @@ function HoldingRow({
 
   return (
     <div
-      className={`border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5 ${
+      className={`app-row border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5 ${
         hidden ? "bg-gray-50/80 opacity-70" : ""
       }`}
     >
@@ -318,9 +319,11 @@ export function HoldingsTable() {
 
   if (holdings.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
-        Chưa có vị thế mở. Mua cổ phiếu để thấy danh mục.
-      </div>
+      <EmptyState
+        icon={LineChart}
+        title="Chưa có vị thế mở"
+        description="Mua cổ phiếu để thấy danh mục và P&L realtime."
+      />
     );
   }
 
@@ -331,14 +334,14 @@ export function HoldingsTable() {
   };
 
   return (
-    <div className="app-card overflow-hidden p-0">
+    <div className="app-table-wrap">
       {hiddenCount > 0 && (
         <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
           {hiddenCount} mã đang ẩn — không tính vào chỉ số trên các trang khác.
         </div>
       )}
 
-      <div className="hidden border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:gap-3">
+      <div className="app-table-head hidden px-4 py-2.5 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:gap-3">
         <span>Vị thế</span>
         <span className="text-right">Số lượng</span>
         <span className="text-right">Giá vốn</span>

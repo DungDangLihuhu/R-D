@@ -17,8 +17,8 @@ export function StatCard({
         : "text-app-text";
 
   return (
-    <div className="app-card">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
+    <div className="app-card app-card-static">
+      <p className="text-xs font-medium text-app-muted">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${trendColor}`}>
         {value}
       </p>

@@ -65,7 +65,7 @@ export function TradingViewChart({
 
   return (
     <div
-      className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white"
+      className="min-w-0 overflow-hidden app-card p-0"
       style={{ height }}
     >
       <div

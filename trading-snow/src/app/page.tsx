@@ -76,9 +76,9 @@ function Row({
   color?: string;
 }) {
   return (
-    <div className="flex justify-between text-sm">
+    <div className="flex justify-between gap-3 border-b border-gray-100 py-2 text-sm last:border-b-0">
       <span className="text-gray-500">{label}</span>
-      <span className={`tabular-nums ${color}`}>{value}</span>
+      <span className={`tabular-nums font-medium ${color}`}>{value}</span>
     </div>
   );
 }

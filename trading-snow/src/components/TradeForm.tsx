@@ -75,11 +75,11 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       <h2 className="text-lg font-semibold">Thêm giao dịch</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="text-gray-500">Loại</span>
+          <span className="app-label">Loại</span>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as TransactionType)}
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+            className="mt-1 w-full app-input"
           >
             {types.map((t) => (
               <option key={t.value} value={t.value}>
@@ -91,33 +91,33 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
         {!isCash && (
           <>
             <label className="block text-sm">
-              <span className="text-gray-500">Mã</span>
+              <span className="app-label">Mã</span>
               <input
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value)}
                 placeholder="SAN, AAPL, MC..."
-                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 uppercase"
+                className="mt-1 w-full app-input uppercase"
                 required
               />
             </label>
             <label className="block text-sm">
-              <span className="text-gray-500">Sàn / quốc gia (tùy chọn)</span>
+              <span className="app-label">Sàn / quốc gia (tùy chọn)</span>
               <input
                 value={exchange}
                 onChange={(e) => setExchange(e.target.value)}
                 placeholder="PA, L, France, NMS..."
-                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 uppercase"
+                className="mt-1 w-full app-input uppercase"
               />
               <span className="mt-1 block text-xs text-gray-400">
                 VD: SAN + PA → SAN.PA (Sanofi Paris)
               </span>
             </label>
             <label className="block text-sm">
-              <span className="text-gray-500">Loại tài sản</span>
+              <span className="app-label">Loại tài sản</span>
               <select
                 value={assetType}
                 onChange={(e) => setAssetType(e.target.value as AssetType)}
-                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+                className="mt-1 w-full app-input"
               >
                 {assetTypes.map((a) => (
                   <option key={a.value} value={a.value}>
@@ -129,7 +129,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
           </>
         )}
         <label className="block text-sm">
-          <span className="text-gray-500">
+          <span className="app-label">
             {isCash ? "Số tiền" : "Số lượng"}
           </span>
           <input
@@ -137,12 +137,12 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
             step="any"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+            className="mt-1 w-full app-input"
             required
           />
         </label>
         <label className="block text-sm">
-          <span className="text-gray-500">
+          <span className="app-label">
             {isCash ? "Tỷ giá (1)" : "Giá"}
           </span>
           <input
@@ -150,36 +150,36 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
             step="any"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+            className="mt-1 w-full app-input"
             required
           />
         </label>
         <label className="block text-sm">
-          <span className="text-gray-500">Phí</span>
+          <span className="app-label">Phí</span>
           <input
             type="number"
             step="any"
             value={fee}
             onChange={(e) => setFee(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+            className="mt-1 w-full app-input"
           />
         </label>
         <label className="block text-sm">
-          <span className="text-gray-500">Ngày</span>
+          <span className="app-label">Ngày</span>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+            className="mt-1 w-full app-input"
           />
         </label>
       </div>
       <label className="block text-sm">
-        <span className="text-gray-500">Ghi chú</span>
+        <span className="app-label">Ghi chú</span>
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2"
+          className="mt-1 w-full app-input"
           placeholder="Tùy chọn"
         />
       </label>

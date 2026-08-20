@@ -80,7 +80,7 @@ export function CsvImport() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+        className="app-btn-secondary"
       >
         <FileSpreadsheet className="h-4 w-4" />
         Import CSV broker
@@ -89,7 +89,7 @@ export function CsvImport() {
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+    <div className="app-card space-y-4 p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Import CSV từ broker</h2>
         <button
@@ -114,7 +114,7 @@ export function CsvImport() {
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value as CsvFormat)}
-          className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+          className="app-input text-sm"
         >
           {FORMATS.map((f) => (
             <option key={f.value} value={f.value}>
@@ -198,7 +198,7 @@ export function CsvImport() {
           </div>
           <button
             onClick={confirmImport}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
+            className="app-btn-primary"
           >
             Xác nhận import {importPreview.transactions.length} giao dịch
           </button>

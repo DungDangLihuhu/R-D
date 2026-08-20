@@ -1,6 +1,8 @@
 "use client";
 
+import { History } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
+import { EmptyState } from "@/components/EmptyState";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
@@ -21,16 +23,18 @@ export function ClosedTradesTable({
 
   if (sorted.length === 0) {
     return (
-      <div className="app-card px-4 py-12 text-center text-sm text-gray-500">
-        Chưa có lệnh đã đóng. Lãi/lỗ hiện khi bạn bán cổ phiếu đã mua trước đó.
-      </div>
+      <EmptyState
+        icon={History}
+        title="Chưa có lệnh đã đóng"
+        description="Lãi/lỗ hiện khi bạn bán cổ phiếu đã mua trước đó."
+      />
     );
   }
 
   const totalPnl = sorted.reduce((s, t) => s + t.pnl, 0);
 
   return (
-    <div className="app-card overflow-hidden p-0">
+    <div className="app-table-wrap">
       <div className="space-y-3 p-3 sm:hidden">
         {pageItems.map((t, i) => {
           const quote = state.marketQuotes?.[t.symbol];
@@ -86,7 +90,7 @@ export function ClosedTradesTable({
 
       <div className="hidden sm:block">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-500">
+          <thead className="app-table-head text-left">
             <tr>
               <th className="px-4 py-2">Ngày</th>
               <th className="px-4 py-2">Mã</th>
@@ -103,7 +107,7 @@ export function ClosedTradesTable({
               return (
                 <tr
                   key={`${t.date}-${t.symbol}-${i}`}
-                  className="border-t border-gray-200"
+                  className="app-row border-t border-gray-200"
                 >
                   <td className="px-4 py-2">{formatDate(t.date)}</td>
                   <td className="px-4 py-2">

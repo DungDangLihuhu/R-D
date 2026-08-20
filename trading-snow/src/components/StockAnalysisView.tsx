@@ -41,18 +41,18 @@ interface SearchSuggestion {
 
 function ChartSkeleton() {
   return (
-    <div className="h-[22rem] animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+    <div className="h-[22rem] app-skeleton" />
   );
 }
 
 function AnalysisSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="h-36 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+      <div className="h-36 app-skeleton" />
       <ChartSkeleton />
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="h-48 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
-        <div className="h-48 animate-pulse rounded-xl border border-gray-200 bg-gray-50" />
+        <div className="h-48 app-skeleton" />
+        <div className="h-48 app-skeleton" />
       </div>
     </div>
   );
@@ -226,8 +226,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Phân tích</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="app-page-title">Phân tích</h1>
+          <p className="app-page-desc">
             Chỉ số cơ bản · báo cáo · tin tức · giao dịch nội bộ (Yahoo + Finnhub)
           </p>
         </div>
@@ -271,7 +271,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   }
                 }}
                 placeholder="Nhập mã (AAPL, NVDA, BNP.PA…)"
-                className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm"
+                className="app-input w-full py-2 pl-9 pr-3"
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={showSuggestions && visibleSuggestions.length > 0}
@@ -320,7 +320,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             </div>
             <button
               type="submit"
-              className="shrink-0 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
+              className="app-btn-primary shrink-0"
             >
               Xem
             </button>
@@ -333,7 +333,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   router.push(`/stock/${encodeURIComponent(e.target.value)}`);
                 }
               }}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm"
+              className="app-input"
             >
               <option value="">Mã trong danh mục…</option>
               {holdings.map((s) => (
@@ -360,7 +360,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
       {data && !loading && (
         <>
-          <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6">
+          <div className="app-card p-4 sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
               {data.logo ? (
@@ -433,14 +433,12 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+              <div className="app-segmented">
                 <button
                   type="button"
                   onClick={() => setChartMode("technical")}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    chartMode === "technical"
-                      ? "bg-white text-sky-700 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                  className={`app-segmented-item ${
+                    chartMode === "technical" ? "app-segmented-item-active" : ""
                   }`}
                 >
                   Phân tích kĩ thuật
@@ -448,10 +446,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 <button
                   type="button"
                   onClick={() => setChartMode("fundamental")}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                    chartMode === "fundamental"
-                      ? "bg-white text-sky-700 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900"
+                  className={`app-segmented-item ${
+                    chartMode === "fundamental" ? "app-segmented-item-active" : ""
                   }`}
                 >
                   Phân tích cơ bản
@@ -753,7 +749,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="app-card p-4">
       <h3 className="mb-3 font-semibold">{title}</h3>
       {children}
     </div>
@@ -768,7 +764,7 @@ function MetricSection({
   metrics: { label: string; value: string; tone?: "positive" | "negative" }[];
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="app-card p-4">
       <h3 className="mb-3 font-semibold">{title}</h3>
       <dl className="grid gap-2 sm:grid-cols-2">
         {metrics.map((m) => (
