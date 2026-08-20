@@ -106,7 +106,7 @@ export function SyncBadge({ configured }: { configured: boolean }) {
   const room = getSyncRoomId();
   if (!configured) {
     return (
-      <span className="hidden items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500 sm:inline-flex">
+      <span className="hidden items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs text-app-muted sm:inline-flex" style={{ borderColor: "var(--app-border)", background: "var(--app-input-bg)" }}>
         <CloudOff className="h-3 w-3" />
         Local
       </span>

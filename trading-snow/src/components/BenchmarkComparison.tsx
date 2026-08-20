@@ -30,16 +30,8 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { fetchJson } from "@/lib/fetch-cache";
+import { useChartTheme } from "@/lib/chart-theme";
 import type { PortfolioStats, Transaction } from "@/lib/types";
-
-const GRID = "#e2e5ea";
-const TICK = "#6b7280";
-const TOOLTIP = {
-  background: "#ffffff",
-  border: "1px solid #e2e5ea",
-  borderRadius: "8px",
-  color: "#1a1d21",
-};
 
 function formatChartAxisPercent(value: number): string {
   const pct = value - 100;
@@ -67,6 +59,7 @@ export function BenchmarkComparison({
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const chartTheme = useChartTheme();
 
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
@@ -187,9 +180,7 @@ export function BenchmarkComparison({
               type="button"
               onClick={() => setRange(item.value)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                range === item.value
-                  ? "app-pill-active"
-                  : "app-pill-inactive rounded-full px-3 py-1 text-xs font-medium"
+                range === item.value ? "app-pill-active" : "app-pill-inactive"
               }`}
             >
               {item.label}
@@ -249,20 +240,20 @@ export function BenchmarkComparison({
                   label: formatChartMonthYear(p.date),
                 }))}
               >
-                <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+                <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: TICK, fontSize: 11 }}
+                  tick={{ fill: chartTheme.tick, fontSize: 11 }}
                   interval="preserveStartEnd"
                   minTickGap={28}
                 />
                 <YAxis
-                  tick={{ fill: TICK, fontSize: 11 }}
+                  tick={{ fill: chartTheme.tick, fontSize: 11 }}
                   tickFormatter={(v) => formatChartAxisPercent(Number(v))}
                   domain={["auto", "auto"]}
                 />
                 <Tooltip
-                  contentStyle={TOOLTIP}
+                  contentStyle={chartTheme.tooltip}
                   formatter={(v, name) => {
                     if (v == null) return ["—", name === "portfolio" ? "Danh mục" : "S&P 500"];
                     return [

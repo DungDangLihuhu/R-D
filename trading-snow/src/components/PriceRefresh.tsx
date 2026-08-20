@@ -29,7 +29,7 @@ export function PriceRefresh({ compact }: { compact?: boolean }) {
       >
         <RefreshCw className={`h-4 w-4 ${priceLoading ? "animate-spin" : ""}`} />
         {!compact && (
-          <span className="text-gray-500">
+          <span className="text-app-muted">
             {priceLoading
               ? "Đang lấy giá..."
               : quoteUnresolved.length > 0

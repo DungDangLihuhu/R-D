@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { StickyNote, Trash2 } from "lucide-react";
+import { StickyNote, Trash2, Wallet } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
+import { EmptyState } from "@/components/EmptyState";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
@@ -65,7 +66,7 @@ function TradeSummaryCard({
   feeTotal: number;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+    <div className="app-card app-card-static p-4 text-sm">
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <p className="text-xs text-gray-500">Mua</p>
@@ -108,7 +109,7 @@ function TradeRow({
   const cash = isCashSymbol(tx.symbol);
 
   return (
-    <div className="border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5">
+    <div className="border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5 app-row">
       <div className="md:hidden">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -182,7 +183,7 @@ function TradeRow({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100"
+            className="app-btn-danger p-1.5"
             aria-label="Xóa"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -251,7 +252,7 @@ function TradeRow({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded-md border border-rose-200 bg-rose-50 p-1 text-rose-600 hover:bg-rose-100"
+            className="app-btn-danger p-1"
             aria-label="Xóa"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -281,9 +282,11 @@ export function TradeTable() {
 
   if (trades.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
-        Chưa có giao dịch. Thêm hoặc import giao dịch đầu tiên.
-      </div>
+      <EmptyState
+        icon={Wallet}
+        title="Chưa có giao dịch"
+        description="Import CSV, tin nhắn ngân hàng hoặc thêm thủ công để bắt đầu."
+      />
     );
   }
 
@@ -291,8 +294,8 @@ export function TradeTable() {
     <div className="space-y-4">
       <TradeSummaryCard {...summary} />
 
-      <div className="app-card overflow-hidden p-0">
-        <div className="hidden border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-500 md:grid md:grid-cols-[0.7fr_minmax(0,1.4fr)_0.85fr_0.65fr_0.75fr_0.65fr_0.85fr_0.9fr_0.55fr_0.45fr] md:gap-2">
+      <div className="app-table-wrap">
+        <div className="app-table-head hidden px-4 py-2.5 md:grid md:grid-cols-[0.7fr_minmax(0,1.4fr)_0.85fr_0.65fr_0.75fr_0.65fr_0.85fr_0.9fr_0.55fr_0.45fr] md:gap-2">
           <span>Loại</span>
           <span>Vị thế</span>
           <span className="text-right">Ngày</span>

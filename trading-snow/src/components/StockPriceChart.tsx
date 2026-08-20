@@ -21,9 +21,8 @@ import { FUNDAMENTAL_CHART_TIMEFRAMES, showPriceLevelsOnChart } from "@/lib/char
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
 import type { PriceLevels } from "@/lib/stock-analysis";
 import { useChartHistory } from "@/hooks/useChartHistory";
+import { useChartTheme } from "@/lib/chart-theme";
 
-const GRID = "#e2e5ea";
-const TICK = "#6b7280";
 const CHART_COLORS = {
   price: "#0ea5e9",
   targetAnalyst: "#8b5cf6",
@@ -151,6 +150,7 @@ export function StockPriceChart({
   const [timeframe, setTimeframe] = useState<ChartTimeframe>("1d");
   const [chartStyle, setChartStyle] = useState<ChartStyle>("line");
   const { points, loading, error } = useChartHistory(symbol, timeframe, dailySeed);
+  const chartTheme = useChartTheme();
 
   const levels = showPriceLevelsOnChart(timeframe) ? priceLevels : undefined;
 
@@ -160,7 +160,7 @@ export function StockPriceChart({
   );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="app-card p-4">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="font-semibold">Phân tích cơ bản</h3>
         <div className="flex flex-wrap items-center gap-2">
@@ -224,10 +224,10 @@ export function StockPriceChart({
           <div className="min-w-0 w-full h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={points} barCategoryGap="20%">
-                <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+                <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fill: TICK, fontSize: 10 }}
+                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
                   interval="preserveStartEnd"
                   minTickGap={24}
                   tickFormatter={(value) => {
@@ -236,7 +236,7 @@ export function StockPriceChart({
                   }}
                 />
                 <YAxis
-                  tick={{ fill: TICK, fontSize: 10 }}
+                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
                   domain={yDomain}
                   width={64}
                   tickFormatter={formatChartPrice}

@@ -18,15 +18,13 @@ import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { TECHNICAL_CHART_TIMEFRAMES } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
 import { useChartHistory } from "@/hooks/useChartHistory";
+import { useChartTheme } from "@/lib/chart-theme";
 import {
   computeBenDangIndicators,
   type BenDangIndicators,
   type BenDangLayers,
   type SrLevel,
 } from "@/lib/indicators/ben-dang";
-
-const GRID = "#e2e5ea";
-const TICK = "#6b7280";
 
 const COLORS = {
   candleUp: "#10b981",
@@ -435,6 +433,7 @@ export function BenDangChart({
   const [timeframe, setTimeframe] = useState<ChartTimeframe>("1d");
   const [layers, setLayers] = useState<BenDangLayers>(DEFAULT_LAYERS);
   const { points, loading, error } = useChartHistory(symbol, timeframe, dailySeed);
+  const chartTheme = useChartTheme();
 
   const indicators = useMemo(
     () => (points.length > 5 ? computeBenDangIndicators(points) : null),
@@ -452,7 +451,7 @@ export function BenDangChart({
   );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="app-card p-4">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-semibold">Phân tích kĩ thuật</h3>
@@ -496,10 +495,10 @@ export function BenDangChart({
           <div className="min-w-0 w-full h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={points} barCategoryGap="20%">
-                <CartesianGrid stroke={GRID} strokeDasharray="3 3" />
+                <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fill: TICK, fontSize: 10 }}
+                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
                   interval="preserveStartEnd"
                   minTickGap={24}
                   tickFormatter={(value) => {
@@ -508,7 +507,7 @@ export function BenDangChart({
                   }}
                 />
                 <YAxis
-                  tick={{ fill: TICK, fontSize: 10 }}
+                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
                   domain={yDomain}
                   width={64}
                   tickFormatter={formatChartPrice}

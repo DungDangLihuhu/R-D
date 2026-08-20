@@ -42,7 +42,7 @@ export default function TradesPage() {
           <button
             type="button"
             onClick={handleClearAll}
-            className="flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-600 shadow-sm transition-colors hover:bg-rose-50"
+            className="app-btn-danger"
           >
             <Trash2 className="h-4 w-4" />
             Xóa tất cả giao dịch
@@ -56,10 +56,8 @@ export default function TradesPage() {
         <button
           type="button"
           onClick={() => setShowManualForm((v) => !v)}
-          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 ${
-            showManualForm
-              ? "border-sky-300 bg-sky-50 text-sky-700"
-              : "border-gray-200"
+          className={`app-btn-secondary ${
+            showManualForm ? "border-sky-300 bg-sky-50 text-sky-700" : ""
           }`}
         >
           <PenLine className="h-4 w-4" />

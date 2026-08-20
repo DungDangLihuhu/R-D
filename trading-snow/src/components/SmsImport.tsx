@@ -57,7 +57,7 @@ export function SmsImport() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50"
+        className="app-btn-secondary"
       >
         <MessageSquareText className="h-4 w-4" />
         Import tin nhắn ngân hàng
@@ -66,7 +66,7 @@ export function SmsImport() {
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+    <div className="app-card space-y-4 p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Import tin nhắn giao dịch</h2>
         <button
@@ -90,7 +90,7 @@ export function SmsImport() {
         onChange={(e) => setText(e.target.value)}
         placeholder={EXAMPLE}
         rows={5}
-        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400"
+        className="app-input w-full"
       />
 
       <div className="flex flex-wrap gap-2">
@@ -104,7 +104,7 @@ export function SmsImport() {
         <button
           type="button"
           onClick={() => setText(EXAMPLE)}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 hover:bg-gray-200"
+          className="app-btn-secondary"
         >
           Dán ví dụ
         </button>
@@ -150,7 +150,7 @@ export function SmsImport() {
                     <td className="px-3 py-1.5 text-right">
                       {formatMoney(t.price)}
                     </td>
-                    <td className="px-3 py-1.5 text-zlate-500">{t.ref ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-gray-500">{t.ref ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -158,7 +158,7 @@ export function SmsImport() {
           </div>
           <button
             onClick={confirmImport}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
+            className="app-btn-primary"
           >
             Xác nhận thêm {importPreview.transactions.length} giao dịch
           </button>

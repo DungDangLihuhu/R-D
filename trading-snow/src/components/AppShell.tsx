@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Briefcase,
   CalendarDays,
   History,
   LayoutDashboard,
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { state, activePortfolioId, setActivePortfolioId, cloudConfigured } = useApp();
 
   return (
-    <div className="app-bg-mesh min-h-screen overflow-x-hidden text-app-text">
+    <div className="app-bg-mesh flex min-h-screen flex-col overflow-x-hidden text-app-text">
       <header className="app-header">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link
@@ -47,22 +48,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={activePortfolioId}
-              onChange={(e) => setActivePortfolioId(e.target.value)}
-              className="app-input max-w-[min(100%,14rem)] py-1.5"
-            >
-              {state.portfolios.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <label className="relative">
+              <span className="sr-only">Chọn portfolio</span>
+              <Briefcase className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-app-muted" />
+              <select
+                value={activePortfolioId}
+                onChange={(e) => setActivePortfolioId(e.target.value)}
+                className="app-input max-w-[min(100%,14rem)] py-1.5 pl-8"
+              >
+                {state.portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <ThemeToggle />
             <SyncBadge configured={cloudConfigured} />
           </div>
         </div>
-        <nav className="mx-auto flex max-w-6xl gap-1.5 overflow-x-auto px-4 pb-3 scrollbar-none">
+        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-3 scrollbar-none">
           {nav.map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href ||
@@ -83,7 +88,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       </header>
-      <main className="mx-auto max-w-6xl min-w-0 px-4 py-6 sm:py-8">{children}</main>
+      <main className="mx-auto w-full max-w-6xl min-w-0 flex-1 px-4 py-6 sm:py-8">
+        {children}
+      </main>
+      <footer className="app-footer mt-auto">
+        <p className="mx-auto max-w-6xl px-4 py-5 text-center text-xs leading-relaxed">
+          Trading Snow · nhật ký giao dịch cá nhân · dữ liệu thị trường chỉ mang tính tham khảo
+        </p>
+      </footer>
       <NotificationWatcher />
     </div>
   );
