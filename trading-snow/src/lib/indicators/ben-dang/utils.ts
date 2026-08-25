@@ -85,9 +85,9 @@ export function findPivotLows(bars: Bar[], left: number, right: number): SwingPo
 }
 
 export function avgVolume(bars: Bar[], index: number, lookback = 20): number {
-  const start = Math.max(0, index - lookback + 1);
-  const slice = bars.slice(start, index + 1);
-  if (!slice.length) return 0;
+  const start = Math.max(0, index - lookback);
+  const slice = bars.slice(start, index);
+  if (!slice.length) return bars[index]?.volume ?? 0;
   return slice.reduce((s, b) => s + b.volume, 0) / slice.length;
 }
 

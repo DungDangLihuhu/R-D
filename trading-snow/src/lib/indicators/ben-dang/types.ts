@@ -49,6 +49,7 @@ export type WyckoffEvent =
   | "SC"
   | "AR"
   | "ST"
+  | "Spring"
   | "SOS"
   | "LPS"
   | "PSY"
