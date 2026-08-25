@@ -19,6 +19,7 @@ import type { StockAnalysis, StockAnalysisExtra } from "@/lib/stock-analysis";
 import {
   assessmentBg,
   assessmentColor,
+  signalScoreLabel,
   type StockAssessment,
 } from "@/lib/stock-assessment";
 
@@ -419,10 +420,12 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 )}
               </div>
               </div>
-              <AssessmentPanel assessment={data.assessment} currency={data.currency} />
-              {extraLoading && (
-                <p className="mt-2 text-xs text-gray-400">Đang tải tin tức & nội bộ...</p>
-              )}
+              <div className="w-full shrink-0 lg:w-72 xl:w-80">
+                <AssessmentPanel assessment={data.assessment} currency={data.currency} />
+                {extraLoading && (
+                  <p className="mt-2 text-xs text-gray-400">Đang tải tin tức & nội bộ...</p>
+                )}
+              </div>
             </div>
             {data.note && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -714,7 +717,7 @@ function AssessmentPanel({
 }) {
   return (
     <div
-      className={`w-full shrink-0 rounded-xl border p-4 lg:w-56 xl:w-64 ${assessmentBg(assessment.rating)}`}
+      className={`w-full rounded-xl border p-4 ${assessmentBg(assessment.rating)}`}
     >
       <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
         Đánh giá tổng hợp
@@ -722,7 +725,9 @@ function AssessmentPanel({
       <p className={`mt-1 text-2xl font-bold ${assessmentColor(assessment.rating)}`}>
         {assessment.label}
       </p>
-      <p className="mt-0.5 text-xs text-gray-500">Điểm {assessment.score}/100</p>
+      <p className="mt-0.5 text-xs text-gray-500">
+        Điểm {assessment.score}/100 · 50 = trung lập
+      </p>
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex items-baseline justify-between gap-2">
           <dt className="text-gray-600">Nên mua</dt>
@@ -737,6 +742,32 @@ function AssessmentPanel({
           </dd>
         </div>
       </dl>
+      <ul className="mt-3 space-y-1.5 border-t border-gray-200 pt-3">
+        {assessment.signals.map((s) => (
+          <li key={s.id} className="flex items-start justify-between gap-2 text-xs">
+            <div className="min-w-0">
+              <p className="font-medium text-gray-700">{s.label}</p>
+              <p className="truncate text-[11px] text-gray-500">{s.detail}</p>
+            </div>
+            <span
+              className={`shrink-0 tabular-nums font-semibold ${
+                !s.available
+                  ? "text-gray-400"
+                  : s.score > 0.08
+                    ? "text-emerald-700"
+                    : s.score < -0.08
+                      ? "text-rose-700"
+                      : "text-gray-600"
+              }`}
+            >
+              {signalScoreLabel(s.score, s.available)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[10px] leading-snug text-gray-500">
+        Thiếu dữ liệu không tính vào điểm. Chỉ mang tính tham khảo.
+      </p>
     </div>
   );
 }

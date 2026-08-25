@@ -384,6 +384,20 @@ function WyckoffPanel({ indicators, currency }: { indicators: BenDangIndicators;
           <dd className="font-medium">{w.summary.recommendation}</dd>
         </div>
       </dl>
+
+      {w.events.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {w.events.map((e) => (
+            <span
+              key={`${e.event}-${e.index}`}
+              title={e.label}
+              className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-700"
+            >
+              {e.event}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
