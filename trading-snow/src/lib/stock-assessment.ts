@@ -24,6 +24,7 @@ export interface OptionFlowSummary {
   callVolume: number;
   putVolume: number;
   putCallRatio: number;
+  source?: "yahoo" | "finnhub";
 }
 
 export interface StockAssessment {
@@ -227,11 +228,12 @@ function optionFlowSignal(flow: OptionFlowSummary | null | undefined): Assessmen
   else if (ratio > 1.3) score = -0.8;
   else if (ratio > 1.1) score = -0.4;
 
+  const source = flow.source === "yahoo" ? "Yahoo" : flow.source === "finnhub" ? "Finnhub" : "";
   return {
     id: "options",
     label: "Option flow",
     score,
-    detail: `P/C ${ratio.toFixed(2)} · C ${flow.callVolume.toLocaleString("vi-VN")} / P ${flow.putVolume.toLocaleString("vi-VN")}`,
+    detail: `P/C ${ratio.toFixed(2)} · C ${flow.callVolume.toLocaleString("vi-VN")} / P ${flow.putVolume.toLocaleString("vi-VN")}${source ? ` · ${source}` : ""}`,
     available: true,
   };
 }

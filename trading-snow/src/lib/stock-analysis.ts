@@ -1,6 +1,6 @@
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, yahooInsiderShareChange } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooOptionFlow, yahooInsiderShareChange } from "./yahoo";
 import type { YahooInsiderData } from "./yahoo";
 import {
   computeStockAssessment,
@@ -124,6 +124,11 @@ async function finnhubGet<T>(path: string, symbol: string): Promise<T | null> {
 }
 
 async function fetchOptionFlow(symbol: string): Promise<OptionFlowSummary | null> {
+  const yahoo = await fetchYahooOptionFlow(symbol);
+  if (yahoo && yahoo.callVolume + yahoo.putVolume > 0) {
+    return { ...yahoo, source: "yahoo" };
+  }
+
   const chain = await finnhubGet<{
     data?: {
       options?: {
@@ -151,6 +156,7 @@ async function fetchOptionFlow(symbol: string): Promise<OptionFlowSummary | null
     callVolume,
     putVolume,
     putCallRatio: callVolume > 0 ? putVolume / callVolume : 0,
+    source: "finnhub",
   };
 }
 
@@ -203,6 +209,62 @@ function volatilityMetric(label: string, value: number | null | undefined): Anal
     if (value <= 25) m.tone = "positive";
     else if (value > 40) m.tone = "negative";
   }
+  return m;
+}
+
+function finitePositive(...values: (number | null | undefined)[]): number | undefined {
+  for (const v of values) {
+    if (v != null && Number.isFinite(v) && v > 0) return v;
+  }
+  return undefined;
+}
+
+function resolvePeg(
+  reported: number | undefined,
+  pe: number | undefined,
+  growthPct: number | undefined
+): number | undefined {
+  if (reported != null && Number.isFinite(reported) && reported > 0 && reported < 80) {
+    return reported;
+  }
+  if (pe != null && pe > 0 && growthPct != null && growthPct > 0) {
+    return pe / growthPct;
+  }
+  return undefined;
+}
+
+/** Số năm EPS (có tăng trưởng) cần để hoàn vốn giá hiện tại. Không tăng trưởng thì = P/E. */
+function earningsPaybackYears(
+  pe: number | undefined,
+  growthPct: number | undefined
+): number | undefined {
+  if (pe == null || !Number.isFinite(pe) || pe <= 0) return undefined;
+  const g = growthPct != null && Number.isFinite(growthPct) ? growthPct / 100 : 0;
+  if (g > 0.005 && g < 1.5) {
+    const n = Math.log(1 + pe * g) / Math.log(1 + g);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return pe;
+}
+
+function pegMetric(label: string, peg: number | undefined): AnalysisMetric {
+  if (peg == null || !Number.isFinite(peg) || peg <= 0) return metric(label, "—");
+  const m = metric(label, num(peg));
+  if (peg <= 1.2) m.tone = "positive";
+  else if (peg >= 2.5) m.tone = "negative";
+  return m;
+}
+
+function yearsMetric(
+  label: string,
+  years: number | undefined,
+  goodMax: number,
+  badMin: number
+): AnalysisMetric {
+  if (years == null || !Number.isFinite(years) || years <= 0) return metric(label, "—");
+  const m = metric(label, years > 80 ? ">80 năm" : `${years.toFixed(1)} năm`);
+  if (years <= goodMax) m.tone = "positive";
+  else if (years >= badMin) m.tone = "negative";
   return m;
 }
 
@@ -516,12 +578,23 @@ function buildSections(
   profile: {
     marketCapitalization?: number;
     shareOutstanding?: number;
-  }
+  },
+  price: number
 ): AnalysisSection[] {
   const revenueTtm =
     m.revenuePerShareTTM && profile.shareOutstanding
       ? m.revenuePerShareTTM * profile.shareOutstanding * 1_000_000
       : null;
+
+  const peTtm =
+    finitePositive(m.peTTM) ??
+    (price > 0 && finitePositive(m.epsTTM) ? price / m.epsTTM : undefined);
+  const forwardPe = finitePositive(m.forwardPE);
+  const growth = finitePositive(m.epsGrowthTTMYoy, m.epsGrowth3Y);
+  const pegTtm = resolvePeg(m.pegTTM, peTtm, growth);
+  const pegForward = resolvePeg(undefined, forwardPe, growth);
+  const epsPayback = earningsPaybackYears(peTtm, growth);
+  const fcfPayback = finitePositive(m.pfcfShareTTM);
 
   return [
     {
@@ -546,7 +619,10 @@ function buildSections(
       metrics: [
         metric("P/E TTM", num(m.peTTM)),
         metric("P/E Forward", num(m.forwardPE)),
-        metric("PEG TTM", num(m.pegTTM)),
+        pegMetric("PEG TTM", pegTtm),
+        pegMetric("PEG Forward", pegForward),
+        yearsMetric("Hoàn vốn EPS", epsPayback, 12, 25),
+        yearsMetric("Hoàn vốn FCF", fcfPayback, 15, 30),
         metric("P/S (EV/Revenue)", num(m.evRevenueTTM)),
         metric("P/B", num(m.pb)),
         metric("P/FCF TTM", num(m.pfcfShareTTM)),
@@ -674,7 +750,7 @@ function buildCoreSections(
 ): AnalysisSection[] {
   const m = metricsRes?.metric ?? {};
   const sections: AnalysisSection[] = metricsRes
-    ? buildSections(m, profile ?? {})
+    ? buildSections(m, profile ?? {}, quote.price)
     : [];
 
   if (profile?.finnhubIndustry && sections[0]) {

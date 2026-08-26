@@ -11,7 +11,7 @@ export function useChartTheme() {
       theme === "dark"
         ? {
             grid: "#334155",
-            tick: "#94a3b8",
+            tick: "#cbd5e1",
             tooltip: {
               background: "#1e293b",
               border: "1px solid #475569",
