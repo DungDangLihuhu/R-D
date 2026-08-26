@@ -770,7 +770,8 @@ function AssessmentPanel({
         ))}
       </ul>
       <p className="mt-2 text-[10px] leading-snug text-gray-500">
-        Thiếu dữ liệu kéo điểm về trung lập. Chỉ mang tính tham khảo.
+        Mốc mua/bán kết hợp hỗ trợ–kháng cự với PEG · P/E trần · P/FCF (không lấy P/E hiện tại ×
+        EPS). Thiếu dữ liệu thì chỉ dùng kỹ thuật. Chỉ mang tính tham khảo, không phải lệnh mua/bán.
       </p>
     </div>
   );
