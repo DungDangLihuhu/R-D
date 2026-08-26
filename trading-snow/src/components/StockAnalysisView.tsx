@@ -725,9 +725,7 @@ function AssessmentPanel({
       <p className={`mt-1 text-2xl font-bold ${assessmentColor(assessment.rating)}`}>
         {assessment.label}
       </p>
-      <p className="mt-0.5 text-xs text-gray-500">
-        Điểm {assessment.score}/100 · 50 = trung lập
-      </p>
+      <p className="mt-0.5 text-xs text-gray-500">Điểm {assessment.score}/100</p>
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex items-baseline justify-between gap-2">
           <dt className="text-gray-600">Nên mua</dt>

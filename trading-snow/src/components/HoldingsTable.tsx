@@ -171,7 +171,7 @@ function HoldingRow({
   return (
     <div
       className={`app-row border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5 ${
-        hidden ? "bg-gray-50/80 opacity-70" : ""
+        hidden ? "bg-amber-50" : ""
       }`}
     >
       <div className="md:hidden">

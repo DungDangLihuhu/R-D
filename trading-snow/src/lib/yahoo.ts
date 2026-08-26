@@ -616,3 +616,121 @@ export async function fetchQuotesFinnhub(
   }
   return results;
 }
+
+export interface YahooOptionFlow {
+  callVolume: number;
+  putVolume: number;
+  putCallRatio: number;
+}
+
+interface YahooOptionContract {
+  volume?: number;
+  openInterest?: number;
+}
+
+interface YahooOptionExpiry {
+  calls?: YahooOptionContract[];
+  puts?: YahooOptionContract[];
+}
+
+function sumOptionSide(contracts: YahooOptionContract[] | undefined): {
+  volume: number;
+  openInterest: number;
+} {
+  let volume = 0;
+  let openInterest = 0;
+  for (const c of contracts ?? []) {
+    volume += c.volume ?? 0;
+    openInterest += c.openInterest ?? 0;
+  }
+  return { volume, openInterest };
+}
+
+async function fetchYahooOptionsExpiry(
+  yahoo: string,
+  host: string,
+  session: { cookie: string; crumb: string } | null,
+  date?: number
+): Promise<{
+  expirationDates: number[];
+  options: YahooOptionExpiry[];
+} | null> {
+  const params = new URLSearchParams();
+  if (session?.crumb) params.set("crumb", session.crumb);
+  if (date != null) params.set("date", String(date));
+  const qs = params.toString();
+  const url = `https://${host}/v7/finance/options/${encodeYahooSymbol(yahoo)}${qs ? `?${qs}` : ""}`;
+  const res = await fetch(url, {
+    headers: session
+      ? { ...YAHOO_HEADERS, Cookie: session.cookie }
+      : YAHOO_HEADERS,
+    next: { revalidate: 900 },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    optionChain?: {
+      result?: {
+        expirationDates?: number[];
+        options?: YahooOptionExpiry[];
+      }[];
+    };
+  };
+  const result = json.optionChain?.result?.[0];
+  if (!result) return null;
+  return {
+    expirationDates: result.expirationDates ?? [],
+    options: result.options ?? [],
+  };
+}
+
+export async function fetchYahooOptionFlow(symbol: string): Promise<YahooOptionFlow | null> {
+  const session = await getYahooSession();
+  const hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
+
+  for (const candidate of resolveYahooSymbolCandidates(symbol)) {
+    const yahoo = toYahooSymbol(candidate);
+    for (const host of hosts) {
+      const nearest = await fetchYahooOptionsExpiry(yahoo, host, session);
+      if (!nearest?.options.length) continue;
+
+      const extraDates = nearest.expirationDates.filter(Boolean).slice(1, 3);
+      const extra = extraDates.length
+        ? await Promise.all(
+            extraDates.map((date) => fetchYahooOptionsExpiry(yahoo, host, session, date))
+          )
+        : [];
+
+      const expiries = [
+        ...nearest.options,
+        ...extra.flatMap((hit) => hit?.options ?? []),
+      ];
+
+      let callVolume = 0;
+      let callOi = 0;
+      let putVolume = 0;
+      let putOi = 0;
+      for (const expiry of expiries) {
+        const calls = sumOptionSide(expiry.calls);
+        const puts = sumOptionSide(expiry.puts);
+        callVolume += calls.volume;
+        callOi += calls.openInterest;
+        putVolume += puts.volume;
+        putOi += puts.openInterest;
+      }
+
+      const useVolume = callVolume + putVolume > 0;
+      const calls = useVolume ? callVolume : callOi;
+      const puts = useVolume ? putVolume : putOi;
+      if (calls + puts === 0) continue;
+
+      return {
+        callVolume: calls,
+        putVolume: puts,
+        putCallRatio: calls > 0 ? puts / calls : 0,
+      };
+    }
+  }
+
+  return null;
+}
+

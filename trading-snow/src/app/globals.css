@@ -59,9 +59,9 @@
   --app-border: #334155;
   --app-border-glass: rgba(51, 65, 85, 0.8);
   --app-text: #f8fafc;
-  --app-text-muted: #e2e8f0;
-  --app-text-subtle: #cbd5e1;
-  --app-text-secondary: #f1f5f9;
+  --app-text-muted: #e8eef5;
+  --app-text-subtle: #d4dee9;
+  --app-text-secondary: #f8fafc;
   --app-header-bg: rgba(15, 23, 42, 0.85);
   --app-header-border: rgba(51, 65, 85, 0.6);
   --app-input-bg: rgba(30, 41, 59, 0.9);
@@ -452,7 +452,7 @@ button:not(:disabled) {
 
 .dark .text-gray-400,
 .dark .text-slate-400 {
-  color: var(--app-text-subtle);
+  color: var(--app-text-muted);
 }
 
 .dark .text-gray-500,
@@ -583,8 +583,14 @@ button:not(:disabled) {
 }
 
 .dark .bg-gray-50,
+.dark .bg-gray-50\/80,
 .dark .bg-gray-100 {
-  background-color: rgba(51, 65, 85, 0.4);
+  background-color: rgba(51, 65, 85, 0.55);
+}
+
+.dark .bg-amber-50\/40,
+.dark .bg-amber-50\/60 {
+  background-color: rgba(120, 53, 15, 0.35);
 }
 
 .dark .hover\:bg-gray-50:hover,
