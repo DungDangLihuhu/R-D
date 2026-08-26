@@ -1,9 +1,10 @@
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooOptionFlow, yahooInsiderShareChange } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, yahooInsiderShareChange } from "./yahoo";
 import type { YahooInsiderData } from "./yahoo";
 import {
   computeStockAssessment,
+  type NewsSentimentSummary,
   type OptionFlowSummary,
   type StockAssessment,
 } from "./stock-assessment";
@@ -659,6 +660,14 @@ function buildSections(
         metric("KL TB 10 ngày", num(m["10DayAverageTradingVolume"], 0)),
         metric("KL TB 3 tháng", num(m["3MonthAverageTradingVolume"], 0)),
         volatilityMetric("Độ biến động 3 tháng", m["3MonthADReturnStd"]),
+        metric(
+          "Short % float",
+          pct(
+            m.shortPercentOutstanding != null && m.shortPercentOutstanding <= 1
+              ? m.shortPercentOutstanding * 100
+              : m.shortPercentOutstanding
+          )
+        ),
       ],
     },
   ];
@@ -729,6 +738,21 @@ async function fetchCompanyNews(upper: string): Promise<NewsRow[]> {
   return [];
 }
 
+async function fetchNewsSentiment(symbol: string): Promise<NewsSentimentSummary | null> {
+  const data = await finnhubGet<{
+    companyNewsScore?: number;
+    sentiment?: { bullishPercent?: number; bearishPercent?: number };
+  }>("news-sentiment?", symbol);
+  const bull = data?.sentiment?.bullishPercent;
+  const bear = data?.sentiment?.bearishPercent;
+  if (bull == null && bear == null) return null;
+  return {
+    bullishPercent: bull ?? 0.5,
+    bearishPercent: bear ?? 0.5,
+    companyNewsScore: data?.companyNewsScore,
+  };
+}
+
 type FinnhubProfile = {
   name?: string;
   ticker?: string;
@@ -776,12 +800,18 @@ export async function fetchStockAnalysisExtra(
   symbol: string,
   core: Pick<
     StockAnalysis,
-    "symbol" | "price" | "sections" | "priceHistory" | "priceLevels" | "recommendations"
+    | "symbol"
+    | "price"
+    | "sections"
+    | "priceHistory"
+    | "priceLevels"
+    | "recommendations"
+    | "earningsHistory"
   > & { metrics: Record<string, number> }
 ): Promise<StockAnalysisExtra> {
   const upper = symbol.trim().toUpperCase();
 
-  const [insiderRes, executiveRes, yahooInsider, peers, optionFlow, news] =
+  const [insiderRes, executiveRes, yahooInsider, peers, optionFlow, news, newsSentiment, yahooStats] =
     await Promise.all([
       finnhubGet<{
         data?: {
@@ -802,6 +832,8 @@ export async function fetchStockAnalysisExtra(
       finnhubGet<string[]>("stock/peers?", upper),
       fetchOptionFlow(upper),
       fetchCompanyNews(upper),
+      fetchNewsSentiment(upper),
+      fetchYahooKeyStats(upper),
     ]);
 
   const insiderTransactions = buildInsiderRows(
@@ -819,6 +851,11 @@ export async function fetchStockAnalysisExtra(
     recommendations: core.recommendations,
     priceLevels: core.priceLevels,
     optionFlow,
+    earningsHistory: core.earningsHistory,
+    priceHistory: core.priceHistory,
+    newsSentiment,
+    pegRatio: yahooStats?.pegRatio,
+    shortPercentOfFloat: yahooStats?.shortPercentOfFloat,
   });
 
   return {
@@ -879,6 +916,13 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     earningsUpcoming
   );
 
+  const earningsHistory = (earningsHist ?? []).slice(0, 8).map((e) => ({
+    period: e.period,
+    estimate: e.estimate ?? null,
+    actual: e.actual ?? null,
+    surprisePercent: e.surprisePercent ?? null,
+  }));
+
   const assessment = computeStockAssessment({
     price: quote.price,
     metrics: m,
@@ -887,6 +931,8 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     recommendations: recommendations ?? [],
     priceLevels,
     optionFlow: null,
+    earningsHistory,
+    priceHistory,
   });
 
   return {
@@ -905,12 +951,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     high52: m["52WeekHigh"] ?? undefined,
     low52: m["52WeekLow"] ?? undefined,
     sections,
-    earningsHistory: (earningsHist ?? []).slice(0, 8).map((e) => ({
-      period: e.period,
-      estimate: e.estimate ?? null,
-      actual: e.actual ?? null,
-      surprisePercent: e.surprisePercent ?? null,
-    })),
+    earningsHistory,
     earningsUpcoming: earningsUpcoming.slice(0, 4),
     recommendations: (recommendations ?? []).slice(0, 6),
     insiderTransactions: [],

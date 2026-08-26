@@ -1,4 +1,5 @@
 import type {
+  EarningsRow,
   InsiderRow,
   NewsRow,
   PriceLevels,
@@ -27,6 +28,12 @@ export interface OptionFlowSummary {
   source?: "yahoo" | "finnhub";
 }
 
+export interface NewsSentimentSummary {
+  bullishPercent: number;
+  bearishPercent: number;
+  companyNewsScore?: number;
+}
+
 export interface StockAssessment {
   rating: AssessmentRating;
   label: string;
@@ -47,9 +54,9 @@ const RATING_LABELS: Record<AssessmentRating, string> = {
 };
 
 const POSITIVE_NEWS =
-  /\b(tăng|surge|soar|rally|beat|exceed|growth|profit|record|upgrade|bull|breakout|mua|buy|strong|positive|partnership|deal|win)\b/i;
+  /\b(upgrade|raised guidance|beats? estimates|record (revenue|profit)|buyback|lawsuit settled|beat consensus)\b/i;
 const NEGATIVE_NEWS =
-  /\b(giảm|fall|drop|plunge|miss|loss|cut|downgrade|bear|sell|bán|lawsuit|probe|investigation|warning|weak|layoff|delay)\b/i;
+  /\b(downgrade|cut guidance|misses? estimates|lawsuit|probe|investigation|layoff|warning|restatement|fraud|plunge|going concern)\b/i;
 
 const OPEN_MARKET_BUY = new Set(["P"]);
 const OPEN_MARKET_SELL = new Set(["S"]);
@@ -64,10 +71,10 @@ function displayScore(weighted: number): number {
 }
 
 function scoreToRating(score: number): AssessmentRating {
-  if (score >= 70) return "strong_buy";
-  if (score >= 58) return "buy";
-  if (score > 42) return "hold";
-  if (score > 30) return "sell";
+  if (score >= 74) return "strong_buy";
+  if (score >= 63) return "buy";
+  if (score > 37) return "hold";
+  if (score > 26) return "sell";
   return "strong_sell";
 }
 
@@ -79,40 +86,68 @@ function bandScore(value: number, great: number, good: number, bad: number, terr
   return -1;
 }
 
-function fundamentalSignal(metrics: Record<string, number>): AssessmentSignal {
-  const parts: { score: number; note: string }[] = [];
+function finitePositive(...values: (number | null | undefined)[]): number | undefined {
+  for (const v of values) {
+    if (v != null && Number.isFinite(v) && v > 0) return v;
+  }
+  return undefined;
+}
 
+function resolvePeg(
+  reported: number | undefined,
+  pe: number | undefined,
+  growthPct: number | undefined
+): number | undefined {
+  if (reported != null && Number.isFinite(reported) && reported > 0 && reported < 80) {
+    return reported;
+  }
+  if (pe != null && pe > 0 && growthPct != null && growthPct > 0) {
+    return pe / growthPct;
+  }
+  return undefined;
+}
+
+function toShortPercent(raw: number | undefined): number | undefined {
+  if (raw == null || !Number.isFinite(raw) || raw < 0) return undefined;
+  return raw <= 1 ? raw * 100 : raw;
+}
+
+function rsiWilder(closes: number[], period = 14): number | undefined {
+  if (closes.length < period + 1) return undefined;
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d >= 0) gain += d;
+    else loss -= d;
+  }
+  gain /= period;
+  loss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    gain = (gain * (period - 1) + Math.max(d, 0)) / period;
+    loss = (loss * (period - 1) + Math.max(-d, 0)) / period;
+  }
+  if (loss === 0) return 100;
+  return 100 - 100 / (1 + gain / loss);
+}
+
+function qualitySignal(metrics: Record<string, number>): AssessmentSignal {
+  const parts: { score: number; note: string }[] = [];
   const add = (v: number | undefined, score: number, note: string) => {
     if (v == null || !Number.isFinite(v)) return;
     parts.push({ score, note });
   };
 
-  add(
-    metrics.epsGrowthTTMYoy,
-    clamp(bandScore(metrics.epsGrowthTTMYoy, 25, 8, 0, -15)),
-    "EPS"
-  );
+  add(metrics.epsGrowthTTMYoy, clamp(bandScore(metrics.epsGrowthTTMYoy, 30, 12, 0, -20)), "EPS");
   add(
     metrics.revenueGrowthTTMYoy,
-    clamp(bandScore(metrics.revenueGrowthTTMYoy, 20, 6, 0, -10)),
+    clamp(bandScore(metrics.revenueGrowthTTMYoy, 25, 10, 0, -12)),
     "DT"
   );
-  add(
-    metrics.grossMarginTTM,
-    clamp(bandScore(metrics.grossMarginTTM, 50, 30, 15, 5)),
-    "GM"
-  );
-  add(
-    metrics.netProfitMarginTTM,
-    clamp(bandScore(metrics.netProfitMarginTTM, 20, 8, 2, -5)),
-    "NM"
-  );
-  add(metrics.roeTTM, clamp(bandScore(metrics.roeTTM, 20, 10, 5, 0)), "ROE");
-  add(
-    metrics["52WeekPriceReturnDaily"],
-    clamp(bandScore(metrics["52WeekPriceReturnDaily"], 30, 8, -5, -25)),
-    "52w"
-  );
+  add(metrics.grossMarginTTM, clamp(bandScore(metrics.grossMarginTTM, 55, 35, 18, 8)), "GM");
+  add(metrics.netProfitMarginTTM, clamp(bandScore(metrics.netProfitMarginTTM, 22, 10, 3, -5)), "NM");
+  add(metrics.roeTTM, clamp(bandScore(metrics.roeTTM, 22, 12, 6, 0)), "ROE");
 
   const de = metrics["totalDebt/totalEquityQuarterly"];
   if (de != null && Number.isFinite(de)) {
@@ -120,50 +155,115 @@ function fundamentalSignal(metrics: Record<string, number>): AssessmentSignal {
   }
   add(
     metrics.currentRatioQuarterly,
-    clamp(bandScore(metrics.currentRatioQuarterly, 2, 1.3, 1, 0.7)),
+    clamp(bandScore(metrics.currentRatioQuarterly, 2, 1.4, 1, 0.7)),
     "CR"
   );
 
-  const pe = metrics.forwardPE || metrics.peTTM;
-  if (pe != null && Number.isFinite(pe)) {
-    if (pe < 0) parts.push({ score: -0.35, note: "P/E âm" });
-    else if (pe < 12) parts.push({ score: 0.25, note: "P/E thấp" });
-    else if (pe < 22) parts.push({ score: 0.08, note: "P/E vừa" });
-    else if (pe < 35) parts.push({ score: -0.08, note: "P/E cao" });
-    else parts.push({ score: -0.3, note: "P/E rất cao" });
-  }
-
-  const ret50 = metrics["50DayPriceReturnDaily"];
-  const ret200 = metrics["200DayPriceReturnDaily"];
-  if (ret50 != null && ret200 != null && Number.isFinite(ret50) && Number.isFinite(ret200)) {
-    parts.push({
-      score: ret50 > ret200 ? 0.2 : -0.2,
-      note: ret50 > ret200 ? "trend 50>200" : "trend 50<200",
-    });
-  }
-
   if (!parts.length) {
-    return {
-      id: "fundamental",
-      label: "Cơ bản",
-      score: 0,
-      detail: "Không đủ chỉ số",
-      available: false,
-    };
+    return { id: "quality", label: "Chất lượng", score: 0, detail: "Không đủ chỉ số", available: false };
   }
 
   const score = clamp(parts.reduce((s, p) => s + p.score, 0) / parts.length);
   const positive = parts.filter((p) => p.score > 0.05).length;
   return {
-    id: "fundamental",
-    label: "Cơ bản",
+    id: "quality",
+    label: "Chất lượng",
     score,
-    detail: `${positive}/${parts.length} nhóm tích cực` + (pe != null && Number.isFinite(pe) ? ` · P/E ${pe.toFixed(1)}` : ""),
+    detail: `${positive}/${parts.length} nhóm tốt (tăng trưởng/biên/ROE)`,
     available: true,
   };
 }
 
-function newsSignal(news: NewsRow[]): AssessmentSignal {
+function valuationSignal(
+  price: number,
+  metrics: Record<string, number>,
+  pegOverride?: number,
+  shortPercent?: number
+): AssessmentSignal {
+  const parts: { score: number; note: string }[] = [];
+  const pe = finitePositive(metrics.forwardPE, metrics.peTTM);
+  const growth = finitePositive(metrics.epsGrowthTTMYoy, metrics.epsGrowth3Y);
+  const peg = resolvePeg(pegOverride ?? metrics.pegTTM, pe, growth);
+  const pfcf = metrics.pfcfShareTTM;
+  const high = metrics["52WeekHigh"];
+  const low = metrics["52WeekLow"];
+
+  if (peg != null) {
+    let s = 0;
+    if (peg < 1) s = 0.35;
+    else if (peg < 1.5) s = 0.08;
+    else if (peg < 2) s = -0.2;
+    else if (peg < 3) s = -0.5;
+    else s = -0.85;
+    parts.push({ score: s, note: `PEG ${peg.toFixed(1)}` });
+  } else if (pe != null) {
+    let s = 0;
+    if (pe < 0) s = -0.4;
+    else if (pe < 14) s = 0.2;
+    else if (pe < 22) s = 0;
+    else if (pe < 32) s = -0.25;
+    else if (pe < 45) s = -0.5;
+    else s = -0.75;
+    parts.push({ score: s, note: `P/E ${pe.toFixed(0)}` });
+  }
+
+  if (pfcf != null && Number.isFinite(pfcf)) {
+    if (pfcf < 0) parts.push({ score: -0.4, note: "FCF âm" });
+    else if (pfcf < 15) parts.push({ score: 0.2, note: "P/FCF thấp" });
+    else if (pfcf < 28) parts.push({ score: 0, note: "P/FCF vừa" });
+    else if (pfcf < 45) parts.push({ score: -0.3, note: "P/FCF cao" });
+    else parts.push({ score: -0.55, note: "P/FCF rất cao" });
+  }
+
+  if (high && low && high > low && price > 0) {
+    const pos = (price - low) / (high - low);
+    parts.push({
+      score: clamp((0.52 - pos) * 0.9, -0.45, 0.22),
+      note: pos > 0.9 ? "sát đỉnh 52w" : pos < 0.2 ? "gần đáy 52w" : `52w ${(pos * 100).toFixed(0)}%`,
+    });
+  }
+
+  const short = toShortPercent(shortPercent);
+  if (short != null) {
+    if (short >= 20) parts.push({ score: -0.45, note: `short ${short.toFixed(1)}%` });
+    else if (short >= 10) parts.push({ score: -0.25, note: `short ${short.toFixed(1)}%` });
+    else if (short >= 5) parts.push({ score: -0.08, note: `short ${short.toFixed(1)}%` });
+  }
+
+  if (!parts.length) {
+    return { id: "valuation", label: "Định giá", score: 0, detail: "Không đủ P/E · PEG", available: false };
+  }
+
+  const score = clamp(parts.reduce((s, p) => s + p.score, 0) / parts.length);
+  return {
+    id: "valuation",
+    label: "Định giá",
+    score: clamp(score),
+    detail: parts.map((p) => p.note).slice(0, 3).join(" · "),
+    available: true,
+  };
+}
+
+function newsSignal(
+  news: NewsRow[],
+  sentiment?: NewsSentimentSummary | null
+): AssessmentSignal {
+  if (sentiment) {
+    const bull = sentiment.bullishPercent > 1 ? sentiment.bullishPercent / 100 : sentiment.bullishPercent;
+    const bear = sentiment.bearishPercent > 1 ? sentiment.bearishPercent / 100 : sentiment.bearishPercent;
+    let score = clamp(bull - bear);
+    if (sentiment.companyNewsScore != null) {
+      score = clamp(score * 0.6 + (sentiment.companyNewsScore - 0.5) * 0.8);
+    }
+    return {
+      id: "news",
+      label: "Tin tức (7 ngày)",
+      score,
+      detail: `Sentiment ${((bull - bear) * 100).toFixed(0)}%`,
+      available: true,
+    };
+  }
+
   const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
   const recent = news.filter((n) => {
     const t = new Date(n.date).getTime();
@@ -179,15 +279,13 @@ function newsSignal(news: NewsRow[]): AssessmentSignal {
     };
   }
 
-  const twoDays = Date.now() - 2 * 24 * 3600 * 1000;
   let net = 0;
   let classified = 0;
   for (const n of recent) {
     const pos = POSITIVE_NEWS.test(n.headline);
     const neg = NEGATIVE_NEWS.test(n.headline);
     if (pos === neg) continue;
-    const weight = new Date(n.date).getTime() >= twoDays ? 1.4 : 1;
-    net += (pos ? 1 : -1) * weight;
+    net += pos ? 1 : -1;
     classified += 1;
   }
 
@@ -196,17 +294,16 @@ function newsSignal(news: NewsRow[]): AssessmentSignal {
       id: "news",
       label: "Tin tức (7 ngày)",
       score: 0,
-      detail: `${recent.length} tin · chưa rõ thiên hướng`,
+      detail: `${recent.length} tin · chưa rõ hướng`,
       available: true,
     };
   }
 
-  const score = clamp(net / Math.max(classified, 1));
   return {
     id: "news",
     label: "Tin tức (7 ngày)",
-    score,
-    detail: `${recent.length} tin · ${classified} có hướng · ${net >= 0 ? "+" : ""}${net.toFixed(0)}`,
+    score: clamp((net / classified) * 0.7),
+    detail: `${recent.length} tin · ${classified} có hướng`,
     available: true,
   };
 }
@@ -223,17 +320,18 @@ function optionFlowSignal(flow: OptionFlowSummary | null | undefined): Assessmen
   }
   const ratio = flow.putCallRatio;
   let score = 0;
-  if (ratio < 0.7) score = 0.8;
-  else if (ratio < 0.9) score = 0.4;
-  else if (ratio > 1.3) score = -0.8;
-  else if (ratio > 1.1) score = -0.4;
+  if (ratio < 0.45) score = 0.35;
+  else if (ratio < 0.65) score = 0.12;
+  else if (ratio <= 0.95) score = 0;
+  else if (ratio <= 1.2) score = -0.2;
+  else score = -0.5;
 
   const source = flow.source === "yahoo" ? "Yahoo" : flow.source === "finnhub" ? "Finnhub" : "";
   return {
     id: "options",
     label: "Option flow",
     score,
-    detail: `P/C ${ratio.toFixed(2)} · C ${flow.callVolume.toLocaleString("vi-VN")} / P ${flow.putVolume.toLocaleString("vi-VN")}${source ? ` · ${source}` : ""}`,
+    detail: `P/C ${ratio.toFixed(2)} (tb thị trường ~0.7) · C ${flow.callVolume.toLocaleString("vi-VN")} / P ${flow.putVolume.toLocaleString("vi-VN")}${source ? ` · ${source}` : ""}`,
     available: true,
   };
 }
@@ -294,20 +392,29 @@ function insiderSignal(transactions: InsiderRow[]): AssessmentSignal {
   }
 
   const net = (buy - sell) / (buy + sell);
+  let score = 0;
+  if (net > 0.35) score = 0.45;
+  else if (net > 0.05) score = 0.15;
+  else if (net > -0.55) score = 0;
+  else if (net > -0.85) score = -0.2;
+  else score = -0.45;
+
   return {
     id: "insider",
     label: "Insider",
-    score: clamp(net * 1.15),
-    detail: `Mở TT net ${net >= 0 ? "+" : ""}${(net * 100).toFixed(0)}%${ignored ? ` · ${ignored} grant/tax bỏ` : ""}`,
+    score,
+    detail: `Mở TT net ${net >= 0 ? "+" : ""}${(net * 100).toFixed(0)}% (bán ròng là bình thường)${ignored ? ` · ${ignored} bỏ` : ""}`,
     available: true,
   };
 }
 
-function technicalSignal(price: number, levels: PriceLevels): AssessmentSignal {
+function technicalSignal(
+  price: number,
+  levels: PriceLevels,
+  priceHistory?: { close: number }[]
+): AssessmentSignal {
   const supports = levels.support.map((s) => s.price).filter((p) => p < price);
   const resistances = levels.resistance.map((r) => r.price).filter((p) => p > price);
-  const fair = levels.targetFundamental?.price;
-  const analyst = levels.targetAnalyst?.price;
 
   let score = 0;
   const parts: string[] = [];
@@ -315,80 +422,105 @@ function technicalSignal(price: number, levels: PriceLevels): AssessmentSignal {
   if (supports.length) {
     const nearest = Math.max(...supports);
     const dist = (price - nearest) / price;
-    score += clamp(0.4 - dist * 3.2, -0.25, 0.45);
+    score += clamp(0.28 - dist * 3.5, -0.2, 0.32);
     if (dist < 0.03) parts.push("gần hỗ trợ");
   }
 
   if (resistances.length) {
     const nearest = Math.min(...resistances);
     const dist = (nearest - price) / price;
-    score += clamp(dist * 2.2 - 0.28, -0.45, 0.22);
+    score += clamp(dist * 1.6 - 0.22, -0.4, 0.12);
     if (dist < 0.03) parts.push("gần kháng cự");
   }
 
-  const low52 = levels.support.find((s) => s.label.includes("52"))?.price;
-  const high52 = levels.resistance.find((r) => r.label.includes("52"))?.price;
-  if (low52 && high52 && high52 > low52) {
-    const pos = (price - low52) / (high52 - low52);
-    if (pos > 0.92) {
-      score -= 0.12;
-      parts.push("sát đỉnh 52w");
-    } else if (pos < 0.12) {
-      score += 0.08;
-      parts.push("gần đáy 52w");
+  const closes = priceHistory?.map((p) => p.close).filter((c) => c > 0) ?? [];
+  const rsi = rsiWilder(closes);
+  if (rsi != null) {
+    if (rsi >= 75) {
+      score -= 0.35;
+      parts.push(`RSI ${rsi.toFixed(0)} quá mua`);
+    } else if (rsi >= 68) {
+      score -= 0.18;
+      parts.push(`RSI ${rsi.toFixed(0)}`);
+    } else if (rsi <= 28) {
+      score += 0.22;
+      parts.push(`RSI ${rsi.toFixed(0)} quá bán`);
+    } else if (rsi <= 35) {
+      score += 0.1;
+      parts.push(`RSI ${rsi.toFixed(0)}`);
     }
-  }
-
-  if (fair) {
-    const upside = (fair - price) / price;
-    score += clamp(upside * 1.6, -0.45, 0.45);
-    parts.push(`hợp lý ${upside >= 0 ? "+" : ""}${(upside * 100).toFixed(0)}%`);
-  }
-
-  if (analyst) {
-    const upside = (analyst - price) / price;
-    score += clamp(upside, -0.3, 0.3) * 0.45;
   }
 
   return {
     id: "technical",
-    label: "Kỹ thuật & mức giá",
+    label: "Kỹ thuật",
     score: clamp(score),
-    detail: parts.length ? parts.join(" · ") : "Trung lập",
+    detail: parts.length ? parts.join(" · ") : "Trung lập vs hỗ trợ/kháng cự",
     available: true,
   };
+}
+
+function earningsSignal(rows: EarningsRow[] | undefined): AssessmentSignal {
+  const recent = (rows ?? [])
+    .filter((e) => e.surprisePercent != null && Number.isFinite(e.surprisePercent))
+    .slice(0, 4);
+  if (recent.length < 2) {
+    return {
+      id: "earnings",
+      label: "KQKD",
+      score: 0,
+      detail: "Chưa đủ lịch sử surprise",
+      available: false,
+    };
+  }
+
+  const beats = recent.filter((e) => (e.surprisePercent ?? 0) > 0).length;
+  const avg = recent.reduce((s, e) => s + (e.surprisePercent ?? 0), 0) / recent.length;
+  const beatRatio = beats / recent.length;
+  let score = (beatRatio - 0.5) * 1.1;
+  score += clamp(avg / 25, -0.25, 0.25);
+
+  return {
+    id: "earnings",
+    label: "KQKD",
+    score: clamp(score),
+    detail: `${beats}/${recent.length} quý vượt dự báo · TB ${avg >= 0 ? "+" : ""}${avg.toFixed(1)}%`,
+    available: true,
+  };
+}
+
+function recBuyShare(row: RecommendationRow): number {
+  const total = row.strongBuy + row.buy + row.hold + row.sell + row.strongSell;
+  if (!total) return 0;
+  return (row.strongBuy + row.buy) / total;
 }
 
 function recommendationSignal(rows: RecommendationRow[]): AssessmentSignal {
   const latest = rows[0];
   if (!latest) {
-    return {
-      id: "recs",
-      label: "Khuyến nghị",
-      score: 0,
-      detail: "Không có dữ liệu",
-      available: false,
-    };
+    return { id: "recs", label: "Khuyến nghị", score: 0, detail: "Không có dữ liệu", available: false };
   }
   const total =
     latest.strongBuy + latest.buy + latest.hold + latest.sell + latest.strongSell;
   if (!total) {
-    return {
-      id: "recs",
-      label: "Khuyến nghị",
-      score: 0,
-      detail: "Không có dữ liệu",
-      available: false,
-    };
+    return { id: "recs", label: "Khuyến nghị", score: 0, detail: "Không có dữ liệu", available: false };
   }
-  const bullish = latest.strongBuy * 2 + latest.buy;
-  const bearish = latest.sell + latest.strongSell * 2;
-  const score = clamp((bullish - bearish) / (total * 2));
+
+  const buyPct = recBuyShare(latest);
+  const sellPct = (latest.sell + latest.strongSell) / total;
+  let score = clamp((buyPct - 0.55) / 0.32);
+  if (sellPct > 0.1) score -= clamp((sellPct - 0.1) * 1.6, 0, 0.4);
+
+  if (rows[1]) {
+    const delta = buyPct - recBuyShare(rows[1]);
+    score = clamp(score * 0.75 + clamp(delta * 6, -0.35, 0.35) * 0.25);
+  }
+
   return {
     id: "recs",
     label: "Khuyến nghị",
-    score,
-    detail: `${total} CTCK · Mua ${latest.strongBuy + latest.buy} · Giữ ${latest.hold} · Bán ${latest.sell + latest.strongSell}`,
+    score: clamp(score),
+    detail: `${total} CTCK · ${(buyPct * 100).toFixed(0)}% mua (tb phố ~55%) · Giữ ${latest.hold} · Bán ${latest.sell + latest.strongSell}`,
     available: true,
   };
 }
@@ -413,7 +545,7 @@ function computeBuySellPrices(price: number, levels: PriceLevels): {
 
   let buyPrice = nearestBelow(supports, price) ?? price * 0.98;
   if (fair && fair < price && fair < buyPrice) {
-    buyPrice = (buyPrice * 0.7 + fair * 0.3);
+    buyPrice = buyPrice * 0.7 + fair * 0.3;
   }
   if (buyPrice >= price) buyPrice = price * 0.99;
 
@@ -424,12 +556,14 @@ function computeBuySellPrices(price: number, levels: PriceLevels): {
 }
 
 const SIGNAL_WEIGHTS: Record<string, number> = {
-  fundamental: 0.28,
-  technical: 0.22,
-  news: 0.12,
-  insider: 0.14,
-  options: 0.14,
-  recs: 0.1,
+  quality: 0.18,
+  valuation: 0.24,
+  technical: 0.14,
+  earnings: 0.12,
+  news: 0.1,
+  insider: 0.08,
+  options: 0.08,
+  recs: 0.06,
 };
 
 export function computeStockAssessment(input: {
@@ -440,11 +574,24 @@ export function computeStockAssessment(input: {
   recommendations: RecommendationRow[];
   priceLevels: PriceLevels;
   optionFlow?: OptionFlowSummary | null;
+  earningsHistory?: EarningsRow[];
+  priceHistory?: { date?: string; close: number }[];
+  newsSentiment?: NewsSentimentSummary | null;
+  pegRatio?: number;
+  shortPercentOfFloat?: number;
 }): StockAssessment {
+  const shortFromMetrics =
+    input.shortPercentOfFloat ??
+    input.metrics.shortPercentOutstanding ??
+    input.metrics.shortPercentFloat;
+  const shortPct = toShortPercent(shortFromMetrics);
+
   const signals: AssessmentSignal[] = [
-    fundamentalSignal(input.metrics),
-    technicalSignal(input.price, input.priceLevels),
-    newsSignal(input.news),
+    qualitySignal(input.metrics),
+    valuationSignal(input.price, input.metrics, input.pegRatio, shortPct),
+    technicalSignal(input.price, input.priceLevels, input.priceHistory),
+    earningsSignal(input.earningsHistory),
+    newsSignal(input.news, input.newsSentiment),
     insiderSignal(input.insiderTransactions),
     optionFlowSignal(input.optionFlow),
     recommendationSignal(input.recommendations),
@@ -459,6 +606,7 @@ export function computeStockAssessment(input: {
     weightSum += w;
   }
   if (weightSum > 0) weighted /= weightSum;
+  if (weightSum < 0.55) weighted *= weightSum / 0.55;
 
   const score = displayScore(weighted);
   const rating = scoreToRating(score);
