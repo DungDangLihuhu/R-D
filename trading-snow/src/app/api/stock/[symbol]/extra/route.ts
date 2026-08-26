@@ -35,6 +35,7 @@ export async function GET(
         priceHistory: core.priceHistory,
         priceLevels: core.priceLevels,
         recommendations: core.recommendations,
+        earningsHistory: core.earningsHistory,
         metrics: core.metrics ?? {},
       })
     );

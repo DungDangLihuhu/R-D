@@ -764,7 +764,7 @@ function AssessmentPanel({
         ))}
       </ul>
       <p className="mt-2 text-[10px] leading-snug text-gray-500">
-        Thiếu dữ liệu không tính vào điểm. Chỉ mang tính tham khảo.
+        Thiếu dữ liệu kéo điểm về trung lập. Chỉ mang tính tham khảo.
       </p>
     </div>
   );

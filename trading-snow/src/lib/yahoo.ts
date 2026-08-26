@@ -734,3 +734,42 @@ export async function fetchYahooOptionFlow(symbol: string): Promise<YahooOptionF
   return null;
 }
 
+export interface YahooKeyStats {
+  pegRatio?: number;
+  /** 0–1 fraction of float, e.g. 0.015 = 1.5% */
+  shortPercentOfFloat?: number;
+  shortRatio?: number;
+}
+
+export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats | null> {
+  const session = await getYahooSession();
+  if (!session) return null;
+
+  for (const candidate of resolveYahooSymbolCandidates(symbol)) {
+    const yahoo = toYahooSymbol(candidate);
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics&crumb=${encodeURIComponent(session.crumb)}`;
+    const res = await fetch(url, {
+      headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) continue;
+    const json = (await res.json()) as {
+      quoteSummary?: {
+        result?: {
+          defaultKeyStatistics?: Record<string, unknown>;
+        }[];
+      };
+    };
+    const ks = json.quoteSummary?.result?.[0]?.defaultKeyStatistics;
+    if (!ks) continue;
+    const pegRatio = parseYahooRawNumber(ks.pegRatio);
+    const shortPercentOfFloat = parseYahooRawNumber(ks.shortPercentOfFloat);
+    const shortRatio = parseYahooRawNumber(ks.shortRatio);
+    if (pegRatio == null && shortPercentOfFloat == null && shortRatio == null) continue;
+    return { pegRatio, shortPercentOfFloat, shortRatio };
+  }
+
+  return null;
+}
+
+
