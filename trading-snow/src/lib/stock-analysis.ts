@@ -1,3 +1,4 @@
+import type { MarketSession } from "./types";
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
 import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, yahooInsiderShareChange } from "./yahoo";
@@ -86,6 +87,8 @@ export interface StockAnalysis {
   price: number;
   change: number;
   changePercent: number;
+  /** pre / post when Yahoo is in extended hours */
+  marketSession?: MarketSession;
   high52?: number;
   low52?: number;
   sections: AnalysisSection[];
@@ -948,6 +951,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     price: quote.price,
     change: quote.change,
     changePercent: quote.changePercent,
+    marketSession: quote.marketSession,
     high52: m["52WeekHigh"] ?? undefined,
     low52: m["52WeekLow"] ?? undefined,
     sections,

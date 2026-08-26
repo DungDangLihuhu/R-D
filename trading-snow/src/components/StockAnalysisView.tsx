@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Search } from "lucide-react";
+import { SessionBadge } from "@/components/SessionBadge";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
@@ -16,12 +17,37 @@ import {
   formatShares,
 } from "@/lib/format";
 import type { StockAnalysis, StockAnalysisExtra } from "@/lib/stock-analysis";
+import type { MarketSession } from "@/lib/types";
 import {
   assessmentBg,
   assessmentColor,
   signalScoreLabel,
   type StockAssessment,
 } from "@/lib/stock-assessment";
+
+const QUOTE_REFRESH_MS = 5 * 60 * 1000;
+
+type LiveQuote = {
+  price: number;
+  change: number;
+  changePercent: number;
+  marketSession?: MarketSession;
+};
+
+function toLiveQuote(q: {
+  price?: number;
+  change?: number;
+  changePercent?: number;
+  marketSession?: MarketSession;
+} | null | undefined): LiveQuote | null {
+  if (!q || !(q.price != null && q.price > 0)) return null;
+  return {
+    price: q.price,
+    change: q.change ?? 0,
+    changePercent: q.changePercent ?? 0,
+    marketSession: q.marketSession,
+  };
+}
 
 const BenDangChart = dynamic(
   () => import("@/components/BenDangChart").then((m) => m.BenDangChart),
@@ -69,8 +95,9 @@ function insiderActionLabel(code: string, change: number): string {
 
 export function StockAnalysisView({ symbol }: { symbol: string }) {
   const router = useRouter();
-  const { stats } = useApp();
+  const { stats, state } = useApp();
   const [data, setData] = useState<StockAnalysis | null>(null);
+  const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
   const [extraLoading, setExtraLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +115,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     setSearchQuery(symbol);
     setShowSuggestions(false);
     setActiveIndex(-1);
+    setLiveQuote(null);
   }
 
   const holdings = useMemo(
@@ -217,12 +245,69 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     };
   }, [symbol, data?.symbol]);
 
+  useEffect(() => {
+    if (!symbol) return;
+
+    let cancelled = false;
+
+    const pull = async () => {
+      try {
+        const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbol)}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const json = (await res.json()) as {
+          quotes?: {
+            symbol: string;
+            price: number;
+            change: number;
+            changePercent: number;
+            marketSession?: MarketSession;
+          }[];
+        };
+        const row =
+          json.quotes?.find((q) => q.symbol.toUpperCase() === symbol.toUpperCase()) ??
+          json.quotes?.[0];
+        const next = toLiveQuote(row);
+        if (!cancelled && next) setLiveQuote(next);
+      } catch {
+        /* keep last quote */
+      }
+    };
+
+    void pull();
+    const id = globalThis.setInterval(pull, QUOTE_REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pull();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      globalThis.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [symbol]);
+
   const dailySeed = useMemo(
     () => data?.priceHistory,
     [data?.priceHistory]
   );
 
   const holding = stats.holdings.find((h) => h.symbol === symbol);
+  const ctxQuote = toLiveQuote(state.marketQuotes?.[symbol]);
+  const analysisQuote = data
+    ? toLiveQuote({
+        price: data.price,
+        change: data.change,
+        changePercent: data.changePercent,
+        marketSession: data.marketSession,
+      })
+    : null;
+  const quote = liveQuote ?? ctxQuote ?? analysisQuote;
+  const extendedSession =
+    quote?.marketSession === "pre" || quote?.marketSession === "post"
+      ? quote.marketSession
+      : undefined;
 
   return (
     <div className="space-y-6">
@@ -230,7 +315,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
         <div>
           <h1 className="app-page-title">Phân tích</h1>
           <p className="app-page-desc">
-            Chỉ số cơ bản · báo cáo · tin tức · giao dịch nội bộ (Yahoo + Finnhub)
+            Chỉ số cơ bản · báo cáo · tin tức · nội bộ · giá Yahoo (pre-market & after-hours, mỗi 5 phút)
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[20rem]">
@@ -386,22 +471,30 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                       </span>
                     )}
                   </div>
-                  <div className="mt-2 flex flex-wrap items-baseline gap-3">
-                    <span className="text-2xl font-semibold tabular-nums">
-                      {formatMoney(data.price, data.currency)}
-                    </span>
-                    <span
-                      className={`text-sm font-medium tabular-nums ${
-                        data.changePercent >= 0 ? "text-emerald-600" : "text-rose-600"
-                      }`}
-                    >
-                      {formatPercent(data.changePercent)}
-                    </span>
-                    {data.high52 != null && data.low52 != null && (
-                      <span className="text-xs text-gray-500">
-                        52w: {data.low52.toFixed(2)} – {data.high52.toFixed(2)}
+                  <div className="mt-2">
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      <span className="text-2xl font-semibold tabular-nums">
+                        {formatMoney(quote?.price ?? data.price, data.currency)}
                       </span>
-                    )}
+                      <span
+                        className={`text-sm font-medium tabular-nums ${
+                          (quote?.changePercent ?? data.changePercent) >= 0
+                            ? "text-emerald-600"
+                            : "text-rose-600"
+                        }`}
+                      >
+                        {formatPercent(quote?.changePercent ?? data.changePercent)}
+                      </span>
+                      {data.high52 != null && data.low52 != null && (
+                        <span className="text-xs text-gray-500">
+                          52w: {data.low52.toFixed(2)} – {data.high52.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    <SessionBadge
+                      session={extendedSession}
+                      changePercent={extendedSession ? quote?.changePercent : null}
+                    />
                   </div>
                   {holding && (
                     <p className="mt-1 text-xs text-gray-500">

@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Eye, EyeOff, LineChart } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
-import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { Pagination } from "@/components/Pagination";
+import { SessionBadge } from "@/components/SessionBadge";
+import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
-import type { Holding, MarketQuote, MarketSession } from "@/lib/types";
+import type { Holding, MarketQuote } from "@/lib/types";
 import {
   formatMoney,
-  formatPercent,
   formatPnlArrow,
   formatShares,
 } from "@/lib/format";
@@ -20,31 +20,6 @@ function pnlClass(value: number) {
   if (value > 0) return "text-emerald-600";
   if (value < 0) return "text-rose-600";
   return "text-gray-600";
-}
-
-function SessionBadge({
-  session,
-  changePercent,
-}: {
-  session?: MarketSession;
-  changePercent?: number | null;
-}) {
-  if (session !== "pre" && session !== "post") return null;
-  const label = session === "pre" ? "Pre-market" : "After hours";
-  if (changePercent == null || !Number.isFinite(changePercent)) {
-    return (
-      <span className="mt-0.5 block text-[10px] font-medium text-violet-600">
-        ({label})
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`mt-0.5 block text-[10px] font-semibold tabular-nums whitespace-nowrap ${pnlClass(changePercent)}`}
-    >
-      ({label} {formatPercent(changePercent)})
-    </span>
-  );
 }
 
 function MetricStack({
