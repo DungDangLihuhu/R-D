@@ -558,10 +558,130 @@ function nearestAboveLevel(
     .sort((a, b) => a.price - b.price)[0];
 }
 
-function computeBuySellPrices(
+function median(values: number[]): number | null {
+  const xs = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const mid = Math.floor(xs.length / 2);
+  return xs.length % 2 === 1 ? xs[mid]! : (xs[mid - 1]! + xs[mid]!) / 2;
+}
+
+function mean(values: number[]): number | null {
+  const xs = values.filter((v) => Number.isFinite(v));
+  if (!xs.length) return null;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+function growthToPercent(raw: number): number {
+  return Math.abs(raw) <= 1 ? raw * 100 : raw;
+}
+
+function inPriceBand(value: number, price: number): boolean {
+  return value > price * 0.35 && value <= price * 2.8;
+}
+
+type FundPoint = { price: number; label: string };
+
+function uniqueJoin(parts: string[]): string {
+  return [...new Set(parts.filter(Boolean))].join(" + ");
+}
+
+/**
+ * Neo định giá độc lập — không dùng P/E hiện tại × EPS (vòng về giá spot).
+ * PEG 1.0 / P/E 16× / P/FCF 16× = vùng rẻ; PEG 2.0 / P/E 26× / P/FCF 28× = vùng đắt.
+ */
+function fundamentalAnchors(
+  price: number,
+  metrics?: Record<string, number>,
+  pegRatio?: number
+): {
+  buy: FundPoint | null;
+  sellAbove: FundPoint | null;
+  sellRaw: number | null;
+  mid: number | null;
+  sellLabels: string[];
+} {
+  const empty = {
+    buy: null,
+    sellAbove: null,
+    sellRaw: null,
+    mid: null,
+    sellLabels: [] as string[],
+  };
+  if (!metrics || !(price > 0)) return empty;
+
+  const buyPts: FundPoint[] = [];
+  const sellPts: FundPoint[] = [];
+  const fair: number[] = [];
+  let addedEpsPeg = false;
+
+  const consider = (value: number, label: string, side: "buy" | "sell") => {
+    if (!Number.isFinite(value) || !inPriceBand(value, price)) return;
+    fair.push(value);
+    if (side === "buy" && value < price * 0.97) buyPts.push({ price: value, label });
+    if (side === "sell") sellPts.push({ price: value, label });
+  };
+
+  const eps = metrics.epsTTM;
+  const growthRaw = finitePositive(metrics.epsGrowthTTMYoy, metrics.epsGrowth3Y);
+  const growthPct = growthRaw != null ? growthToPercent(growthRaw) : undefined;
+
+  if (eps != null && eps > 0 && growthPct != null && growthPct >= 5) {
+    const g = Math.min(growthPct, 40);
+    consider(eps * g, "PEG 1.0", "buy");
+    consider(eps * g * 2, "PEG 2.0", "sell");
+    addedEpsPeg = true;
+  }
+
+  if (eps != null && eps > 0) {
+    consider(eps * 16, "P/E 16×", "buy");
+    consider(eps * 26, "P/E 26×", "sell");
+  }
+
+  const pfcf = metrics.pfcfShareTTM;
+  if (pfcf != null && Number.isFinite(pfcf) && pfcf > 2 && pfcf < 200) {
+    const fcfps = price / pfcf;
+    if (fcfps > 0) {
+      consider(fcfps * 16, "P/FCF 16×", "buy");
+      consider(fcfps * 28, "P/FCF 28×", "sell");
+    }
+  }
+
+  if (!addedEpsPeg && pegRatio != null && pegRatio > 0.2 && pegRatio < 20) {
+    consider(price / pegRatio, "PEG 1.0", "buy");
+    consider((price * 2) / pegRatio, "PEG 2.0", "sell");
+  }
+
+  const buyMed = median(buyPts.map((p) => p.price));
+  const sellMed = median(sellPts.map((p) => p.price));
+  const sellAbovePts = sellPts.filter((p) => p.price > price * 1.03);
+  const sellAboveMed = median(sellAbovePts.map((p) => p.price));
+
+  return {
+    buy: buyMed != null ? { price: buyMed, label: uniqueJoin(buyPts.map((p) => p.label)) } : null,
+    sellAbove:
+      sellAboveMed != null
+        ? { price: sellAboveMed, label: uniqueJoin(sellAbovePts.map((p) => p.label)) }
+        : null,
+    sellRaw: sellMed,
+    mid: mean(fair),
+    sellLabels: [...new Set(sellPts.map((p) => p.label))],
+  };
+}
+
+function clampBuyAnchor(value: number, price: number): number {
+  return Math.min(price * 0.995, Math.max(price * 0.58, value));
+}
+
+function clampSellAnchor(value: number, price: number): number {
+  return Math.max(price * 1.005, Math.min(price * 1.55, value));
+}
+
+export function computeBuySellPrices(
   price: number,
   levels: PriceLevels,
-  priceHistory?: { close: number }[]
+  priceHistory?: { close: number }[],
+  metrics?: Record<string, number>,
+  pegRatio?: number
 ): {
   buyPrice: number;
   sellPrice: number;
@@ -574,32 +694,87 @@ function computeBuySellPrices(
   const support = nearestBelowLevel(levels.support, price, minGap);
   const resistance = nearestAboveLevel(levels.resistance, price, minGap);
 
-  let buyPrice: number;
-  let buyNote: string;
+  let techBuy: number;
+  let techBuyNote: string;
   if (support) {
-    buyPrice = support.price * (1 - daily * 0.25);
-    buyNote = `${support.label} − buffer biến động`;
+    techBuy = support.price * (1 - daily * 0.25);
+    techBuyNote = `${support.label} − buffer`;
   } else {
-    buyPrice = price * (1 - Math.max(0.025, daily * 1.6));
-    buyNote = `Không có hỗ trợ đủ xa · ~${((1 - buyPrice / price) * 100).toFixed(1)}% dưới giá`;
+    techBuy = price * (1 - Math.max(0.025, daily * 1.6));
+    techBuyNote = `Buffer KT ~${((1 - techBuy / price) * 100).toFixed(1)}% dưới giá`;
   }
 
-  let sellPrice: number;
-  let sellNote: string;
+  let techSell: number;
+  let techSellNote: string;
   if (resistance) {
-    sellPrice = resistance.price;
-    sellNote = resistance.label;
+    techSell = resistance.price;
+    techSellNote = resistance.label;
   } else {
-    sellPrice = price * (1 + Math.max(0.03, daily * 1.8));
-    sellNote = `Không có kháng cự đủ xa · ~${((sellPrice / price - 1) * 100).toFixed(1)}% trên giá`;
+    techSell = price * (1 + Math.max(0.03, daily * 1.8));
+    techSellNote = `Buffer KT ~${((techSell / price - 1) * 100).toFixed(1)}% trên giá`;
   }
 
-  if (buyPrice >= price) {
-    buyPrice = price * (1 - minGap);
+  const fund = fundamentalAnchors(price, metrics, pegRatio);
+  const expensive = fund.mid != null && price > fund.mid * 1.08;
+  const cheap = fund.mid != null && price < fund.mid * 0.92;
+  const alreadyAboveFundSell = fund.sellRaw != null && price >= fund.sellRaw * 0.98;
+
+  const fundBuyClamped = fund.buy ? clampBuyAnchor(fund.buy.price, price) : null;
+  const fundSellClamped = fund.sellAbove ? clampSellAnchor(fund.sellAbove.price, price) : null;
+
+  const buyBits: string[] = [techBuyNote];
+  const sellBits: string[] = [techSellNote];
+
+  let buyPrice = techBuy;
+  if (expensive) {
+    if (fundBuyClamped != null) {
+      buyPrice = 0.55 * techBuy + 0.45 * Math.min(techBuy, fundBuyClamped);
+      buyBits.push(fund.buy?.label ?? "định giá");
+    }
+    buyBits.push("đắt vs định giá");
+  } else if (cheap) {
+    buyBits.push("rẻ vs định giá · giữ mốc kỹ thuật");
+  } else if (fundBuyClamped != null) {
+    buyPrice = (techBuy + Math.min(techBuy, fundBuyClamped)) / 2;
+    if (fund.buy) buyBits.push(fund.buy.label);
   }
-  if (sellPrice <= price) {
-    sellPrice = price * (1 + minGap);
+
+  let sellPrice = techSell;
+  if (alreadyAboveFundSell) {
+    const bounce = price * (1 + Math.max(0.018, daily * 1.15));
+    const cap = price * (1 + Math.max(0.04, daily * 2.1));
+    sellPrice = Math.min(techSell, cap);
+    if (sellPrice > bounce * 1.35) sellPrice = Math.min(sellPrice, bounce * 1.2);
+    sellBits.push("đã trên mốc bán cơ bản");
+    if (fund.sellLabels.length) sellBits.push(uniqueJoin(fund.sellLabels));
+  } else if (expensive && fundSellClamped != null) {
+    sellPrice = Math.min(techSell, fundSellClamped);
+    sellBits.push(fund.sellAbove?.label ?? "định giá");
+  } else if (cheap && fundSellClamped != null && fundSellClamped > techSell) {
+    sellPrice = 0.45 * techSell + 0.55 * fundSellClamped;
+    sellBits.push(fund.sellAbove?.label ?? "định giá");
+  } else if (!expensive && !cheap && fundSellClamped != null) {
+    sellPrice = (techSell + Math.max(techSell, fundSellClamped)) / 2;
+    if (fund.sellAbove) sellBits.push(fund.sellAbove.label);
   }
+
+  const closes = (priceHistory ?? []).map((p) => p.close).filter((c) => c > 0);
+  const rsi = rsiWilder(closes);
+  if (rsi != null && rsi >= 68) {
+    const deeper = price - (price - buyPrice) * 1.12;
+    buyPrice = Math.min(buyPrice, Math.max(price * 0.58, deeper));
+    buyBits.push(`RSI ${rsi.toFixed(0)} quá mua`);
+  } else if (rsi != null && rsi <= 32) {
+    buyPrice = price - (price - buyPrice) * 0.88;
+    buyBits.push(`RSI ${rsi.toFixed(0)} quá bán`);
+  }
+
+  if (buyPrice >= price) buyPrice = price * (1 - minGap);
+  if (sellPrice <= price) sellPrice = price * (1 + minGap);
+  if (sellPrice <= buyPrice) sellPrice = buyPrice * (1 + Math.max(0.04, daily * 2.5));
+
+  let buyNote = uniqueJoin(buyBits).replace(/ \+ /g, " · ");
+  let sellNote = uniqueJoin(sellBits).replace(/ \+ /g, " · ");
 
   const reward = sellPrice - price;
   const risk = price - buyPrice;
@@ -668,7 +843,9 @@ export function computeStockAssessment(input: {
   const { buyPrice, sellPrice, buyNote, sellNote } = computeBuySellPrices(
     input.price,
     input.priceLevels,
-    input.priceHistory
+    input.priceHistory,
+    input.metrics,
+    input.pegRatio
   );
 
   return {
