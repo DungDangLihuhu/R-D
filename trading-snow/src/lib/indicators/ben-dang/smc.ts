@@ -2,58 +2,80 @@ import type { Bar, PremiumDiscountZone, SmcResult, SwingPoint } from "./types";
 import { findPivotHighs, findPivotLows } from "./utils";
 
 export function computeSmc(bars: Bar[], swingLength = 50): SmcResult {
-  const empty: SmcResult = { premiumDiscount: undefined };
-  if (bars.length < swingLength * 2 + 5) return empty;
+  if (bars.length < 8) return { premiumDiscount: undefined };
 
   const swingLen = Math.max(5, Math.min(swingLength, Math.floor(bars.length / 3)));
   const swingHighs = findPivotHighs(bars, swingLen, swingLen);
   const swingLows = findPivotLows(bars, swingLen, swingLen);
   const currentPrice = bars[bars.length - 1].close;
-  const premiumDiscount = detectPremiumDiscount(swingHighs, swingLows, currentPrice);
+  const premiumDiscount = detectPremiumDiscount(
+    bars,
+    swingHighs,
+    swingLows,
+    currentPrice,
+    swingLen
+  );
 
   return { premiumDiscount };
 }
 
-/** Dealing range from swings that bracket current price (ICT-style). */
+/**
+ * ICT dealing range: last opposing swings, expanded with any newer unconfirmed
+ * extreme so a dump/rally is inside the zone (price always in premium or discount).
+ */
 function detectPremiumDiscount(
+  bars: Bar[],
   swingHighs: SwingPoint[],
   swingLows: SwingPoint[],
-  currentPrice: number
+  currentPrice: number,
+  swingLen: number
 ): PremiumDiscountZone | undefined {
-  if (!swingHighs.length || !swingLows.length) return undefined;
+  const lookback = Math.max(swingLen * 3, 24);
+  let from = Math.max(0, bars.length - lookback);
 
-  const highs = [...swingHighs].sort((a, b) => b.index - a.index);
-  const lows = [...swingLows].sort((a, b) => b.index - a.index);
+  const lastHigh = swingHighs[swingHighs.length - 1];
+  const lastLow = swingLows[swingLows.length - 1];
+  if (lastHigh && lastLow) {
+    from = Math.min(lastHigh.index, lastLow.index);
+  } else if (lastHigh) {
+    from = lastHigh.index;
+  } else if (lastLow) {
+    from = lastLow.index;
+  }
 
-  let top: SwingPoint | undefined;
-  let bottom: SwingPoint | undefined;
+  const slice = bars.slice(from);
+  if (!slice.length) return undefined;
 
-  for (const h of highs) {
-    for (const l of lows) {
-      if (h.price <= l.price) continue;
-      if (currentPrice >= l.price && currentPrice <= h.price) {
-        return zoneFrom(h, l);
-      }
+  let top = -Infinity;
+  let bottom = Infinity;
+  let topIdx = from;
+  let botIdx = from;
+  for (let i = 0; i < slice.length; i++) {
+    const bar = slice[i];
+    if (bar.high >= top) {
+      top = bar.high;
+      topIdx = from + i;
+    }
+    if (bar.low <= bottom) {
+      bottom = bar.low;
+      botIdx = from + i;
     }
   }
 
-  top = highs[0];
-  bottom = lows[0];
-  if (!top || !bottom || top.price <= bottom.price) {
-    top = swingHighs[swingHighs.length - 1];
-    bottom = swingLows[swingLows.length - 1];
+  if (!Number.isFinite(top) || !Number.isFinite(bottom) || top <= bottom) {
+    return undefined;
   }
-  if (!top || !bottom || top.price <= bottom.price) return undefined;
 
-  return zoneFrom(top, bottom);
-}
+  // If confirmed swings still leave price outside (rare), expand to include it.
+  if (currentPrice > top) top = currentPrice;
+  if (currentPrice < bottom) bottom = currentPrice;
+  if (top <= bottom) return undefined;
 
-function zoneFrom(top: SwingPoint, bottom: SwingPoint): PremiumDiscountZone {
   return {
-    top: top.price,
-    bottom: bottom.price,
-    equilibrium: (top.price + bottom.price) / 2,
-    swingHighIndex: top.index,
-    swingLowIndex: bottom.index,
+    top,
+    bottom,
+    equilibrium: (top + bottom) / 2,
+    swingHighIndex: topIdx,
+    swingLowIndex: botIdx,
   };
 }

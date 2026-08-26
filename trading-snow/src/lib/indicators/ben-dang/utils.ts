@@ -131,20 +131,24 @@ export function isPivotLowAt(bars: Bar[], index: number, left: number, right = l
 
 export function clusterPrices(
   prices: number[],
-  tolerance: number
+  tolerance: number,
+  maxSpan?: number
 ): { price: number; count: number }[] {
   if (!prices.length) return [];
+  const spanCap = maxSpan != null && maxSpan > 0 ? maxSpan : tolerance * 2.5;
   const sorted = [...prices].sort((a, b) => a - b);
-  const clusters: { price: number; count: number; sum: number }[] = [];
+  const clusters: { price: number; count: number; sum: number; min: number; max: number }[] = [];
 
   for (const p of sorted) {
     const last = clusters[clusters.length - 1];
-    if (last && Math.abs(p - last.price) <= tolerance) {
+    if (last && Math.abs(p - last.price) <= tolerance && p - last.min <= spanCap) {
       last.count++;
       last.sum += p;
       last.price = last.sum / last.count;
+      last.min = Math.min(last.min, p);
+      last.max = Math.max(last.max, p);
     } else {
-      clusters.push({ price: p, count: 1, sum: p });
+      clusters.push({ price: p, count: 1, sum: p, min: p, max: p });
     }
   }
 

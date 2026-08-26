@@ -14,6 +14,22 @@ function toLevel(
   };
 }
 
+function dedupeNear(levels: SrLevel[], tolerance: number): SrLevel[] {
+  const sorted = [...levels].sort((a, b) => a.price - b.price);
+  const out: SrLevel[] = [];
+  for (const level of sorted) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(level.price - last.price) <= tolerance) {
+      if (level.touches > last.touches || (level.touches === last.touches && level.type === last.type)) {
+        out[out.length - 1] = level;
+      }
+    } else {
+      out.push(level);
+    }
+  }
+  return out;
+}
+
 export function computeSupportResistance(
   bars: Bar[],
   period = 10,
@@ -34,39 +50,47 @@ export function computeSupportResistance(
 
   const resistanceClusters = clusterPrices(
     pivotHighs.map((p) => p.price),
-    tolerance
+    tolerance,
+    lastAtr * 1.2
   );
   const supportClusters = clusterPrices(
     pivotLows.map((p) => p.price),
-    tolerance
+    tolerance,
+    lastAtr * 1.2
   );
 
-  const resistances = resistanceClusters
-    .map((c) => toLevel(c.price, "resistance", c.count))
-    .filter((l) => l.price > currentPrice + minGap)
+  // Role flip: broken resistance (pivot high below price) becomes support, and vice versa.
+  const flipped: SrLevel[] = [
+    ...resistanceClusters.map((c) =>
+      toLevel(c.price, c.price > currentPrice ? "resistance" : "support", c.count)
+    ),
+    ...supportClusters.map((c) =>
+      toLevel(c.price, c.price < currentPrice ? "support" : "resistance", c.count)
+    ),
+  ].filter((l) => Math.abs(l.price - currentPrice) >= minGap);
+
+  const candidates = dedupeNear(flipped, tolerance);
+
+  let resistances = candidates
+    .filter((l) => l.type === "resistance" && l.price > currentPrice + minGap)
     .sort((a, b) => a.price - b.price)
     .slice(0, perSide);
 
-  const supports = supportClusters
-    .map((c) => toLevel(c.price, "support", c.count))
-    .filter((l) => l.price < currentPrice - minGap)
+  let supports = candidates
+    .filter((l) => l.type === "support" && l.price < currentPrice - minGap)
     .sort((a, b) => b.price - a.price)
     .slice(0, perSide);
 
-  if (!resistances.length) {
-    const fallback = resistanceClusters
-      .map((c) => toLevel(c.price, "resistance", c.count))
-      .sort((a, b) => Math.abs(a.price - currentPrice) - Math.abs(b.price - currentPrice))
-      .slice(0, 1);
-    resistances.push(...fallback);
-  }
+  // Unconfirmed extreme in the last pivot window (crash/rally before fractal confirms).
+  const recent = bars.slice(-Math.max(effectivePeriod * 2, 8));
+  const recentLow = Math.min(...recent.map((b) => b.low));
+  const recentHigh = Math.max(...recent.map((b) => b.high));
 
-  if (!supports.length) {
-    const fallback = supportClusters
-      .map((c) => toLevel(c.price, "support", c.count))
-      .sort((a, b) => Math.abs(a.price - currentPrice) - Math.abs(b.price - currentPrice))
-      .slice(0, 1);
-    supports.push(...fallback);
+  if (!supports.length && recentLow < currentPrice - minGap) {
+    supports = [toLevel(recentLow, "support", 1)];
+  }
+  if (!resistances.length && recentHigh > currentPrice + minGap) {
+    resistances = [toLevel(recentHigh, "resistance", 1)];
   }
 
   return {
