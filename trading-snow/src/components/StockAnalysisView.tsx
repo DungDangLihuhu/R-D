@@ -49,7 +49,8 @@ function ChartSkeleton() {
 function AnalysisSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="h-36 app-skeleton" />
+      <div className="h-28 app-skeleton" />
+      <div className="h-40 app-skeleton" />
       <ChartSkeleton />
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="h-48 app-skeleton" />
@@ -362,8 +363,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
       {data && !loading && (
         <>
           <div className="app-card p-4 sm:p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
+            <div className="flex min-w-0 flex-wrap items-start gap-4">
               {data.logo ? (
                 <img
                   src={data.logo}
@@ -419,19 +419,18 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   </a>
                 )}
               </div>
-              </div>
-              <div className="w-full shrink-0 lg:w-72 xl:w-80">
-                <AssessmentPanel assessment={data.assessment} currency={data.currency} />
-                {extraLoading && (
-                  <p className="mt-2 text-xs text-gray-400">Đang tải tin tức & nội bộ...</p>
-                )}
-              </div>
             </div>
             {data.note && (
               <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 {data.note}
               </p>
             )}
+            <div className="mt-4">
+              <AssessmentPanel assessment={data.assessment} currency={data.currency} />
+              {extraLoading && (
+                <p className="mt-2 text-xs text-gray-400">Đang tải tin tức & nội bộ...</p>
+              )}
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -717,61 +716,79 @@ function AssessmentPanel({
 }) {
   return (
     <div
-      className={`w-full rounded-xl border p-4 ${assessmentBg(assessment.rating)}`}
+      className={`w-full rounded-xl border px-3 py-3 sm:px-4 ${assessmentBg(assessment.rating)}`}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-        Đánh giá tổng hợp
-      </p>
-      <p className={`mt-1 text-2xl font-bold ${assessmentColor(assessment.rating)}`}>
-        {assessment.label}
-      </p>
-      <p className="mt-0.5 text-xs text-gray-500">Điểm {assessment.score}/100</p>
-      <dl className="mt-3 space-y-2 text-sm">
-        <div>
-          <div className="flex items-baseline justify-between gap-2">
-            <dt className="text-gray-600">Mốc mua</dt>
-            <dd className="font-semibold tabular-nums text-emerald-700">
-              {formatMoney(assessment.buyPrice, currency)}
-            </dd>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="shrink-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            Đánh giá tổng hợp
+          </p>
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <p className={`text-xl font-bold leading-tight ${assessmentColor(assessment.rating)}`}>
+              {assessment.label}
+            </p>
+            <p className="text-xs text-gray-500">Điểm {assessment.score}/100</p>
           </div>
-          <p className="mt-0.5 text-[11px] text-gray-500">{assessment.buyNote}</p>
         </div>
-        <div>
-          <div className="flex items-baseline justify-between gap-2">
-            <dt className="text-gray-600">Mốc bán</dt>
-            <dd className="font-semibold tabular-nums text-rose-700">
-              {formatMoney(assessment.sellPrice, currency)}
-            </dd>
-          </div>
-          <p className="mt-0.5 text-[11px] text-gray-500">{assessment.sellNote}</p>
-        </div>
-      </dl>
-      <ul className="mt-3 space-y-1.5 border-t border-gray-200 pt-3">
-        {assessment.signals.map((s) => (
-          <li key={s.id} className="flex items-start justify-between gap-2 text-xs">
-            <div className="min-w-0">
-              <p className="font-medium text-gray-700">{s.label}</p>
-              <p className="truncate text-[11px] text-gray-500">{s.detail}</p>
+        <dl className="grid min-w-0 flex-1 grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+              <dt className="text-gray-600">Mốc mua</dt>
+              <dd className="font-semibold tabular-nums text-emerald-700">
+                {formatMoney(assessment.buyPrice, currency)}
+              </dd>
             </div>
-            <span
-              className={`shrink-0 tabular-nums font-semibold ${
-                !s.available
-                  ? "text-gray-400"
-                  : s.score > 0.08
-                    ? "text-emerald-700"
-                    : s.score < -0.08
-                      ? "text-rose-700"
-                      : "text-gray-600"
-              }`}
+            <p
+              className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500"
+              title={assessment.buyNote}
             >
-              {signalScoreLabel(s.score, s.available)}
-            </span>
+              {assessment.buyNote}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+              <dt className="text-gray-600">Mốc bán</dt>
+              <dd className="font-semibold tabular-nums text-rose-700">
+                {formatMoney(assessment.sellPrice, currency)}
+              </dd>
+            </div>
+            <p
+              className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500"
+              title={assessment.sellNote}
+            >
+              {assessment.sellNote}
+            </p>
+          </div>
+        </dl>
+      </div>
+      <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-gray-200 pt-3 md:grid-cols-4">
+        {assessment.signals.map((s) => (
+          <li key={s.id} className="min-w-0">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <p className="truncate font-medium text-gray-700">{s.label}</p>
+              <span
+                className={`shrink-0 tabular-nums font-semibold ${
+                  !s.available
+                    ? "text-gray-400"
+                    : s.score > 0.08
+                      ? "text-emerald-700"
+                      : s.score < -0.08
+                        ? "text-rose-700"
+                        : "text-gray-600"
+                }`}
+              >
+                {signalScoreLabel(s.score, s.available)}
+              </span>
+            </div>
+            <p className="truncate text-[11px] leading-snug text-gray-500" title={s.detail}>
+              {s.detail}
+            </p>
           </li>
         ))}
       </ul>
       <p className="mt-2 text-[10px] leading-snug text-gray-500">
-        Mốc mua/bán kết hợp hỗ trợ–kháng cự với PEG · P/E trần · P/FCF (không lấy P/E hiện tại ×
-        EPS). Thiếu dữ liệu thì chỉ dùng kỹ thuật. Chỉ mang tính tham khảo, không phải lệnh mua/bán.
+        Mốc mua/bán kết hợp S/R với PEG · P/E · P/FCF. Thiếu dữ liệu thì chỉ dùng kỹ thuật. Chỉ tham
+        khảo, không phải lệnh.
       </p>
     </div>
   );
