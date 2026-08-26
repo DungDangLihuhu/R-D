@@ -41,6 +41,8 @@ export interface StockAssessment {
   score: number;
   buyPrice: number;
   sellPrice: number;
+  buyNote: string;
+  sellNote: string;
   signals: AssessmentSignal[];
   optionFlow?: OptionFlowSummary | null;
 }
@@ -525,34 +527,87 @@ function recommendationSignal(rows: RecommendationRow[]): AssessmentSignal {
   };
 }
 
-function nearestBelow(levels: number[], price: number): number | undefined {
-  const below = levels.filter((p) => p > 0 && p < price * 0.998).sort((a, b) => b - a);
-  return below[0];
+function typicalDailyMovePct(history?: { close: number }[]): number {
+  const closes = (history ?? []).map((p) => p.close).filter((c) => c > 0);
+  if (closes.length < 6) return 0.02;
+  const n = Math.min(20, closes.length - 1);
+  let sum = 0;
+  for (let i = closes.length - n; i < closes.length; i++) {
+    sum += Math.abs(closes[i] - closes[i - 1]) / closes[i - 1];
+  }
+  return clamp(sum / n, 0.008, 0.055);
 }
 
-function nearestAbove(levels: number[], price: number): number | undefined {
-  const above = levels.filter((p) => p > price * 1.002).sort((a, b) => a - b);
-  return above[0];
+function nearestBelowLevel(
+  levels: { price: number; label: string }[],
+  price: number,
+  minGap: number
+): { price: number; label: string } | undefined {
+  return levels
+    .filter((l) => l.price > 0 && l.price <= price * (1 - minGap))
+    .sort((a, b) => b.price - a.price)[0];
 }
 
-function computeBuySellPrices(price: number, levels: PriceLevels): {
+function nearestAboveLevel(
+  levels: { price: number; label: string }[],
+  price: number,
+  minGap: number
+): { price: number; label: string } | undefined {
+  return levels
+    .filter((l) => l.price >= price * (1 + minGap))
+    .sort((a, b) => a.price - b.price)[0];
+}
+
+function computeBuySellPrices(
+  price: number,
+  levels: PriceLevels,
+  priceHistory?: { close: number }[]
+): {
   buyPrice: number;
   sellPrice: number;
+  buyNote: string;
+  sellNote: string;
 } {
-  const supports = levels.support.map((s) => s.price);
-  const resistances = levels.resistance.map((r) => r.price);
-  const fair = levels.targetFundamental?.price;
+  const daily = typicalDailyMovePct(priceHistory);
+  const minGap = Math.max(0.012, daily * 1.15);
 
-  let buyPrice = nearestBelow(supports, price) ?? price * 0.98;
-  if (fair && fair < price && fair < buyPrice) {
-    buyPrice = buyPrice * 0.7 + fair * 0.3;
+  const support = nearestBelowLevel(levels.support, price, minGap);
+  const resistance = nearestAboveLevel(levels.resistance, price, minGap);
+
+  let buyPrice: number;
+  let buyNote: string;
+  if (support) {
+    buyPrice = support.price * (1 - daily * 0.25);
+    buyNote = `${support.label} − buffer biến động`;
+  } else {
+    buyPrice = price * (1 - Math.max(0.025, daily * 1.6));
+    buyNote = `Không có hỗ trợ đủ xa · ~${((1 - buyPrice / price) * 100).toFixed(1)}% dưới giá`;
   }
-  if (buyPrice >= price) buyPrice = price * 0.99;
 
-  let sellPrice = nearestAbove(resistances, price) ?? price * 1.03;
-  if (sellPrice <= price) sellPrice = price * 1.01;
+  let sellPrice: number;
+  let sellNote: string;
+  if (resistance) {
+    sellPrice = resistance.price;
+    sellNote = resistance.label;
+  } else {
+    sellPrice = price * (1 + Math.max(0.03, daily * 1.8));
+    sellNote = `Không có kháng cự đủ xa · ~${((sellPrice / price - 1) * 100).toFixed(1)}% trên giá`;
+  }
 
-  return { buyPrice, sellPrice };
+  if (buyPrice >= price) {
+    buyPrice = price * (1 - minGap);
+  }
+  if (sellPrice <= price) {
+    sellPrice = price * (1 + minGap);
+  }
+
+  const reward = sellPrice - price;
+  const risk = price - buyPrice;
+  if (risk > 0 && reward / risk < 1) {
+    sellNote += " · R:R < 1 tại giá hiện tại";
+  }
+
+  return { buyPrice, sellPrice, buyNote, sellNote };
 }
 
 const SIGNAL_WEIGHTS: Record<string, number> = {
@@ -610,7 +665,11 @@ export function computeStockAssessment(input: {
 
   const score = displayScore(weighted);
   const rating = scoreToRating(score);
-  const { buyPrice, sellPrice } = computeBuySellPrices(input.price, input.priceLevels);
+  const { buyPrice, sellPrice, buyNote, sellNote } = computeBuySellPrices(
+    input.price,
+    input.priceLevels,
+    input.priceHistory
+  );
 
   return {
     rating,
@@ -618,6 +677,8 @@ export function computeStockAssessment(input: {
     score,
     buyPrice,
     sellPrice,
+    buyNote,
+    sellNote,
     signals,
     optionFlow: input.optionFlow,
   };

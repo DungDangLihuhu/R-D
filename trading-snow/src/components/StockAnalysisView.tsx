@@ -727,17 +727,23 @@ function AssessmentPanel({
       </p>
       <p className="mt-0.5 text-xs text-gray-500">Điểm {assessment.score}/100</p>
       <dl className="mt-3 space-y-2 text-sm">
-        <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-gray-600">Nên mua</dt>
-          <dd className="font-semibold tabular-nums text-emerald-700">
-            {formatMoney(assessment.buyPrice, currency)}
-          </dd>
+        <div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="text-gray-600">Mốc mua</dt>
+            <dd className="font-semibold tabular-nums text-emerald-700">
+              {formatMoney(assessment.buyPrice, currency)}
+            </dd>
+          </div>
+          <p className="mt-0.5 text-[11px] text-gray-500">{assessment.buyNote}</p>
         </div>
-        <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-gray-600">Nên bán</dt>
-          <dd className="font-semibold tabular-nums text-rose-700">
-            {formatMoney(assessment.sellPrice, currency)}
-          </dd>
+        <div>
+          <div className="flex items-baseline justify-between gap-2">
+            <dt className="text-gray-600">Mốc bán</dt>
+            <dd className="font-semibold tabular-nums text-rose-700">
+              {formatMoney(assessment.sellPrice, currency)}
+            </dd>
+          </div>
+          <p className="mt-0.5 text-[11px] text-gray-500">{assessment.sellNote}</p>
         </div>
       </dl>
       <ul className="mt-3 space-y-1.5 border-t border-gray-200 pt-3">
