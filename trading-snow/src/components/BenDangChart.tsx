@@ -48,6 +48,7 @@ const COLORS = {
 } as const;
 
 type TaPoint = OhlcPoint & { rsi: number | null };
+type TechnicalTimeframe = (typeof TECHNICAL_CHART_TIMEFRAMES)[number];
 
 const TA_SYNC_ID = "ta-ohlcv-rsi";
 const CHART_MARGIN = { top: 6, right: 12, left: 0, bottom: 2 };
@@ -324,6 +325,67 @@ function WyckoffLines({
   );
 }
 
+function WyckoffEventMarkers({
+  wyckoff,
+  data,
+  visible,
+}: {
+  wyckoff: WyckoffResult;
+  data: OhlcPoint[];
+  visible: boolean;
+}) {
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+  if (!visible || !xScale || !yScale || !wyckoff.events.length) return null;
+
+  const bullish = new Set(["PS", "SC", "ST", "Spring", "SOS", "LPS"]);
+  const offsets = new Map<number, number>();
+
+  return (
+    <g className="wyckoff-event-markers">
+      {wyckoff.events.slice(-10).map((event) => {
+        const point = data[event.index];
+        if (!point) return null;
+        const x = xScale(point.date, { position: "middle" });
+        const y = yScale(event.price);
+        if (x == null || y == null) return null;
+        const key = Math.round(x);
+        const stack = offsets.get(key) ?? 0;
+        offsets.set(key, stack + 1);
+        const isBullishEvent = bullish.has(event.event);
+        const color = isBullishEvent ? "#34d399" : "#fb7185";
+        const textY = isBullishEvent
+          ? y + 14 + stack * 11
+          : y - 8 - stack * 11;
+
+        return (
+          <g key={`${event.event}-${event.index}`}>
+            <title>{`${event.label} · ${point.label}`}</title>
+            <circle
+              cx={x}
+              cy={y}
+              r={3.2}
+              fill={color}
+              stroke="#0f172a"
+              strokeWidth={1}
+            />
+            <text
+              x={x}
+              y={textY}
+              textAnchor="middle"
+              fontSize={9}
+              fill={color}
+              fontWeight={700}
+            >
+              {event.event}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 function ChartTooltip({
   active,
   payload,
@@ -503,6 +565,14 @@ function WyckoffPanel({
       : entry?.action === "avoid"
         ? "border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/40"
         : "border-sky-300 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-950/40";
+  const confidenceClass =
+    w.confidence.level === "high"
+      ? "text-emerald-600 dark:text-emerald-300"
+      : w.confidence.level === "medium"
+        ? "text-amber-600 dark:text-amber-300"
+        : "text-rose-600 dark:text-rose-300";
+  const entryHeading =
+    entry?.action === "avoid" ? "Mốc chờ xác nhận" : "Giá nên vào";
 
   return (
     <div className="mt-4 space-y-3 border-t border-gray-100 pt-4 dark:border-slate-700">
@@ -517,14 +587,23 @@ function WyckoffPanel({
             {w.phaseLabel}
           </p>
         </div>
-        {w.tradingRange && (
-          <div className="text-right text-xs text-gray-600 dark:text-slate-300">
-            <p>
-              Ice {formatMoney(w.tradingRange.ice, currency)} – Creek{" "}
-              {formatMoney(w.tradingRange.creek, currency)}
-            </p>
-          </div>
-        )}
+        <div className="text-right text-xs text-gray-600 dark:text-slate-300">
+          {w.tradingRange && (
+            <>
+              <p>
+                Ice {formatMoney(w.tradingRange.ice, currency)} – Creek{" "}
+                {formatMoney(w.tradingRange.creek, currency)}
+              </p>
+              <p className="mt-0.5">
+                Test biên: {w.tradingRange.bottomTouches} Ice ·{" "}
+                {w.tradingRange.topTouches} Creek
+              </p>
+            </>
+          )}
+          <p className={`mt-0.5 font-semibold ${confidenceClass}`}>
+            Tin cậy {w.confidence.label} · {w.confidence.score}/100
+          </p>
+        </div>
       </div>
 
       {entry && (
@@ -532,7 +611,7 @@ function WyckoffPanel({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-slate-400">
-                Giá nên vào
+                {entryHeading}
               </p>
               <p className="text-lg font-semibold tabular-nums">{formatMoney(entry.price, currency)}</p>
               <p className="text-xs font-medium">{entry.label}</p>
@@ -552,6 +631,16 @@ function WyckoffPanel({
             </div>
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-slate-300">{entry.reason}</p>
+        </div>
+      )}
+
+      {!entry && (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50/60 px-3 py-2.5 text-sm dark:border-slate-600 dark:bg-slate-800/50">
+          <p className="font-medium">Chưa có giá vào đủ tin cậy</p>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-slate-300">
+            Chờ trading range trưởng thành và có ST/Spring/SOS hoặc
+            UT/SOW được volume xác nhận.
+          </p>
         </div>
       )}
 
@@ -583,6 +672,18 @@ function WyckoffPanel({
           ))}
         </div>
       )}
+
+      {w.warnings.length > 0 && (
+        <ul className="space-y-0.5 text-xs text-amber-700 dark:text-amber-300">
+          {w.warnings.map((warning) => (
+            <li key={warning}>• {warning}</li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[11px] text-gray-400">
+        Wyckoff là kịch bản có điều kiện, không phải dự báo giá chắc chắn.
+        Ưu tiên tín hiệu đã đóng nến và có volume xác nhận.
+      </p>
     </div>
   );
 }
@@ -629,14 +730,17 @@ export function BenDangChart({
   currency: string;
   dailySeed?: { date: string; close: number }[];
 }) {
-  const [timeframe, setTimeframe] = useState<ChartTimeframe>("1d");
+  const [timeframe, setTimeframe] = useState<TechnicalTimeframe>("1d");
   const [layers, setLayers] = useState<BenDangLayers>(DEFAULT_LAYERS);
   const { points, loading, error } = useChartHistory(symbol, timeframe, dailySeed);
   const chartTheme = useChartTheme();
 
   const indicators = useMemo(
-    () => (points.length > 5 ? computeBenDangIndicators(points) : null),
-    [points]
+    () =>
+      points.length > 5
+        ? computeBenDangIndicators(points, { timeframe })
+        : null,
+    [points, timeframe]
   );
 
   const currentPrice = points.length ? points[points.length - 1].close : 0;
@@ -762,6 +866,11 @@ export function BenDangChart({
                   <Candlesticks data={chartData} />
                   <SrLines levels={indicators.sr.levels} visible={layers.sr} />
                   <WyckoffLines wyckoff={indicators.wyckoff} visible={layers.wyckoff} />
+                  <WyckoffEventMarkers
+                    wyckoff={indicators.wyckoff}
+                    data={chartData}
+                    visible={layers.wyckoff}
+                  />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

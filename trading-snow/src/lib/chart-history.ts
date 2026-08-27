@@ -71,24 +71,91 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
 }
 
-function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {
+function localDateKey(date: string, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(date));
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((p) => p.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  } catch {
+    return date.slice(0, 10);
+  }
+}
+
+function modalMinute(points: OhlcPoint[]): number {
+  const counts = new Map<number, number>();
+  for (const point of points.slice(-30, -1)) {
+    const date = new Date(point.date);
+    const key = date.getUTCMinutes();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+}
+
+/**
+ * Yahoo sometimes appends a quote snapshot after the active OHLC bucket
+ * (e.g. a Thursday quote after the current weekly candle). It is not a real
+ * candle and otherwise creates false pivots, volume dry-ups and climaxes.
+ */
+export function stripTrailingQuoteSnapshot(
+  points: OhlcPoint[],
+  timeframe: ChartTimeframe
+): OhlcPoint[] {
+  if (points.length < 3) return points;
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const lastDate = new Date(last.date);
+  const prevDate = new Date(prev.date);
+  const gapMs = lastDate.getTime() - prevDate.getTime();
+  const irregularMinute =
+    lastDate.getUTCMinutes() !== modalMinute(points) ||
+    lastDate.getUTCSeconds() !== 0;
+  const overlapsBucket =
+    (timeframe === "1h" && gapMs < 45 * 60 * 1000) ||
+    (timeframe === "1w" && gapMs < 5 * 24 * 60 * 60 * 1000) ||
+    (timeframe === "all" &&
+      lastDate.getUTCFullYear() === prevDate.getUTCFullYear() &&
+      lastDate.getUTCMonth() === prevDate.getUTCMonth());
+
+  return irregularMinute || overlapsBucket ? points.slice(0, -1) : points;
+}
+
+/**
+ * Build 4H candles from the exchange session, not from UTC wall-clock
+ * buckets. US sessions become 4 bars + the remaining 2.5H bar, instead of
+ * the old accidental 3H + 4H split.
+ */
+export function aggregateTo4h(
+  points: OhlcPoint[],
+  timeZone = "America/New_York"
+): OhlcPoint[] {
   if (!points.length) return [];
-  const bucketMs = 4 * 60 * 60 * 1000;
-  const buckets = new Map<number, OhlcPoint[]>();
+  const sessions = new Map<string, OhlcPoint[]>();
 
   for (const p of points) {
-    const t = new Date(p.date).getTime();
-    const key = Math.floor(t / bucketMs) * bucketMs;
-    const arr = buckets.get(key) ?? [];
+    const key = localDateKey(p.date, timeZone);
+    const arr = sessions.get(key) ?? [];
     arr.push(p);
-    buckets.set(key, arr);
+    sessions.set(key, arr);
   }
 
-  return [...buckets.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([key, bars]) => {
-      const date = new Date(key);
-      return {
+  const result: OhlcPoint[] = [];
+  for (const [, sessionBars] of [...sessions.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const sorted = [...sessionBars].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    for (let start = 0; start < sorted.length; start += 4) {
+      const bars = sorted.slice(start, start + 4);
+      if (!bars.length) continue;
+      const date = new Date(bars[0].date);
+      result.push({
         date: date.toISOString(),
         label: formatChartLabel(date, "4h"),
         open: bars[0].open,
@@ -96,12 +163,17 @@ function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {
         low: Math.min(...bars.map((b) => b.low)),
         close: bars[bars.length - 1].close,
         volume: bars.reduce((sum, b) => sum + b.volume, 0),
-      };
-    });
+      });
+    }
+  }
+  return result;
 }
 
 function parseYahooOhlc(
   result: {
+    meta?: {
+      exchangeTimezoneName?: string;
+    };
     timestamp?: number[];
     indicators?: {
       quote?: {
@@ -168,9 +240,16 @@ async function fetchOhlcOne(
   const result = json?.chart?.result?.[0];
   if (!result) return [];
 
-  let points = parseYahooOhlc(result, timeframe);
+  const sourceTimeframe = spec.aggregate4h ? "1h" : timeframe;
+  let points = stripTrailingQuoteSnapshot(
+    parseYahooOhlc(result, timeframe),
+    sourceTimeframe
+  );
   if (spec.aggregate4h) {
-    points = aggregateTo4h(points);
+    points = aggregateTo4h(
+      points,
+      result.meta?.exchangeTimezoneName ?? "America/New_York"
+    );
   }
   return points;
 }
