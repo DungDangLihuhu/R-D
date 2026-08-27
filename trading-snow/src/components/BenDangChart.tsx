@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Line,
+  ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,7 +16,7 @@ import {
   useXAxisScale,
   useYAxisScale,
 } from "recharts";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatMoney, formatPercent, formatVolume } from "@/lib/format";
 import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { TECHNICAL_CHART_TIMEFRAMES } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
@@ -26,6 +29,7 @@ import {
   type SrLevel,
   type WyckoffResult,
 } from "@/lib/indicators/ben-dang";
+import { computeRsiSeries } from "@/lib/indicators/ben-dang/utils";
 
 const COLORS = {
   candleUp: "#10b981",
@@ -40,7 +44,15 @@ const COLORS = {
   creek: "#f59e0b",
   ice: "#06b6d4",
   entry: "#38bdf8",
+  rsi: "#a78bfa",
 } as const;
+
+type TaPoint = OhlcPoint & { rsi: number | null };
+
+const TA_SYNC_ID = "ta-ohlcv-rsi";
+const CHART_MARGIN = { top: 6, right: 12, left: 0, bottom: 2 };
+const Y_AXIS_WIDTH = 64;
+const RSI_PERIOD = 14;
 
 const TIMEFRAME_LABELS: Record<ChartTimeframe, string> = {
   "1h": "1H",
@@ -316,32 +328,76 @@ function ChartTooltip({
   active,
   payload,
   currency,
+  tooltipStyle,
 }: {
   active?: boolean;
-  payload?: { payload?: OhlcPoint }[];
+  payload?: { payload?: TaPoint }[];
   currency: string;
+  tooltipStyle?: CSSProperties;
 }) {
   if (!active || !payload?.[0]?.payload) return null;
   const p = payload[0].payload;
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
-      <p className="mb-1 text-gray-500">{p.label}</p>
+    <div
+      className="rounded-lg border px-3 py-2 text-xs shadow-md"
+      style={tooltipStyle}
+    >
+      <p className="mb-1 opacity-70">{p.label}</p>
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
-        <span className="text-gray-500">Mở</span>
+        <span className="opacity-70">Mở</span>
         <span>{formatMoney(p.open, currency)}</span>
-        <span className="text-gray-500">Cao</span>
+        <span className="opacity-70">Cao</span>
         <span>{formatMoney(p.high, currency)}</span>
-        <span className="text-gray-500">Thấp</span>
+        <span className="opacity-70">Thấp</span>
         <span>{formatMoney(p.low, currency)}</span>
-        <span className="text-gray-500">Đóng</span>
+        <span className="opacity-70">Đóng</span>
         <span className="font-semibold">{formatMoney(p.close, currency)}</span>
-        {p.volume > 0 && (
-          <>
-            <span className="text-gray-500">Vol</span>
-            <span>{p.volume.toLocaleString("vi-VN")}</span>
-          </>
-        )}
+        <span className="opacity-70">Vol</span>
+        <span>{formatVolume(p.volume)}</span>
+        <span className="opacity-70">RSI {RSI_PERIOD}</span>
+        <span className="font-semibold">
+          {p.rsi != null ? p.rsi.toFixed(1) : "—"}
+        </span>
       </div>
+    </div>
+  );
+}
+
+function VolumeBarShape(props: {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: TaPoint;
+}) {
+  const { x = 0, y = 0, width = 0, height = 0, payload } = props;
+  if (!payload || height <= 0) return null;
+  const up = payload.close >= payload.open;
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={Math.max(width, 1)}
+      height={Math.max(height, 1)}
+      fill={up ? COLORS.candleUp : COLORS.candleDown}
+      opacity={0.72}
+    />
+  );
+}
+
+function PaneLabel({
+  title,
+  value,
+  valueClass,
+}: {
+  title: string;
+  value?: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="pointer-events-none absolute left-[72px] top-1 z-10 flex items-baseline gap-2 text-[11px] font-medium text-gray-500">
+      <span>{title}</span>
+      {value ? <span className={`tabular-nums font-semibold ${valueClass ?? ""}`}>{value}</span> : null}
     </div>
   );
 }
@@ -585,6 +641,46 @@ export function BenDangChart({
 
   const currentPrice = points.length ? points[points.length - 1].close : 0;
 
+  const chartData = useMemo<TaPoint[]>(() => {
+    const rsi = computeRsiSeries(
+      points.map((p) => p.close),
+      RSI_PERIOD
+    );
+    return points.map((p, i) => ({ ...p, rsi: rsi[i] }));
+  }, [points]);
+
+  const lastRsi = useMemo(() => {
+    for (let i = chartData.length - 1; i >= 0; i--) {
+      if (chartData[i].rsi != null) return chartData[i].rsi;
+    }
+    return null;
+  }, [chartData]);
+
+  const maxVolume = useMemo(
+    () => chartData.reduce((m, p) => (p.volume > m ? p.volume : m), 0),
+    [chartData]
+  );
+
+  const tooltipStyle = useMemo<CSSProperties>(
+    () => ({
+      background: chartTheme.tooltip.background,
+      border: chartTheme.tooltip.border,
+      color: chartTheme.tooltip.color,
+      borderRadius: chartTheme.tooltip.borderRadius,
+      boxShadow: chartTheme.tooltip.boxShadow,
+    }),
+    [chartTheme]
+  );
+
+  const rsiTone =
+    lastRsi == null
+      ? "text-gray-500"
+      : lastRsi >= 70
+        ? "text-rose-500"
+        : lastRsi <= 30
+          ? "text-emerald-500"
+          : "text-violet-400";
+
   const yDomain = useMemo(
     () =>
       indicators
@@ -598,7 +694,7 @@ export function BenDangChart({
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-semibold">Phân tích kĩ thuật</h3>
-          <p className="text-xs text-gray-500">Premium/Discount · Hỗ trợ/Kháng cự · Wyckoff</p>
+          <p className="text-xs text-gray-500">Premium/Discount · Hỗ trợ/Kháng cự · Wyckoff · Volume · RSI</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-gray-200 p-0.5">
@@ -635,39 +731,118 @@ export function BenDangChart({
 
       {!loading && !error && points.length > 1 && indicators && (
         <>
-          <div className="min-w-0 w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={points} barCategoryGap="20%">
-                <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
-                  interval="preserveStartEnd"
-                  minTickGap={24}
-                  tickFormatter={(value) => {
-                    const p = points.find((pt) => pt.date === value);
-                    return p?.label ?? String(value).slice(0, 10);
-                  }}
-                />
-                <YAxis
-                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
-                  domain={yDomain}
-                  width={64}
-                  tickFormatter={formatChartPrice}
-                  allowDecimals
-                  tickCount={6}
-                />
-                <Tooltip content={<ChartTooltip currency={currency} />} />
-                <Bar dataKey="close" fill="transparent" isAnimationActive={false} />
-                <PremiumDiscountZones
-                  zone={indicators.smc.premiumDiscount}
-                  visible={layers.smc}
-                />
-                <Candlesticks data={points} />
-                <SrLines levels={indicators.sr.levels} visible={layers.sr} />
-                <WyckoffLines wyckoff={indicators.wyckoff} visible={layers.wyckoff} />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="min-w-0 w-full space-y-1">
+            <div className="relative h-[360px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={chartData}
+                  barCategoryGap="20%"
+                  syncId={TA_SYNC_ID}
+                  margin={CHART_MARGIN}
+                >
+                  <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
+                  <XAxis dataKey="date" hide />
+                  <YAxis
+                    tick={{ fill: chartTheme.tick, fontSize: 10 }}
+                    domain={yDomain}
+                    width={Y_AXIS_WIDTH}
+                    tickFormatter={formatChartPrice}
+                    allowDecimals
+                    tickCount={6}
+                  />
+                  <Tooltip
+                    content={<ChartTooltip currency={currency} tooltipStyle={tooltipStyle} />}
+                    cursor={{ stroke: chartTheme.tick, strokeDasharray: "3 3" }}
+                  />
+                  <Bar dataKey="close" fill="transparent" isAnimationActive={false} />
+                  <PremiumDiscountZones
+                    zone={indicators.smc.premiumDiscount}
+                    visible={layers.smc}
+                  />
+                  <Candlesticks data={chartData} />
+                  <SrLines levels={indicators.sr.levels} visible={layers.sr} />
+                  <WyckoffLines wyckoff={indicators.wyckoff} visible={layers.wyckoff} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="relative h-[88px] w-full">
+              <PaneLabel
+                title="Vol"
+                value={maxVolume > 0 ? formatVolume(chartData[chartData.length - 1]?.volume ?? 0) : "Không có dữ liệu"}
+              />
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} syncId={TA_SYNC_ID} margin={CHART_MARGIN}>
+                  <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" hide />
+                  <YAxis
+                    tick={{ fill: chartTheme.tick, fontSize: 9 }}
+                    width={Y_AXIS_WIDTH}
+                    domain={[0, maxVolume > 0 ? maxVolume * 1.15 : 1]}
+                    tickFormatter={formatVolume}
+                    tickCount={3}
+                    allowDecimals
+                  />
+                  <Tooltip
+                    content={<ChartTooltip currency={currency} tooltipStyle={tooltipStyle} />}
+                    cursor={{ stroke: chartTheme.tick, strokeDasharray: "3 3" }}
+                  />
+                  <Bar
+                    dataKey="volume"
+                    isAnimationActive={false}
+                    shape={VolumeBarShape}
+                    maxBarSize={18}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="relative h-[116px] w-full">
+              <PaneLabel
+                title={`RSI ${RSI_PERIOD}`}
+                value={lastRsi != null ? lastRsi.toFixed(1) : "—"}
+                valueClass={rsiTone}
+              />
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} syncId={TA_SYNC_ID} margin={{ ...CHART_MARGIN, bottom: 18 }}>
+                  <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: chartTheme.tick, fontSize: 10 }}
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                    tickFormatter={(value) => {
+                      const p = chartData.find((pt) => pt.date === value);
+                      return p?.label ?? String(value).slice(0, 10);
+                    }}
+                  />
+                  <YAxis
+                    tick={{ fill: chartTheme.tick, fontSize: 9 }}
+                    width={Y_AXIS_WIDTH}
+                    domain={[0, 100]}
+                    ticks={[30, 50, 70]}
+                  />
+                  <ReferenceArea y1={70} y2={100} fill="#ef4444" fillOpacity={0.08} ifOverflow="hidden" />
+                  <ReferenceArea y1={0} y2={30} fill="#10b981" fillOpacity={0.08} ifOverflow="hidden" />
+                  <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.7} />
+                  <ReferenceLine y={30} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.7} />
+                  <ReferenceLine y={50} stroke={chartTheme.tick} strokeDasharray="3 3" strokeOpacity={0.45} />
+                  <Tooltip
+                    content={<ChartTooltip currency={currency} tooltipStyle={tooltipStyle} />}
+                    cursor={{ stroke: chartTheme.tick, strokeDasharray: "3 3" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="rsi"
+                    stroke={COLORS.rsi}
+                    strokeWidth={1.6}
+                    dot={false}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {layers.sr && (
@@ -719,6 +894,13 @@ export function BenDangChart({
                 </span>
               </>
             )}
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" />
+              <span className="inline-block h-2 w-2 rounded-sm bg-rose-500" /> Volume
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-0.5 w-3 bg-violet-400" /> RSI 14
+            </span>
           </div>
 
           {layers.wyckoff && (

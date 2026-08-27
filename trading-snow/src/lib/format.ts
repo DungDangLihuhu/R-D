@@ -17,6 +17,15 @@ export function formatNumber(value: number, digits = 2): string {
   }).format(value);
 }
 
+export function formatVolume(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${formatNumber(value / 1_000_000_000, 2)} Tỷ`;
+  if (abs >= 1_000_000) return `${formatNumber(value / 1_000_000, 1)} Tr`;
+  if (abs >= 1_000) return `${formatNumber(value / 1_000, 1)} N`;
+  return formatNumber(value, 0);
+}
+
 export function formatShares(value: number): string {
   const rounded = Math.round(value * 10000) / 10000;
   if (Number.isInteger(rounded)) return formatNumber(rounded, 0);
