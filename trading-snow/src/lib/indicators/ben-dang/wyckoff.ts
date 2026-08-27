@@ -35,10 +35,10 @@ interface WyckoffConfig {
 }
 
 const TIMEFRAME_CONFIG: Record<WyckoffTimeframe, WyckoffConfig> = {
-  "1h": { lookback: 100, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 12, entryEventMaxBars: 20 },
-  "4h": { lookback: 100, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 10, entryEventMaxBars: 15 },
-  "1d": { lookback: 120, pivot: 3, minRangeBars: 12, maxRangeBars: 100, breakoutMaxBars: 15, entryEventMaxBars: 20 },
-  "1w": { lookback: 104, pivot: 2, minRangeBars: 8, maxRangeBars: 70, breakoutMaxBars: 8, entryEventMaxBars: 12 },
+  "1h": { lookback: 150, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 12, entryEventMaxBars: 20 },
+  "4h": { lookback: 150, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 10, entryEventMaxBars: 15 },
+  "1d": { lookback: 150, pivot: 3, minRangeBars: 12, maxRangeBars: 100, breakoutMaxBars: 15, entryEventMaxBars: 20 },
+  "1w": { lookback: 150, pivot: 2, minRangeBars: 8, maxRangeBars: 70, breakoutMaxBars: 8, entryEventMaxBars: 12 },
   all: { lookback: 60, pivot: 2, minRangeBars: 8, maxRangeBars: 42, breakoutMaxBars: 6, entryEventMaxBars: 8 },
 };
 const KEY_EVENTS: WyckoffEvent[] = [

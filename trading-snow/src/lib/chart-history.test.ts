@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateTo4h,
+  CHART_BAR_LIMIT,
+  limitChartBars,
   sessionHoursFromYahooMeta,
   stripTrailingQuoteSnapshot,
   type OhlcPoint,
@@ -141,5 +143,22 @@ describe("aggregateTo4h", () => {
     );
 
     expect(hours).toEqual({ startMinutes: 9 * 60 + 30, endMinutes: 16 * 60 });
+  });
+});
+
+describe("limitChartBars", () => {
+  it("keeps the newest 150 candles and leaves All uncapped", () => {
+    const points = Array.from({ length: 200 }, (_, index) =>
+      point(
+        `2026-01-${String((index % 28) + 1).padStart(2, "0")}T13:30:00.000Z`,
+        100 + index
+      )
+    );
+
+    const limited = limitChartBars(points, "1d");
+    expect(limited).toHaveLength(CHART_BAR_LIMIT);
+    expect(limited[0]).toBe(points[50]);
+    expect(limited[limited.length - 1]).toBe(points[199]);
+    expect(limitChartBars(points, "all")).toHaveLength(200);
   });
 });
