@@ -33,14 +33,25 @@ interface TimeframeSpec {
   aggregate4h?: boolean;
 }
 
+/** Visible candles on every chart timeframe except All. */
+export const CHART_BAR_LIMIT = 150;
+
 const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
-  "1h": { interval: "60m", range: "1mo" },
-  "4h": { interval: "60m", range: "3mo", aggregate4h: true },
-  "1d": { interval: "1d", range: "6mo" },
-  "1w": { interval: "1wk", range: "2y" },
-  "1m": { interval: "1mo", range: "5y" },
+  "1h": { interval: "60m", range: "3mo" },
+  "4h": { interval: "60m", range: "6mo", aggregate4h: true },
+  "1d": { interval: "1d", range: "1y" },
+  "1w": { interval: "1wk", range: "5y" },
+  "1m": { interval: "1mo", range: "max" },
   all: { interval: "3mo", range: "max" },
 };
+
+export function limitChartBars(
+  points: OhlcPoint[],
+  timeframe: ChartTimeframe
+): OhlcPoint[] {
+  if (timeframe === "all" || points.length <= CHART_BAR_LIMIT) return points;
+  return points.slice(-CHART_BAR_LIMIT);
+}
 
 export function isChartTimeframe(value: string): value is ChartTimeframe {
   return (CHART_TIMEFRAMES as readonly string[]).includes(value);
@@ -356,7 +367,7 @@ async function fetchOhlcOne(
       sessionHoursFromYahooMeta(result.meta, timeZone)
     );
   }
-  return points;
+  return limitChartBars(points, timeframe);
 }
 
 export async function fetchChartHistory(
