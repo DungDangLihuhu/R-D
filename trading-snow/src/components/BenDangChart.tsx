@@ -252,12 +252,26 @@ function WyckoffLines({
   if (!visible || !yScale || !plotArea) return null;
 
   const lines: { price: number; color: string; label: string; dashed?: boolean }[] = [];
-  if (wyckoff.tradingRange) {
-    lines.push({ price: wyckoff.tradingRange.creek, color: COLORS.creek, label: "Creek", dashed: true });
-    lines.push({ price: wyckoff.tradingRange.ice, color: COLORS.ice, label: "Ice", dashed: true });
+  const ice = wyckoff.tradingRange?.ice;
+  const creek = wyckoff.tradingRange?.creek;
+  const entryPx = wyckoff.entry?.price;
+  const same = (a?: number, b?: number) =>
+    a != null && b != null && Math.abs(a - b) / Math.max(Math.abs(a), 1) < 0.004;
+
+  if (creek != null) {
+    lines.push({ price: creek, color: COLORS.creek, label: "Creek", dashed: true });
   }
-  if (wyckoff.entry) {
-    lines.push({ price: wyckoff.entry.price, color: COLORS.entry, label: "Vào", dashed: false });
+  if (ice != null) {
+    const iceLabel = same(ice, entryPx) ? "Ice / Vào" : "Ice";
+    lines.push({
+      price: ice,
+      color: same(ice, entryPx) ? COLORS.entry : COLORS.ice,
+      label: iceLabel,
+      dashed: !same(ice, entryPx),
+    });
+  }
+  if (entryPx != null && !same(entryPx, ice) && !same(entryPx, creek)) {
+    lines.push({ price: entryPx, color: COLORS.entry, label: "Vào", dashed: false });
   }
   if (!lines.length) return null;
 
