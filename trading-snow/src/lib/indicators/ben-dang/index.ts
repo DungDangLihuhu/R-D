@@ -13,6 +13,8 @@ export type {
   SmcResult,
   SrLevel,
   SrResult,
+  WyckoffEntry,
+  WyckoffEntryAction,
   WyckoffEvent,
   WyckoffEventMarker,
   WyckoffPhase,
