@@ -87,6 +87,88 @@ function localDateKey(date: string, timeZone: string): string {
   }
 }
 
+export interface RegularSessionHours {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+const US_EQUITY_TIMEZONES = new Set([
+  "America/New_York",
+  "America/Toronto",
+  "America/Detroit",
+  "America/Indiana/Indianapolis",
+  "America/Kentucky/Louisville",
+]);
+
+function localMinutes(date: string, timeZone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(date));
+    const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+    const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+    return hour * 60 + minute;
+  } catch {
+    const fallback = new Date(date);
+    return fallback.getUTCHours() * 60 + fallback.getUTCMinutes();
+  }
+}
+
+export function defaultRegularSessionHours(
+  timeZone: string
+): RegularSessionHours | undefined {
+  if (US_EQUITY_TIMEZONES.has(timeZone)) {
+    return { startMinutes: 9 * 60 + 30, endMinutes: 16 * 60 };
+  }
+  return undefined;
+}
+
+export function sessionHoursFromYahooMeta(
+  meta:
+    | {
+        currentTradingPeriod?: {
+          regular?: { start?: number; end?: number };
+        };
+      }
+    | undefined,
+  timeZone: string
+): RegularSessionHours | undefined {
+  const regular = meta?.currentTradingPeriod?.regular;
+  if (regular?.start && regular?.end) {
+    const startMinutes = localMinutes(
+      new Date(regular.start * 1000).toISOString(),
+      timeZone
+    );
+    const endMinutes = localMinutes(
+      new Date(regular.end * 1000).toISOString(),
+      timeZone
+    );
+    if (endMinutes > startMinutes) {
+      return { startMinutes, endMinutes };
+    }
+  }
+  return defaultRegularSessionHours(timeZone);
+}
+
+function inRegularHours(
+  date: string,
+  timeZone: string,
+  hours: RegularSessionHours | undefined
+): boolean {
+  if (!hours) return true;
+  const minutes = localMinutes(date, timeZone);
+  return minutes >= hours.startMinutes && minutes < hours.endMinutes;
+}
+
+function medianCount(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
 function modalMinute(points: OhlcPoint[]): number {
   const counts = new Map<number, number>();
   for (const point of points.slice(-30, -1)) {
@@ -131,34 +213,49 @@ export function stripTrailingQuoteSnapshot(
 }
 
 /**
- * Build 4H candles from the exchange session, not from UTC wall-clock
- * buckets. US sessions become 4 bars + the remaining 2.5H bar, instead of
- * the old accidental 3H + 4H split.
+ * Build 4H candles from regular exchange hours, not UTC wall-clock buckets.
+ * US cash sessions become one 4H bar from the open plus the remaining RTH
+ * bar. Premarket/after-hours hours are ignored, and a still-forming last
+ * group is dropped so it cannot repaint as a fake 4H candle.
  */
 export function aggregateTo4h(
   points: OhlcPoint[],
-  timeZone = "America/New_York"
+  timeZone = "America/New_York",
+  sessionHours: RegularSessionHours | undefined = defaultRegularSessionHours(
+    timeZone
+  )
 ): OhlcPoint[] {
-  if (!points.length) return [];
+  const filtered = points.filter((point) =>
+    inRegularHours(point.date, timeZone, sessionHours)
+  );
+  if (!filtered.length) return [];
   const sessions = new Map<string, OhlcPoint[]>();
 
-  for (const p of points) {
+  for (const p of filtered) {
     const key = localDateKey(p.date, timeZone);
     const arr = sessions.get(key) ?? [];
     arr.push(p);
     sessions.set(key, arr);
   }
 
+  const ordered = [...sessions.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const typical = medianCount(
+    ordered.slice(0, -1).map(([, bars]) => bars.length).filter((count) => count >= 4)
+  );
+  const lastSessionLength = ordered[ordered.length - 1]?.[1].length ?? 0;
+  const lastSessionIncomplete = typical > 0 && lastSessionLength < typical;
+
   const result: OhlcPoint[] = [];
-  for (const [, sessionBars] of [...sessions.entries()].sort(([a], [b]) =>
-    a.localeCompare(b)
-  )) {
+  ordered.forEach(([, sessionBars], sessionIndex) => {
     const sorted = [...sessionBars].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
+    const dropIncompleteRemainder =
+      sessionIndex === ordered.length - 1 && lastSessionIncomplete;
     for (let start = 0; start < sorted.length; start += 4) {
       const bars = sorted.slice(start, start + 4);
       if (!bars.length) continue;
+      if (dropIncompleteRemainder && bars.length < 4) continue;
       const date = new Date(bars[0].date);
       result.push({
         date: date.toISOString(),
@@ -170,7 +267,7 @@ export function aggregateTo4h(
         volume: bars.reduce((sum, b) => sum + b.volume, 0),
       });
     }
-  }
+  });
   return result;
 }
 
@@ -246,15 +343,17 @@ async function fetchOhlcOne(
   if (!result) return [];
 
   const sourceTimeframe = spec.aggregate4h ? "1h" : timeframe;
+  const timeZone = result.meta?.exchangeTimezoneName ?? "America/New_York";
   let points = stripTrailingQuoteSnapshot(
-    parseYahooOhlc(result, timeframe),
+    parseYahooOhlc(result, sourceTimeframe),
     sourceTimeframe,
-    result.meta?.exchangeTimezoneName ?? "America/New_York"
+    timeZone
   );
   if (spec.aggregate4h) {
     points = aggregateTo4h(
       points,
-      result.meta?.exchangeTimezoneName ?? "America/New_York"
+      timeZone,
+      sessionHoursFromYahooMeta(result.meta, timeZone)
     );
   }
   return points;

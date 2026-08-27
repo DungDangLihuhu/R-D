@@ -156,3 +156,74 @@ describe("computeWyckoff safeguards", () => {
     expect(result.tradingRange?.kind).not.toBe("accumulation");
   });
 });
+
+function distribution(): Bar[] {
+  const bars: Bar[] = [];
+  let price = 80;
+  for (let index = 0; index < 20; index++) {
+    const open = price;
+    price += 0.9;
+    bars.push(bar(index, open, price + 0.3, open - 0.3, price, 100));
+  }
+
+  bars.push(bar(20, 98, 110, 97, 108, 320)); // BC
+  bars.push(bar(21, 108, 109, 102, 103, 180));
+  bars.push(bar(22, 103, 104, 95, 97, 160)); // AR trough
+  bars.push(bar(23, 97, 101, 96, 100, 120));
+  bars.push(bar(24, 100, 104, 99, 102, 110));
+  bars.push(bar(25, 102, 105, 101, 104, 100));
+  bars.push(bar(26, 104, 106, 102, 103, 95));
+  bars.push(bar(27, 103, 112, 102, 104, 150)); // UT above Creek, close back in
+  bars.push(bar(28, 104, 105, 101, 102, 90));
+  bars.push(bar(29, 102, 104, 100, 101, 85));
+  bars.push(bar(30, 101, 103, 99, 100, 80));
+  bars.push(bar(31, 100, 102, 98, 99, 80));
+  bars.push(bar(32, 99, 118, 98, 104, 160)); // UTAD new high after return to range
+  bars.push(bar(33, 104, 105, 101, 102, 90));
+  bars.push(bar(34, 102, 103, 99, 100, 85));
+  bars.push(bar(35, 100, 101, 91, 92, 240)); // SOW below Ice
+  bars.push(bar(36, 92, 93, 90, 91, 140));
+  bars.push(bar(37, 91, 106, 90, 104, 70)); // weak LPSY rally
+  bars.push(bar(38, 104, 105, 101, 102, 65));
+  bars.push(bar(39, 102, 103, 99, 100, 60));
+  bars.push(bar(40, 100, 101, 97, 98, 55));
+  bars.push(bar(41, 98, 99, 96, 97, 50));
+  return bars;
+}
+
+describe("computeWyckoff distribution confirmation", () => {
+  it("requires a new high after returning to the range before labeling UTAD", () => {
+    const bars = distribution();
+    const result = computeWyckoff(bars, "1d");
+    const events = new Set(result.events.map((event) => event.event));
+
+    expect(events.has("BC")).toBe(true);
+    expect(events.has("UT")).toBe(true);
+    expect(events.has("UTAD")).toBe(true);
+    expect(events.has("SOW")).toBe(true);
+    expect(events.has("LPSY")).toBe(true);
+    expect(result.phase).toBe("distribution");
+    expect(result.entry?.action).toBe("avoid");
+  });
+
+  it("does not upgrade a second equal-high upthrust to UTAD", () => {
+    const bars = distribution().slice(0, 32);
+    bars[31] = bar(31, 100, 102, 98, 99, 80);
+    bars.push(bar(32, 99, 109, 98, 104, 150));
+    bars.push(bar(33, 104, 105, 101, 102, 90));
+    bars.push(bar(34, 102, 103, 99, 100, 85));
+
+    const result = computeWyckoff(bars, "1d");
+
+    expect(result.events.some((event) => event.event === "UTAD")).toBe(false);
+  });
+
+  it("does not label LPSY when the rally expands volume versus SOW", () => {
+    const bars = distribution();
+    bars[37] = bar(37, 91, 106, 90, 104, 400);
+
+    const result = computeWyckoff(bars, "1d");
+
+    expect(result.events.some((event) => event.event === "LPSY")).toBe(false);
+  });
+});

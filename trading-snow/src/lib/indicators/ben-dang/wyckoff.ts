@@ -549,7 +549,7 @@ function buildTradingRange(
   pivotLows: { index: number; price: number }[],
   config: WyckoffConfig
 ): TradingRange | undefined {
-  const lastAtr = atrArr[bars.length - 1] || 0;
+  const lastAtr = atrArr[Math.max(0, bars.length - 2)] || atrArr[bars.length - 1] || 0;
   const candidates: TradingRange[] = [];
 
   if (sc) {
@@ -635,6 +635,21 @@ function lastEvent(events: WyckoffEventMarker[], event: WyckoffEvent): WyckoffEv
     .sort((a, b) => b.index - a.index)[0];
 }
 
+function qualifyUtad(
+  index: number,
+  price: number,
+  events: WyckoffEventMarker[],
+  bars: Bar[],
+  resistance: number
+): boolean {
+  const ut = lastEvent(events, "UT");
+  if (!ut || events.some((item) => item.event === "UTAD")) return false;
+  if (index - ut.index < 3 || price <= ut.price) return false;
+  return bars
+    .slice(ut.index + 1, index)
+    .some((bar) => bar.close <= resistance);
+}
+
 function pruneEvents(events: WyckoffEventMarker[]): WyckoffEventMarker[] {
   const sorted = [...events].sort((a, b) => a.index - b.index);
   const latest = new Map<WyckoffEvent, WyckoffEventMarker>();
@@ -669,7 +684,7 @@ function detectEvents(
   const resistance = range.top;
   const mid = (support + resistance) / 2;
   const height = resistance - support;
-  const lastAtr = atrArr[bars.length - 1] || height * 0.1;
+  const lastAtr = atrArr[Math.max(0, bars.length - 2)] || atrArr[bars.length - 1] || height * 0.1;
   const nearSupport = (price: number) => price <= support + Math.max(lastAtr * 0.6, height * 0.12);
   const nearResistance = (price: number) =>
     price >= resistance - Math.max(lastAtr * 0.6, height * 0.12);
@@ -767,10 +782,9 @@ function detectEvents(
       bar.close < resistance &&
       volAtLeast(vr, 1.05)
     ) {
-      const ut = lastEvent(events, "UT");
-      if (!ut) {
+      if (!lastEvent(events, "UT")) {
         pushEvent(events, "UT", p.index, p.price);
-      } else if (!has("UTAD") && p.index - ut.index >= 3) {
+      } else if (qualifyUtad(p.index, p.price, events, bars, resistance)) {
         pushEvent(events, "UTAD", p.index, p.price);
       }
     } else if (nearResistance(p.price) && !isBullish(bar) && volAtLeast(vr, 1.1)) {
@@ -816,10 +830,9 @@ function detectEvents(
       bar.close < resistance &&
       volAtLeast(vr, 1.05)
     ) {
-      const ut = lastEvent(events, "UT");
-      if (!ut) {
+      if (!lastEvent(events, "UT")) {
         pushEvent(events, "UT", i, bar.high);
-      } else if (!has("UTAD") && i - ut.index >= 3) {
+      } else if (qualifyUtad(i, bar.high, events, bars, resistance)) {
         pushEvent(events, "UTAD", i, bar.high);
       }
     }

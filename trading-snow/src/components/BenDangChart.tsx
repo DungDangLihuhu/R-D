@@ -70,10 +70,15 @@ const DEFAULT_LAYERS: BenDangLayers = {
   wyckoff: true,
 };
 
-function indicatorExtras(indicators: BenDangIndicators): number[] {
+function indicatorExtras(
+  indicators: BenDangIndicators,
+  layers: BenDangLayers
+): number[] {
   const extras: number[] = [];
-  for (const l of indicators.sr.levels) extras.push(l.price);
-  if (indicators.smc.premiumDiscount) {
+  if (layers.sr) {
+    for (const l of indicators.sr.levels) extras.push(l.price);
+  }
+  if (layers.smc && indicators.smc.premiumDiscount) {
     extras.push(
       indicators.smc.premiumDiscount.top,
       indicators.smc.premiumDiscount.bottom,
@@ -81,10 +86,10 @@ function indicatorExtras(indicators: BenDangIndicators): number[] {
     );
   }
   const w = indicators.wyckoff;
-  if (w.tradingRange) {
+  if (layers.wyckoff && w.tradingRange && w.tradingRange.kind !== "range") {
     extras.push(w.tradingRange.top, w.tradingRange.bottom);
   }
-  if (w.entry) extras.push(w.entry.price);
+  if (layers.wyckoff && w.entry) extras.push(w.entry.price);
   return extras;
 }
 
@@ -788,9 +793,11 @@ export function BenDangChart({
   const yDomain = useMemo(
     () =>
       indicators
-        ? computeChartYDomain(points, { extras: indicatorExtras(indicators) })
+        ? computeChartYDomain(points, {
+            extras: indicatorExtras(indicators, layers),
+          })
         : computeChartYDomain(points),
-    [points, indicators]
+    [points, indicators, layers]
   );
 
   return (
