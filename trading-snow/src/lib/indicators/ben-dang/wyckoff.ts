@@ -862,12 +862,18 @@ function analyzeVolumePattern(
   const earlyVol = slice.slice(0, third).reduce((s, b) => s + b.volume, 0) / third;
   const lateVol = slice.slice(-third).reduce((s, b) => s + b.volume, 0) / third;
   const recentVol = slice.slice(-5).reduce((s, b) => s + b.volume, 0) / Math.min(5, slice.length);
-  const climaxVol = Math.max(sc?.volume ?? 0, bc?.volume ?? 0);
+  const climaxVol =
+    range?.kind === "accumulation"
+      ? sc?.volume ?? 0
+      : range?.kind === "distribution"
+        ? bc?.volume ?? 0
+        : 0;
+  const context = range ? "trong biên giá" : "gần đây";
 
   if (climaxVol > 0 && recentVol < climaxVol * 0.55) return "Volume cạn (dry-up) sau climax";
-  if (lateVol > earlyVol * 1.3) return "Volume tăng trong trading range";
-  if (lateVol < earlyVol * 0.7) return "Volume giảm trong trading range";
-  return "Volume ổn định trong trading range";
+  if (lateVol > earlyVol * 1.3) return `Volume tăng ${context}`;
+  if (lateVol < earlyVol * 0.7) return `Volume giảm ${context}`;
+  return `Volume ổn định ${context}`;
 }
 
 function volumeCoverage(bars: Bar[], startIndex: number): number {
