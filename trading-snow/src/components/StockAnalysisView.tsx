@@ -567,11 +567,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             )}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {data.sections.map((section) => (
-              <MetricSection key={section.id} title={section.title} metrics={section.metrics} />
-            ))}
-          </div>
+          {data.sections.length > 0 && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {data.sections.map((section) => (
+                <MetricSection key={section.id} title={section.title} metrics={section.metrics} />
+              ))}
+            </div>
+          )}
 
           {data.earningsUpcoming.length > 0 && (
             <Section title="Lịch công bố KQKD sắp tới">

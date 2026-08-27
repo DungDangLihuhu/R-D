@@ -771,29 +771,16 @@ type FinnhubProfile = {
 };
 
 function buildCoreSections(
-  quote: { price: number; changePercent: number },
+  quote: { price: number },
   profile: FinnhubProfile | null,
   metricsRes: { metric?: Record<string, number> } | null
 ): AnalysisSection[] {
-  const m = metricsRes?.metric ?? {};
   const sections: AnalysisSection[] = metricsRes
-    ? buildSections(m, profile ?? {}, quote.price)
+    ? buildSections(metricsRes.metric ?? {}, profile ?? {}, quote.price)
     : [];
 
   if (profile?.finnhubIndustry && sections[0]) {
     sections[0].metrics.unshift(metric("Ngành", profile.finnhubIndustry));
-  }
-
-  if (sections.length === 0) {
-    sections.push({
-      id: "overview",
-      title: "Tổng quan",
-      metrics: [
-        metric("Giá", num(quote.price)),
-        metric("Thay đổi", pct(quote.changePercent)),
-        metric("Cao 52 tuần", quote.price ? num(quote.price) : "—"),
-      ],
-    });
   }
 
   return sections;
