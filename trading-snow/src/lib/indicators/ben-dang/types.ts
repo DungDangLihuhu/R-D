@@ -44,6 +44,9 @@ export type WyckoffPhase =
   | "markdown"
   | "unknown";
 
+export type WyckoffTimeframe = "1h" | "4h" | "1d" | "1w" | "all";
+export type WyckoffConfidenceLevel = "low" | "medium" | "high";
+
 export type WyckoffEvent =
   | "PS"
   | "SC"
@@ -88,11 +91,20 @@ export interface WyckoffResult {
     creek: number;
     /** Ice = hỗ trợ range */
     ice: number;
+    kind: "accumulation" | "distribution" | "range";
+    topTouches: number;
+    bottomTouches: number;
     startIndex: number;
     endIndex: number;
   };
   events: WyckoffEventMarker[];
   entry?: WyckoffEntry;
+  confidence: {
+    score: number;
+    level: WyckoffConfidenceLevel;
+    label: string;
+  };
+  warnings: string[];
   summary: {
     trend: string;
     volumePattern: string;
@@ -110,6 +122,7 @@ export interface BenDangOptions {
   smcSwingLength?: number;
   srPeriod?: number;
   srMaxLevels?: number;
+  timeframe?: WyckoffTimeframe;
 }
 
 export interface BenDangLayers {

@@ -15,10 +15,12 @@ export type {
   SrResult,
   WyckoffEntry,
   WyckoffEntryAction,
+  WyckoffConfidenceLevel,
   WyckoffEvent,
   WyckoffEventMarker,
   WyckoffPhase,
   WyckoffResult,
+  WyckoffTimeframe,
 } from "./types";
 
 export function computeBenDangIndicators(
@@ -43,6 +45,6 @@ export function computeBenDangIndicators(
   return {
     smc: computeSmc(bars, pdSwing),
     sr: computeSupportResistance(bars, srPeriod, srMaxLevels),
-    wyckoff: computeWyckoff(bars),
+    wyckoff: computeWyckoff(bars, options.timeframe ?? "1d"),
   };
 }

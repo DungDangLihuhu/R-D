@@ -71,24 +71,193 @@ function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
 }
 
-function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {
-  if (!points.length) return [];
-  const bucketMs = 4 * 60 * 60 * 1000;
-  const buckets = new Map<number, OhlcPoint[]>();
+function localDateKey(date: string, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(date));
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((p) => p.type === type)?.value ?? "";
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  } catch {
+    return date.slice(0, 10);
+  }
+}
 
-  for (const p of points) {
-    const t = new Date(p.date).getTime();
-    const key = Math.floor(t / bucketMs) * bucketMs;
-    const arr = buckets.get(key) ?? [];
+export interface RegularSessionHours {
+  startMinutes: number;
+  endMinutes: number;
+}
+
+const US_EQUITY_TIMEZONES = new Set([
+  "America/New_York",
+  "America/Toronto",
+  "America/Detroit",
+  "America/Indiana/Indianapolis",
+  "America/Kentucky/Louisville",
+]);
+
+function localMinutes(date: string, timeZone: string): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(date));
+    const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
+    const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+    return hour * 60 + minute;
+  } catch {
+    const fallback = new Date(date);
+    return fallback.getUTCHours() * 60 + fallback.getUTCMinutes();
+  }
+}
+
+export function defaultRegularSessionHours(
+  timeZone: string
+): RegularSessionHours | undefined {
+  if (US_EQUITY_TIMEZONES.has(timeZone)) {
+    return { startMinutes: 9 * 60 + 30, endMinutes: 16 * 60 };
+  }
+  return undefined;
+}
+
+export function sessionHoursFromYahooMeta(
+  meta:
+    | {
+        currentTradingPeriod?: {
+          regular?: { start?: number; end?: number };
+        };
+      }
+    | undefined,
+  timeZone: string
+): RegularSessionHours | undefined {
+  const regular = meta?.currentTradingPeriod?.regular;
+  if (regular?.start && regular?.end) {
+    const startMinutes = localMinutes(
+      new Date(regular.start * 1000).toISOString(),
+      timeZone
+    );
+    const endMinutes = localMinutes(
+      new Date(regular.end * 1000).toISOString(),
+      timeZone
+    );
+    if (endMinutes > startMinutes) {
+      return { startMinutes, endMinutes };
+    }
+  }
+  return defaultRegularSessionHours(timeZone);
+}
+
+function inRegularHours(
+  date: string,
+  timeZone: string,
+  hours: RegularSessionHours | undefined
+): boolean {
+  if (!hours) return true;
+  const minutes = localMinutes(date, timeZone);
+  return minutes >= hours.startMinutes && minutes < hours.endMinutes;
+}
+
+function medianCount(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
+}
+
+function modalMinute(points: OhlcPoint[]): number {
+  const counts = new Map<number, number>();
+  for (const point of points.slice(-30, -1)) {
+    const date = new Date(point.date);
+    const key = date.getUTCMinutes();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+}
+
+/**
+ * Yahoo sometimes appends a quote snapshot after the active OHLC bucket
+ * (e.g. a Thursday quote after the current weekly candle). It is not a real
+ * candle and otherwise creates false pivots, volume dry-ups and climaxes.
+ */
+export function stripTrailingQuoteSnapshot(
+  points: OhlcPoint[],
+  timeframe: ChartTimeframe,
+  timeZone = "America/New_York"
+): OhlcPoint[] {
+  if (points.length < 3) return points;
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const lastDate = new Date(last.date);
+  const prevDate = new Date(prev.date);
+  const gapMs = lastDate.getTime() - prevDate.getTime();
+  const irregularMinute =
+    lastDate.getUTCMinutes() !== modalMinute(points) ||
+    lastDate.getUTCSeconds() !== 0;
+  const lastLocalDate = localDateKey(last.date, timeZone);
+  const prevLocalDate = localDateKey(prev.date, timeZone);
+  const overlapsBucket =
+    (timeframe === "1h" && gapMs < 45 * 60 * 1000) ||
+    (timeframe === "1d" && lastLocalDate === prevLocalDate) ||
+    (timeframe === "1w" && gapMs < 5 * 24 * 60 * 60 * 1000) ||
+    ((timeframe === "1m" || timeframe === "all") &&
+      lastLocalDate.slice(0, 7) === prevLocalDate.slice(0, 7));
+
+  return irregularMinute || overlapsBucket
+    ? stripTrailingQuoteSnapshot(points.slice(0, -1), timeframe, timeZone)
+    : points;
+}
+
+/**
+ * Build 4H candles from regular exchange hours, not UTC wall-clock buckets.
+ * US cash sessions become one 4H bar from the open plus the remaining RTH
+ * bar. Premarket/after-hours hours are ignored, and a still-forming last
+ * group is dropped so it cannot repaint as a fake 4H candle.
+ */
+export function aggregateTo4h(
+  points: OhlcPoint[],
+  timeZone = "America/New_York",
+  sessionHours: RegularSessionHours | undefined = defaultRegularSessionHours(
+    timeZone
+  )
+): OhlcPoint[] {
+  const filtered = points.filter((point) =>
+    inRegularHours(point.date, timeZone, sessionHours)
+  );
+  if (!filtered.length) return [];
+  const sessions = new Map<string, OhlcPoint[]>();
+
+  for (const p of filtered) {
+    const key = localDateKey(p.date, timeZone);
+    const arr = sessions.get(key) ?? [];
     arr.push(p);
-    buckets.set(key, arr);
+    sessions.set(key, arr);
   }
 
-  return [...buckets.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([key, bars]) => {
-      const date = new Date(key);
-      return {
+  const ordered = [...sessions.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const typical = medianCount(
+    ordered.slice(0, -1).map(([, bars]) => bars.length).filter((count) => count >= 4)
+  );
+  const lastSessionLength = ordered[ordered.length - 1]?.[1].length ?? 0;
+  const lastSessionIncomplete = typical > 0 && lastSessionLength < typical;
+
+  const result: OhlcPoint[] = [];
+  ordered.forEach(([, sessionBars], sessionIndex) => {
+    const sorted = [...sessionBars].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    const dropIncompleteRemainder =
+      sessionIndex === ordered.length - 1 && lastSessionIncomplete;
+    for (let start = 0; start < sorted.length; start += 4) {
+      const bars = sorted.slice(start, start + 4);
+      if (!bars.length) continue;
+      if (dropIncompleteRemainder && bars.length < 4) continue;
+      const date = new Date(bars[0].date);
+      result.push({
         date: date.toISOString(),
         label: formatChartLabel(date, "4h"),
         open: bars[0].open,
@@ -96,12 +265,17 @@ function aggregateTo4h(points: OhlcPoint[]): OhlcPoint[] {
         low: Math.min(...bars.map((b) => b.low)),
         close: bars[bars.length - 1].close,
         volume: bars.reduce((sum, b) => sum + b.volume, 0),
-      };
-    });
+      });
+    }
+  });
+  return result;
 }
 
 function parseYahooOhlc(
   result: {
+    meta?: {
+      exchangeTimezoneName?: string;
+    };
     timestamp?: number[];
     indicators?: {
       quote?: {
@@ -168,9 +342,19 @@ async function fetchOhlcOne(
   const result = json?.chart?.result?.[0];
   if (!result) return [];
 
-  let points = parseYahooOhlc(result, timeframe);
+  const sourceTimeframe = spec.aggregate4h ? "1h" : timeframe;
+  const timeZone = result.meta?.exchangeTimezoneName ?? "America/New_York";
+  let points = stripTrailingQuoteSnapshot(
+    parseYahooOhlc(result, sourceTimeframe),
+    sourceTimeframe,
+    timeZone
+  );
   if (spec.aggregate4h) {
-    points = aggregateTo4h(points);
+    points = aggregateTo4h(
+      points,
+      timeZone,
+      sessionHoursFromYahooMeta(result.meta, timeZone)
+    );
   }
   return points;
 }
