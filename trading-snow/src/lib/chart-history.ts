@@ -104,7 +104,8 @@ function modalMinute(points: OhlcPoint[]): number {
  */
 export function stripTrailingQuoteSnapshot(
   points: OhlcPoint[],
-  timeframe: ChartTimeframe
+  timeframe: ChartTimeframe,
+  timeZone = "America/New_York"
 ): OhlcPoint[] {
   if (points.length < 3) return points;
   const last = points[points.length - 1];
@@ -115,14 +116,18 @@ export function stripTrailingQuoteSnapshot(
   const irregularMinute =
     lastDate.getUTCMinutes() !== modalMinute(points) ||
     lastDate.getUTCSeconds() !== 0;
+  const lastLocalDate = localDateKey(last.date, timeZone);
+  const prevLocalDate = localDateKey(prev.date, timeZone);
   const overlapsBucket =
     (timeframe === "1h" && gapMs < 45 * 60 * 1000) ||
+    (timeframe === "1d" && lastLocalDate === prevLocalDate) ||
     (timeframe === "1w" && gapMs < 5 * 24 * 60 * 60 * 1000) ||
-    (timeframe === "all" &&
-      lastDate.getUTCFullYear() === prevDate.getUTCFullYear() &&
-      lastDate.getUTCMonth() === prevDate.getUTCMonth());
+    ((timeframe === "1m" || timeframe === "all") &&
+      lastLocalDate.slice(0, 7) === prevLocalDate.slice(0, 7));
 
-  return irregularMinute || overlapsBucket ? points.slice(0, -1) : points;
+  return irregularMinute || overlapsBucket
+    ? stripTrailingQuoteSnapshot(points.slice(0, -1), timeframe, timeZone)
+    : points;
 }
 
 /**
@@ -243,7 +248,8 @@ async function fetchOhlcOne(
   const sourceTimeframe = spec.aggregate4h ? "1h" : timeframe;
   let points = stripTrailingQuoteSnapshot(
     parseYahooOhlc(result, timeframe),
-    sourceTimeframe
+    sourceTimeframe,
+    result.meta?.exchangeTimezoneName ?? "America/New_York"
   );
   if (spec.aggregate4h) {
     points = aggregateTo4h(

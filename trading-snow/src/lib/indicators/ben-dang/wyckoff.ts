@@ -31,14 +31,15 @@ interface WyckoffConfig {
   minRangeBars: number;
   maxRangeBars: number;
   breakoutMaxBars: number;
+  entryEventMaxBars: number;
 }
 
 const TIMEFRAME_CONFIG: Record<WyckoffTimeframe, WyckoffConfig> = {
-  "1h": { lookback: 100, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 12 },
-  "4h": { lookback: 100, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 10 },
-  "1d": { lookback: 120, pivot: 3, minRangeBars: 12, maxRangeBars: 100, breakoutMaxBars: 15 },
-  "1w": { lookback: 104, pivot: 2, minRangeBars: 8, maxRangeBars: 70, breakoutMaxBars: 8 },
-  all: { lookback: 60, pivot: 2, minRangeBars: 8, maxRangeBars: 42, breakoutMaxBars: 6 },
+  "1h": { lookback: 100, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 12, entryEventMaxBars: 20 },
+  "4h": { lookback: 100, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 10, entryEventMaxBars: 15 },
+  "1d": { lookback: 120, pivot: 3, minRangeBars: 12, maxRangeBars: 100, breakoutMaxBars: 15, entryEventMaxBars: 20 },
+  "1w": { lookback: 104, pivot: 2, minRangeBars: 8, maxRangeBars: 70, breakoutMaxBars: 8, entryEventMaxBars: 12 },
+  all: { lookback: 60, pivot: 2, minRangeBars: 8, maxRangeBars: 42, breakoutMaxBars: 6, entryEventMaxBars: 8 },
 };
 const KEY_EVENTS: WyckoffEvent[] = [
   "PS",
@@ -81,7 +82,8 @@ export function computeWyckoff(
   const config = TIMEFRAME_CONFIG[timeframe];
   const from = Math.max(0, bars.length - config.lookback);
   const atrArr = atr(bars);
-  const lastAtr = atrArr[bars.length - 1] || medianAtr(atrArr);
+  const lastAtr =
+    atrArr[Math.max(0, bars.length - 2)] || medianAtr(atrArr);
   const pivotHighs = findPivotHighs(bars, config.pivot, config.pivot).filter(
     (p) => p.index >= from
   );
@@ -117,14 +119,21 @@ export function computeWyckoff(
   const volPattern = analyzeVolumePattern(bars, range, sc, bc);
   const phase = detectPhase(bars, range, events, structure, lastAtr);
   const confidence = computeConfidence(bars, range, events, timeframe);
-  const warnings = buildWarnings(bars, range, confidence.score, timeframe);
+  const warnings = buildWarnings(
+    bars,
+    range,
+    events,
+    confidence.score,
+    timeframe
+  );
   const entry = computeEntry(
     bars,
     range,
     events,
     phase.phase,
     lastAtr,
-    confidence.score
+    confidence.score,
+    config.entryEventMaxBars
   );
 
   return {
@@ -140,7 +149,7 @@ export function computeWyckoff(
           topTouches: range.topTouches,
           bottomTouches: range.bottomTouches,
           startIndex: range.startIndex,
-          endIndex: bars.length - 1,
+          endIndex: Math.max(range.startIndex, bars.length - 2),
         }
       : undefined,
     events,
@@ -230,9 +239,36 @@ function volAtLeast(ratio: number | null, min: number): boolean {
   return ratio != null && ratio >= min;
 }
 
+function springVolumeConfirmed(
+  bars: Bar[],
+  index: number,
+  timeframe: WyckoffTimeframe
+): boolean {
+  const ratio = volumeRatio(bars, index, timeframe);
+  if (ratio == null) return false;
+  // A valid spring is either a low-effort test or high-volume absorption that
+  // closes in the upper part of its spread.
+  return ratio <= 1.2 || (ratio >= 1.5 && closeLocation(bars[index]) >= 0.65);
+}
+
+function volumeContractsAfter(
+  bars: Bar[],
+  index: number,
+  referenceIndex: number,
+  timeframe: WyckoffTimeframe
+): boolean {
+  const current = volumeRatio(bars, index, timeframe);
+  const reference = volumeRatio(bars, referenceIndex, timeframe);
+  return (
+    current != null &&
+    reference != null &&
+    current <= Math.max(1, reference * 0.85)
+  );
+}
+
 function bouncedUp(bars: Bar[], index: number, atrVal: number): boolean {
   const low = bars[index].low;
-  const end = Math.min(bars.length - 1, index + 10);
+  const end = Math.min(bars.length - 2, index + 10);
   for (let j = index + 1; j <= end; j++) {
     if (bars[j].close > low + atrVal * 0.45 || bars[j].high > bars[index].high) return true;
   }
@@ -241,7 +277,7 @@ function bouncedUp(bars: Bar[], index: number, atrVal: number): boolean {
 
 function reversedDown(bars: Bar[], index: number, atrVal: number): boolean {
   const high = bars[index].high;
-  const end = Math.min(bars.length - 1, index + 10);
+  const end = Math.min(bars.length - 2, index + 10);
   for (let j = index + 1; j <= end; j++) {
     if (bars[j].close < high - atrVal * 0.45 || bars[j].low < bars[index].low) return true;
   }
@@ -310,7 +346,7 @@ function firstRallyPeak(
   atrVal: number,
   maxBars: number
 ): { index: number; price: number } | null {
-  const end = Math.min(bars.length - 1, start + maxBars);
+  const end = Math.min(bars.length - 2, start + maxBars);
   if (start > end) return null;
   let peak = { index: start, price: bars[start].high };
   for (let i = start; i <= end; i++) {
@@ -322,7 +358,7 @@ function firstRallyPeak(
       return peak;
     }
   }
-  return peak.price > 0 ? peak : null;
+  return null;
 }
 
 function firstReactionLow(
@@ -331,7 +367,7 @@ function firstReactionLow(
   atrVal: number,
   maxBars: number
 ): { index: number; price: number } | null {
-  const end = Math.min(bars.length - 1, start + maxBars);
+  const end = Math.min(bars.length - 2, start + maxBars);
   if (start > end) return null;
   let trough = { index: start, price: bars[start].low };
   for (let i = start; i <= end; i++) {
@@ -343,7 +379,7 @@ function firstReactionLow(
       return trough;
     }
   }
-  return trough.price > 0 ? trough : null;
+  return null;
 }
 
 type Pivot = { index: number; price: number };
@@ -384,11 +420,13 @@ function withTouches(
 function currentBreakoutRun(
   bars: Bar[],
   candidate: TradingRange,
-  lastAtr: number
+  lastAtr: number,
+  throughIndex = bars.length - 1
 ): { direction: "up" | "down"; bars: number; distance: number } | null {
   const height = candidate.top - candidate.bottom;
   const tolerance = Math.max(lastAtr * 0.35, height * 0.03);
-  const lastClose = bars[bars.length - 1].close;
+  const lastIndex = Math.min(Math.max(throughIndex, 0), bars.length - 1);
+  const lastClose = bars[lastIndex].close;
   const direction =
     lastClose > candidate.top + tolerance
       ? "up"
@@ -398,7 +436,7 @@ function currentBreakoutRun(
   if (!direction) return null;
 
   let run = 0;
-  for (let i = bars.length - 1; i >= candidate.startIndex; i--) {
+  for (let i = lastIndex; i >= candidate.startIndex; i--) {
     const beyond =
       direction === "up"
         ? bars[i].close > candidate.top + tolerance
@@ -432,7 +470,12 @@ function isActiveRange(
     return false;
   }
 
-  const breakout = currentBreakoutRun(bars, candidate, lastAtr);
+  const breakout = currentBreakoutRun(
+    bars,
+    candidate,
+    lastAtr,
+    bars.length - 2
+  );
   if (!breakout || breakout.bars < 2) return true;
   const tooFar = breakout.distance > Math.max(height * 0.65, lastAtr * 2.5);
   const tooOld = breakout.bars > config.breakoutMaxBars;
@@ -510,8 +553,9 @@ function buildTradingRange(
   const candidates: TradingRange[] = [];
 
   if (sc) {
-    const ar = firstRallyPeak(bars, sc.index + 1, lastAtr, 14);
-    if (ar && ar.price - sc.price >= lastAtr * 0.7) {
+    const climaxAtr = atrArr[sc.index] || lastAtr;
+    const ar = firstRallyPeak(bars, sc.index + 1, climaxAtr, 14);
+    if (ar && ar.price - sc.price >= climaxAtr * 0.7) {
       candidates.push(
         withTouches(
           {
@@ -530,8 +574,14 @@ function buildTradingRange(
   }
 
   if (bc) {
-    const reaction = firstReactionLow(bars, bc.index + 1, lastAtr, 14);
-    if (reaction && bc.price - reaction.price >= lastAtr * 0.7) {
+    const climaxAtr = atrArr[bc.index] || lastAtr;
+    const reaction = firstReactionLow(
+      bars,
+      bc.index + 1,
+      climaxAtr,
+      14
+    );
+    if (reaction && bc.price - reaction.price >= climaxAtr * 0.7) {
       candidates.push(
         withTouches(
           {
@@ -572,31 +622,32 @@ function pushEvent(
   price: number,
   label?: string
 ) {
-  const lastSame = [...events].reverse().find((e) => e.event === event);
-  if (lastSame && index - lastSame.index < 4) return;
+  const nearDuplicate = events.some(
+    (item) => item.event === event && Math.abs(index - item.index) < 4
+  );
+  if (nearDuplicate) return;
   events.push({ index, event, price, label: label ?? EVENT_LABELS[event] });
 }
 
 function lastEvent(events: WyckoffEventMarker[], event: WyckoffEvent): WyckoffEventMarker | undefined {
-  return [...events].reverse().find((e) => e.event === event);
+  return events
+    .filter((item) => item.event === event)
+    .sort((a, b) => b.index - a.index)[0];
 }
 
 function pruneEvents(events: WyckoffEventMarker[]): WyckoffEventMarker[] {
   const sorted = [...events].sort((a, b) => a.index - b.index);
   const latest = new Map<WyckoffEvent, WyckoffEventMarker>();
-  for (const e of sorted) latest.set(e.event, e);
+  for (const e of sorted) {
+    const current = latest.get(e.event);
+    if (!current || e.index > current.index) latest.set(e.event, e);
+  }
 
   const keep = new Set<string>();
   for (const type of KEY_EVENTS) {
     const hit = latest.get(type);
     if (hit) keep.add(`${hit.event}-${hit.index}`);
   }
-  for (const e of sorted) {
-    if (e.event === "ST" || e.event === "Spring" || e.event === "LPS" || e.event === "LPSY") {
-      keep.add(`${e.event}-${e.index}`);
-    }
-  }
-
   return sorted.filter((e) => keep.has(`${e.event}-${e.index}`)).slice(-16);
 }
 
@@ -699,7 +750,7 @@ function detectEvents(
       p.price < support &&
       bars[p.index].close > support &&
       support - p.price <= Math.max(lastAtr * 1.2, height * 0.08) &&
-      volumeRatio(bars, p.index, timeframe) != null
+      springVolumeConfirmed(bars, p.index, timeframe)
     ) {
       pushEvent(events, "Spring", p.index, p.price);
     }
@@ -716,8 +767,12 @@ function detectEvents(
       bar.close < resistance &&
       volAtLeast(vr, 1.05)
     ) {
-      if (has("UT") || has("SOW")) pushEvent(events, "UTAD", p.index, p.price);
-      else pushEvent(events, "UT", p.index, p.price);
+      const ut = lastEvent(events, "UT");
+      if (!ut) {
+        pushEvent(events, "UT", p.index, p.price);
+      } else if (!has("UTAD") && p.index - ut.index >= 3) {
+        pushEvent(events, "UTAD", p.index, p.price);
+      }
     } else if (nearResistance(p.price) && !isBullish(bar) && volAtLeast(vr, 1.1)) {
       if (range.kind === "distribution" || has("BC")) {
         pushEvent(events, "UT", p.index, p.price);
@@ -750,7 +805,7 @@ function detectEvents(
       bar.low < support &&
       bar.close > support &&
       support - bar.low <= Math.max(lastAtr * 1.2, height * 0.08) &&
-      vr != null
+      springVolumeConfirmed(bars, i, timeframe)
     ) {
       pushEvent(events, "Spring", i, bar.low);
     }
@@ -761,8 +816,12 @@ function detectEvents(
       bar.close < resistance &&
       volAtLeast(vr, 1.05)
     ) {
-      if (has("UT") || has("SOW")) pushEvent(events, "UTAD", i, bar.high);
-      else pushEvent(events, "UT", i, bar.high);
+      const ut = lastEvent(events, "UT");
+      if (!ut) {
+        pushEvent(events, "UT", i, bar.high);
+      } else if (!has("UTAD") && i - ut.index >= 3) {
+        pushEvent(events, "UTAD", i, bar.high);
+      }
     }
 
     if (
@@ -788,9 +847,12 @@ function detectEvents(
     }
   }
 
-  const sosIndex = events.find((e) => e.event === "SOS")?.index ?? Infinity;
-  const sowIndex = events.find((e) => e.event === "SOW")?.index ?? Infinity;
-  const springIndex = lastEvent(events, "Spring")?.index ?? -1;
+  const sos = lastEvent(events, "SOS");
+  const sow = lastEvent(events, "SOW");
+  const spring = lastEvent(events, "Spring");
+  const sosIndex = sos?.index ?? Infinity;
+  const sowIndex = sow?.index ?? Infinity;
+  const springIndex = spring?.index ?? -1;
 
   for (const p of pivotLows) {
     if (p.index < afterStart) continue;
@@ -798,7 +860,8 @@ function detectEvents(
       accContext &&
       p.index > sosIndex &&
       p.price >= support &&
-      p.price <= mid + height * 0.18
+      p.price <= mid + height * 0.18 &&
+      volumeContractsAfter(bars, p.index, sosIndex, timeframe)
     ) {
       pushEvent(events, "LPS", p.index, p.price);
     }
@@ -808,7 +871,8 @@ function detectEvents(
       p.index > springIndex &&
       p.index < sosIndex &&
       nearSupport(p.price) &&
-      p.price > (lastEvent(events, "Spring")?.price ?? 0)
+      p.price > (spring?.price ?? 0) &&
+      volumeContractsAfter(bars, p.index, springIndex, timeframe)
     ) {
       pushEvent(events, "ST", p.index, p.price, "ST — Test Spring");
     }
@@ -820,7 +884,8 @@ function detectEvents(
       distContext &&
       p.index > sowIndex &&
       p.price >= mid &&
-      p.price <= resistance + lastAtr * 0.35
+      p.price <= resistance + lastAtr * 0.35 &&
+      volumeContractsAfter(bars, p.index, sowIndex, timeframe)
     ) {
       pushEvent(events, "LPSY", p.index, p.price);
     }
@@ -970,6 +1035,7 @@ function computeConfidence(
 function buildWarnings(
   bars: Bar[],
   range: TradingRange | undefined,
+  events: WyckoffEventMarker[],
   confidence: number,
   timeframe: WyckoffTimeframe
 ): string[] {
@@ -989,6 +1055,14 @@ function buildWarnings(
   if (confidence < 45 && range) {
     warnings.push("Độ tin cậy thấp — không tạo giá vào");
   }
+  const latestEvent = [...events].sort((a, b) => b.index - a.index)[0];
+  if (
+    latestEvent &&
+    bars.length - 1 - latestEvent.index >
+      TIMEFRAME_CONFIG[timeframe].entryEventMaxBars
+  ) {
+    warnings.push("Sự kiện xác nhận đã cũ — không tạo giá vào mới");
+  }
   if (timeframe === "all") {
     warnings.push("Khung All dùng nến tháng, chỉ phù hợp bối cảnh dài hạn");
   }
@@ -1007,12 +1081,20 @@ function detectPhase(
   trendDesc: string;
   recommendation: string;
 } {
-  const price = bars[bars.length - 1].close;
+  const confirmedIndex = Math.max(0, bars.length - 2);
+  const price = bars[confirmedIndex].close;
   const types = new Set(events.map((e) => e.event));
   const hasAcc = types.has("SC") && (types.has("ST") || types.has("Spring") || types.has("AR"));
   const hasDist = types.has("BC") && (types.has("UT") || types.has("UTAD") || types.has("AR"));
   const above = range ? price > range.top + lastAtr * 0.15 : false;
   const below = range ? price < range.bottom - lastAtr * 0.15 : false;
+  const breakout = range
+    ? currentBreakoutRun(bars, range, lastAtr, confirmedIndex)
+    : null;
+  const confirmedAbove =
+    above && breakout?.direction === "up" && breakout.bars >= 2;
+  const confirmedBelow =
+    below && breakout?.direction === "down" && breakout.bars >= 2;
   const inRange =
     range != null &&
     price >= range.bottom * 0.995 &&
@@ -1050,7 +1132,12 @@ function detectPhase(
     };
   }
 
-  if (types.has("Spring") && types.has("SOS") && (above || structure === "up")) {
+  if (
+    types.has("Spring") &&
+    types.has("SOS") &&
+    confirmedAbove &&
+    structure === "up"
+  ) {
     return {
       phase: "markup",
       label: "Markup — Phase E (sau Spring/SOS)",
@@ -1058,7 +1145,12 @@ function detectPhase(
       recommendation: "Không đuổi; vào LPS khi giá hồi về Creek",
     };
   }
-  if (types.has("UTAD") && types.has("SOW") && (below || structure === "down")) {
+  if (
+    types.has("UTAD") &&
+    types.has("SOW") &&
+    confirmedBelow &&
+    structure === "down"
+  ) {
     return {
       phase: "markdown",
       label: "Markdown — Phase E (sau UTAD/SOW)",
@@ -1114,7 +1206,7 @@ function detectPhase(
       recommendation: "Không mua premium; nếu mua thì chờ Spring tại Ice",
     };
   }
-  if (above && structure === "up") {
+  if (confirmedAbove && structure === "up") {
     return {
       phase: "markup",
       label: "Markup — Xu hướng tăng",
@@ -1122,7 +1214,7 @@ function detectPhase(
       recommendation: "Theo xu hướng; giá nên vào là pullback Creek/LPS",
     };
   }
-  if (below && structure === "down") {
+  if (confirmedBelow && structure === "down") {
     return {
       phase: "markdown",
       label: "Markdown — Xu hướng giảm",
@@ -1168,7 +1260,8 @@ function computeEntry(
   events: WyckoffEventMarker[],
   phase: WyckoffPhase,
   lastAtr: number,
-  confidence: number
+  confidence: number,
+  eventMaxAge: number
 ): WyckoffEntry | undefined {
   if (
     !range ||
@@ -1188,7 +1281,12 @@ function computeEntry(
   const lps = lastEvent(events, "LPS");
   const sos = lastEvent(events, "SOS");
   const st = lastEvent(events, "ST");
-  const hasConfirmedAccumulationEvent = Boolean(st || spring || sos || lps);
+  const latestAccumulationEvent = [st, spring, sos, lps]
+    .filter((event): event is WyckoffEventMarker => event != null)
+    .sort((a, b) => b.index - a.index)[0];
+  const hasFreshAccumulationEvent =
+    latestAccumulationEvent != null &&
+    bars.length - 1 - latestAccumulationEvent.index <= eventMaxAge;
 
   const stanceAt = (target: number, buyIfDiscount = false): "buy" | "wait" => {
     if (confidence < 70) return "wait";
@@ -1210,7 +1308,7 @@ function computeEntry(
     };
   }
 
-  if (!hasConfirmedAccumulationEvent) return undefined;
+  if (!hasFreshAccumulationEvent) return undefined;
 
   if (spring && !sos) {
     const entry = Math.max(ice, Math.min(ice + height * 0.12, spring.price + lastAtr * 0.2));
