@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LineChart,
   Microscope,
+  Radio,
   Snowflake,
   Wallet,
 } from "lucide-react";
@@ -25,6 +26,7 @@ const nav = [
   { href: "/closed", label: "Lệnh đóng", icon: History },
   { href: "/events", label: "Sự kiện", icon: CalendarDays },
   { href: "/stock", label: "Phân tích", icon: Microscope },
+  { href: "/signals", label: "Tín hiệu", icon: Radio },
   { href: "/analytics", label: "Thống kê", icon: BarChart3 },
 ];
 
