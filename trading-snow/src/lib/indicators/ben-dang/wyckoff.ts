@@ -395,6 +395,8 @@ function detectEvents(
 
   const afterStart = range.startIndex + 2;
   const has = (event: WyckoffEvent) => events.some((e) => e.event === event);
+  const accContext = range.kind !== "distribution";
+  const distContext = range.kind === "distribution" || has("BC");
 
   for (const p of pivotLows) {
     if (p.index < afterStart) continue;
@@ -410,6 +412,7 @@ function detectEvents(
     }
 
     if (
+      accContext &&
       (has("ST") || has("SC") || has("AR")) &&
       p.price < support &&
       bars[p.index].close > support &&
@@ -457,6 +460,7 @@ function detectEvents(
     const vr = volumeRatio(bars, i);
 
     if (
+      accContext &&
       (has("ST") || has("SC") || has("AR")) &&
       bar.low < support &&
       bar.close > support &&
@@ -466,7 +470,7 @@ function detectEvents(
     }
 
     if (
-      (has("BC") || range.kind === "distribution") &&
+      distContext &&
       bar.high > resistance &&
       bar.close < resistance &&
       volAtLeast(vr, 1.05)
@@ -476,6 +480,7 @@ function detectEvents(
     }
 
     if (
+      accContext &&
       isBullish(bar) &&
       bar.close > resistance &&
       bar.close > prev.high &&
@@ -486,6 +491,7 @@ function detectEvents(
     }
 
     if (
+      distContext &&
       !isBullish(bar) &&
       bar.close < support &&
       bar.close < prev.low &&
@@ -502,10 +508,16 @@ function detectEvents(
 
   for (const p of pivotLows) {
     if (p.index < afterStart) continue;
-    if (p.index > sosIndex && p.price >= support && p.price <= mid + height * 0.18) {
+    if (
+      accContext &&
+      p.index > sosIndex &&
+      p.price >= support &&
+      p.price <= mid + height * 0.18
+    ) {
       pushEvent(events, "LPS", p.index, p.price);
     }
     if (
+      accContext &&
       springIndex >= 0 &&
       p.index > springIndex &&
       p.index < sosIndex &&
@@ -518,7 +530,12 @@ function detectEvents(
 
   for (const p of pivotHighs) {
     if (p.index < afterStart) continue;
-    if (p.index > sowIndex && p.price >= mid && p.price <= resistance + lastAtr * 0.35) {
+    if (
+      distContext &&
+      p.index > sowIndex &&
+      p.price >= mid &&
+      p.price <= resistance + lastAtr * 0.35
+    ) {
       pushEvent(events, "LPSY", p.index, p.price);
     }
   }
