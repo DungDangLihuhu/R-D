@@ -861,7 +861,32 @@ function analyzeVolumePattern(
   const third = Math.max(3, Math.floor(slice.length / 3));
   const earlyVol = slice.slice(0, third).reduce((s, b) => s + b.volume, 0) / third;
   const lateVol = slice.slice(-third).reduce((s, b) => s + b.volume, 0) / third;
-  const recentVol = slice.slice(-5).reduce((s, b) => s + b.volume, 0) / Math.min(5, slice.length);
+  const reference = slice.slice(Math.max(0, slice.length - 25), -5);
+  const confirmedRecent = slice.slice(-6, -1);
+  const recentVol =
+    confirmedRecent.reduce((sum, bar) => sum + bar.volume, 0) /
+    Math.max(confirmedRecent.length, 1);
+  const avgReferenceVolume =
+    reference.reduce((sum, bar) => sum + bar.volume, 0) /
+    Math.max(reference.length, 1);
+  const avgReferenceSpread =
+    reference.reduce((sum, bar) => sum + barRange(bar), 0) /
+    Math.max(reference.length, 1);
+  const avgRecentVolume =
+    confirmedRecent.reduce((sum, bar) => sum + bar.volume, 0) /
+    Math.max(confirmedRecent.length, 1);
+  const avgRecentSpread =
+    confirmedRecent.reduce((sum, bar) => sum + barRange(bar), 0) /
+    Math.max(confirmedRecent.length, 1);
+  const latestConfirmed = bars[Math.max(0, bars.length - 2)];
+  const nearBottom =
+    range != null &&
+    latestConfirmed.close <=
+      range.bottom + (range.top - range.bottom) * 0.3;
+  const nearTop =
+    range != null &&
+    latestConfirmed.close >=
+      range.top - (range.top - range.bottom) * 0.3;
   const climaxVol =
     range?.kind === "accumulation"
       ? sc?.volume ?? 0
@@ -870,6 +895,28 @@ function analyzeVolumePattern(
         : 0;
   const context = range ? "trong biên giá" : "gần đây";
 
+  if (
+    reference.length >= 5 &&
+    avgReferenceVolume > 0 &&
+    avgReferenceSpread > 0 &&
+    avgRecentVolume > avgReferenceVolume * 1.25 &&
+    avgRecentSpread < avgReferenceSpread * 0.8
+  ) {
+    if (nearBottom) return "Hấp thụ cung: effort cao, biên giá hẹp gần Ice";
+    if (nearTop) return "Hấp thụ cầu: effort cao, biên giá hẹp gần Creek";
+    return "Effort cao nhưng biên giá hẹp — có hấp thụ";
+  }
+  if (
+    reference.length >= 5 &&
+    avgReferenceVolume > 0 &&
+    avgReferenceSpread > 0 &&
+    avgRecentVolume > avgReferenceVolume * 1.25 &&
+    avgRecentSpread > avgReferenceSpread * 1.2
+  ) {
+    return latestConfirmed.close >= latestConfirmed.open
+      ? "Effort + result tăng: cầu đang chiếm ưu thế"
+      : "Effort + result giảm: cung đang chiếm ưu thế";
+  }
   if (climaxVol > 0 && recentVol < climaxVol * 0.55) return "Volume cạn (dry-up) sau climax";
   if (lateVol > earlyVol * 1.3) return `Volume tăng ${context}`;
   if (lateVol < earlyVol * 0.7) return `Volume giảm ${context}`;
