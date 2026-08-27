@@ -1021,7 +1021,8 @@ function computeConfidence(
   else if (coverage < 0.6) score -= 15;
 
   if (range.kind === "range") score = Math.min(score, 40);
-  if (timeframe === "all") score = Math.min(score, 70);
+  // Monthly "All" is strategic context, never an immediate buy trigger.
+  if (timeframe === "all") score = Math.min(score, 65);
   // This is heuristic evidence quality, never a probability or certainty.
   score = Math.max(0, Math.min(90, Math.round(score)));
 

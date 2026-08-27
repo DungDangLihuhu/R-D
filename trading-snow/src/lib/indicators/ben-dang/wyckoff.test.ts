@@ -115,6 +115,13 @@ describe("computeWyckoff safeguards", () => {
     expect(result.entry).toBeDefined();
   });
 
+  it("uses the All timeframe as context, not an immediate buy trigger", () => {
+    const result = computeWyckoff(accumulation(), "all");
+
+    expect(result.confidence.score).toBeLessThan(70);
+    expect(result.entry?.action).not.toBe("buy");
+  });
+
   it("expires an old structure after sustained markup", () => {
     const bars = accumulation();
     for (let index = 40; index < 65; index++) {
