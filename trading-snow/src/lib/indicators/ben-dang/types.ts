@@ -66,16 +66,33 @@ export interface WyckoffEventMarker {
   label: string;
 }
 
+export type WyckoffEntryAction = "buy" | "wait" | "avoid";
+
+export interface WyckoffEntry {
+  /** Mốc giá nên vào (long) theo pha Wyckoff */
+  price: number;
+  stop: number | null;
+  action: WyckoffEntryAction;
+  /** LPS, Spring/Ice, Creek… */
+  label: string;
+  reason: string;
+}
+
 export interface WyckoffResult {
   phase: WyckoffPhase;
   phaseLabel: string;
   tradingRange?: {
     top: number;
     bottom: number;
+    /** Creek = kháng cự range tích lũy */
+    creek: number;
+    /** Ice = hỗ trợ range */
+    ice: number;
     startIndex: number;
     endIndex: number;
   };
   events: WyckoffEventMarker[];
+  entry?: WyckoffEntry;
   summary: {
     trend: string;
     volumePattern: string;
