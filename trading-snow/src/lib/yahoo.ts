@@ -246,6 +246,8 @@ interface YahooV7Quote {
   shortName?: string;
   longName?: string;
   currency?: string;
+  trailingPE?: number;
+  forwardPE?: number;
 }
 
 function v7QuoteToMeta(q: YahooV7Quote): YahooChartMeta {
@@ -734,20 +736,40 @@ export async function fetchYahooOptionFlow(symbol: string): Promise<YahooOptionF
   return null;
 }
 
+export interface YahooPriceTargetRow {
+  epochGradeDate: number;
+  firm: string;
+  currentPriceTarget?: number;
+}
+
 export interface YahooKeyStats {
   pegRatio?: number;
   /** 0–1 fraction of float, e.g. 0.015 = 1.5% */
   shortPercentOfFloat?: number;
   shortRatio?: number;
+  targetMeanPrice?: number;
+  targetMedianPrice?: number;
+  targetHighPrice?: number;
+  targetLowPrice?: number;
+  numberOfAnalystOpinions?: number;
+  priceTargetHistory?: YahooPriceTargetRow[];
+}
+
+export interface YahooPeerMultiple {
+  symbol: string;
+  trailingPe?: number;
+  forwardPe?: number;
 }
 
 export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats | null> {
   const session = await getYahooSession();
   if (!session) return null;
 
+  const cutoffSec = Date.now() / 1000 - 90 * 24 * 3600;
+
   for (const candidate of resolveYahooSymbolCandidates(symbol)) {
     const yahoo = toYahooSymbol(candidate);
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics&crumb=${encodeURIComponent(session.crumb)}`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics,financialData,upgradeDowngradeHistory&crumb=${encodeURIComponent(session.crumb)}`;
     const res = await fetch(url, {
       headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
       next: { revalidate: 3600 },
@@ -757,19 +779,112 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
       quoteSummary?: {
         result?: {
           defaultKeyStatistics?: Record<string, unknown>;
+          financialData?: Record<string, unknown>;
+          upgradeDowngradeHistory?: {
+            history?: {
+              epochGradeDate?: number;
+              firm?: string;
+              currentPriceTarget?: number;
+            }[];
+          };
         }[];
       };
     };
-    const ks = json.quoteSummary?.result?.[0]?.defaultKeyStatistics;
-    if (!ks) continue;
+    const result = json.quoteSummary?.result?.[0];
+    if (!result) continue;
+    const ks = result.defaultKeyStatistics ?? {};
+    const fd = result.financialData ?? {};
     const pegRatio = parseYahooRawNumber(ks.pegRatio);
     const shortPercentOfFloat = parseYahooRawNumber(ks.shortPercentOfFloat);
     const shortRatio = parseYahooRawNumber(ks.shortRatio);
-    if (pegRatio == null && shortPercentOfFloat == null && shortRatio == null) continue;
-    return { pegRatio, shortPercentOfFloat, shortRatio };
+    const targetMeanPrice = parseYahooRawNumber(fd.targetMeanPrice);
+    const targetMedianPrice = parseYahooRawNumber(fd.targetMedianPrice);
+    const targetHighPrice = parseYahooRawNumber(fd.targetHighPrice);
+    const targetLowPrice = parseYahooRawNumber(fd.targetLowPrice);
+    const numberOfAnalystOpinions = parseYahooRawNumber(fd.numberOfAnalystOpinions);
+
+    const priceTargetHistory: YahooPriceTargetRow[] = [];
+    for (const row of result.upgradeDowngradeHistory?.history ?? []) {
+      const epoch = row.epochGradeDate;
+      const firm = row.firm?.trim();
+      const target = row.currentPriceTarget;
+      if (epoch == null || !Number.isFinite(epoch) || !firm) continue;
+      const sec = epoch > 1e12 ? epoch / 1000 : epoch;
+      if (sec < cutoffSec) continue;
+      priceTargetHistory.push({
+        epochGradeDate: sec,
+        firm,
+        currentPriceTarget:
+          typeof target === "number" && Number.isFinite(target) && target > 0 ? target : undefined,
+      });
+    }
+
+    if (
+      pegRatio == null &&
+      shortPercentOfFloat == null &&
+      shortRatio == null &&
+      targetMeanPrice == null &&
+      !priceTargetHistory.length
+    ) {
+      continue;
+    }
+
+    return {
+      pegRatio,
+      shortPercentOfFloat,
+      shortRatio,
+      targetMeanPrice,
+      targetMedianPrice,
+      targetHighPrice,
+      targetLowPrice,
+      numberOfAnalystOpinions,
+      priceTargetHistory,
+    };
   }
 
   return null;
+}
+
+export async function fetchYahooPeerMultiples(symbols: string[]): Promise<YahooPeerMultiple[]> {
+  const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))].slice(0, 8);
+  if (!unique.length) return [];
+
+  const session = await getYahooSession();
+  if (!session) return [];
+
+  const yahooToRequested = new Map<string, string>();
+  for (const symbol of unique) {
+    const yahoo = toYahooSymbol(symbol).toUpperCase();
+    if (!yahooToRequested.has(yahoo)) yahooToRequested.set(yahoo, symbol);
+  }
+
+  const hosts = ["query2.finance.yahoo.com", "query1.finance.yahoo.com"];
+  for (const host of hosts) {
+    const url = `https://${host}/v7/finance/quote?symbols=${encodeURIComponent(
+      [...yahooToRequested.keys()].join(",")
+    )}&crumb=${encodeURIComponent(session.crumb)}`;
+    const res = await fetch(url, {
+      headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) continue;
+    const json = (await res.json()) as { quoteResponse?: { result?: YahooV7Quote[] } };
+    const out: YahooPeerMultiple[] = [];
+    for (const row of json.quoteResponse?.result ?? []) {
+      const yahooSym = row.symbol?.toUpperCase();
+      if (!yahooSym) continue;
+      const symbol = yahooToRequested.get(yahooSym) ?? yahooSym;
+      const trailingPe =
+        typeof row.trailingPE === "number" && Number.isFinite(row.trailingPE) ? row.trailingPE : undefined;
+      const forwardPe =
+        typeof row.forwardPE === "number" && Number.isFinite(row.forwardPE) ? row.forwardPE : undefined;
+      if (trailingPe == null && forwardPe == null) continue;
+      out.push({ symbol, trailingPe, forwardPe });
+    }
+    if (out.length) return out;
+  }
+
+  return [];
 }
 
 

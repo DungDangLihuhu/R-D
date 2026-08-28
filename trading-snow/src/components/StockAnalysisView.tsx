@@ -885,8 +885,8 @@ function AssessmentSignals({ assessment }: { assessment: StockAssessment }) {
         ))}
       </ul>
       <p className="mt-2 text-[10px] leading-snug text-gray-500">
-        Mốc mua/bán kết hợp S/R với PEG · P/E · P/FCF. Thiếu dữ liệu thì chỉ dùng kỹ thuật. Chỉ tham
-        khảo, không phải lệnh.
+        Mốc bán kết hợp kháng cự, trung bình target CTCK 3 tháng, và P/E so với
+        ngành. Mốc mua vẫn S/R + PEG · P/E · P/FCF. Chỉ tham khảo, không phải lệnh.
       </p>
     </div>
   );

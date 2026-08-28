@@ -1,3 +1,11 @@
+import {
+  industryValuationSell,
+  mean,
+  median,
+  weightedMean,
+  type AnalystTargetSummary,
+  type IndustryMultiples,
+} from "./analyst-targets";
 import type {
   EarningsRow,
   InsiderRow,
@@ -558,19 +566,6 @@ function nearestAboveLevel(
     .sort((a, b) => a.price - b.price)[0];
 }
 
-function median(values: number[]): number | null {
-  const xs = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-  if (!xs.length) return null;
-  const mid = Math.floor(xs.length / 2);
-  return xs.length % 2 === 1 ? xs[mid]! : (xs[mid - 1]! + xs[mid]!) / 2;
-}
-
-function mean(values: number[]): number | null {
-  const xs = values.filter((v) => Number.isFinite(v));
-  if (!xs.length) return null;
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-
 function growthToPercent(raw: number): number {
   return Math.abs(raw) <= 1 ? raw * 100 : raw;
 }
@@ -676,12 +671,18 @@ function clampSellAnchor(value: number, price: number): number {
   return Math.max(price * 1.005, Math.min(price * 1.55, value));
 }
 
+export interface BuySellContext {
+  analystTarget?: AnalystTargetSummary | null;
+  industry?: IndustryMultiples | null;
+}
+
 export function computeBuySellPrices(
   price: number,
   levels: PriceLevels,
   priceHistory?: { close: number }[],
   metrics?: Record<string, number>,
-  pegRatio?: number
+  pegRatio?: number,
+  context?: BuySellContext
 ): {
   buyPrice: number;
   sellPrice: number;
@@ -723,7 +724,7 @@ export function computeBuySellPrices(
   const fundSellClamped = fund.sellAbove ? clampSellAnchor(fund.sellAbove.price, price) : null;
 
   const buyBits: string[] = [techBuyNote];
-  const sellBits: string[] = [techSellNote];
+  const sellBits: string[] = [];
 
   let buyPrice = techBuy;
   if (expensive) {
@@ -739,24 +740,58 @@ export function computeBuySellPrices(
     if (fund.buy) buyBits.push(fund.buy.label);
   }
 
-  let sellPrice = techSell;
-  if (alreadyAboveFundSell) {
-    const bounce = price * (1 + Math.max(0.018, daily * 1.15));
-    const cap = price * (1 + Math.max(0.04, daily * 2.1));
-    sellPrice = Math.min(techSell, cap);
-    if (sellPrice > bounce * 1.35) sellPrice = Math.min(sellPrice, bounce * 1.2);
-    sellBits.push("đã trên mốc bán cơ bản");
-    if (fund.sellLabels.length) sellBits.push(uniqueJoin(fund.sellLabels));
-  } else if (expensive && fundSellClamped != null) {
-    sellPrice = Math.min(techSell, fundSellClamped);
-    sellBits.push(fund.sellAbove?.label ?? "định giá");
-  } else if (cheap && fundSellClamped != null && fundSellClamped > techSell) {
-    sellPrice = 0.45 * techSell + 0.55 * fundSellClamped;
-    sellBits.push(fund.sellAbove?.label ?? "định giá");
-  } else if (!expensive && !cheap && fundSellClamped != null) {
-    sellPrice = (techSell + Math.max(techSell, fundSellClamped)) / 2;
-    if (fund.sellAbove) sellBits.push(fund.sellAbove.label);
+  const analyst = context?.analystTarget;
+  const industryAnchor = industryValuationSell(price, metrics, context?.industry);
+  const sellParts: { price: number; weight: number; label: string }[] = [];
+
+  if (resistance && resistance.price > price * (1 + minGap * 0.5)) {
+    sellParts.push({ price: resistance.price, weight: 1, label: resistance.label });
   }
+  if (analyst && analyst.price > price * 1.012) {
+    sellParts.push({ price: analyst.price, weight: 1.25, label: analyst.label });
+  }
+  if (industryAnchor && industryAnchor.price > price * 1.012) {
+    sellParts.push({ price: industryAnchor.price, weight: 1, label: industryAnchor.label });
+  }
+
+  const hasStreetOrIndustry = Boolean(
+    (analyst && analyst.price > 0) || industryAnchor
+  );
+
+  let sellPrice: number;
+  if (hasStreetOrIndustry && sellParts.length) {
+    sellPrice = weightedMean(sellParts) ?? techSell;
+    sellBits.push(...sellParts.map((p) => p.label));
+    if (analyst && analyst.price <= price * 1.012) {
+      const cap = resistance
+        ? Math.max(price * (1 + minGap), Math.min(resistance.price, price * (1 + Math.max(0.03, daily * 1.6))))
+        : price * (1 + Math.max(0.025, daily * 1.4));
+      sellPrice = Math.min(sellPrice, cap);
+      sellBits.push("giá ≥ PT CTCK 3 tháng");
+    }
+  } else {
+    sellBits.push(techSellNote);
+    sellPrice = techSell;
+    if (alreadyAboveFundSell) {
+      const bounce = price * (1 + Math.max(0.018, daily * 1.15));
+      const cap = price * (1 + Math.max(0.04, daily * 2.1));
+      sellPrice = Math.min(techSell, cap);
+      if (sellPrice > bounce * 1.35) sellPrice = Math.min(sellPrice, bounce * 1.2);
+      sellBits.push("đã trên mốc bán cơ bản");
+      if (fund.sellLabels.length) sellBits.push(uniqueJoin(fund.sellLabels));
+    } else if (expensive && fundSellClamped != null) {
+      sellPrice = Math.min(techSell, fundSellClamped);
+      sellBits.push(fund.sellAbove?.label ?? "định giá");
+    } else if (cheap && fundSellClamped != null && fundSellClamped > techSell) {
+      sellPrice = 0.45 * techSell + 0.55 * fundSellClamped;
+      sellBits.push(fund.sellAbove?.label ?? "định giá");
+    } else if (!expensive && !cheap && fundSellClamped != null) {
+      sellPrice = (techSell + Math.max(techSell, fundSellClamped)) / 2;
+      if (fund.sellAbove) sellBits.push(fund.sellAbove.label);
+    }
+  }
+
+  sellPrice = Math.max(price * 1.005, Math.min(sellPrice, price * 2.3));
 
   const closes = (priceHistory ?? []).map((p) => p.close).filter((c) => c > 0);
   const rsi = rsiWilder(closes);
@@ -773,7 +808,7 @@ export function computeBuySellPrices(
   if (sellPrice <= price) sellPrice = price * (1 + minGap);
   if (sellPrice <= buyPrice) sellPrice = buyPrice * (1 + Math.max(0.04, daily * 2.5));
 
-  let buyNote = uniqueJoin(buyBits).replace(/ \+ /g, " · ");
+  const buyNote = uniqueJoin(buyBits).replace(/ \+ /g, " · ");
   let sellNote = uniqueJoin(sellBits).replace(/ \+ /g, " · ");
 
   const reward = sellPrice - price;
@@ -809,6 +844,8 @@ export function computeStockAssessment(input: {
   newsSentiment?: NewsSentimentSummary | null;
   pegRatio?: number;
   shortPercentOfFloat?: number;
+  analystTarget?: AnalystTargetSummary | null;
+  industry?: IndustryMultiples | null;
 }): StockAssessment {
   const shortFromMetrics =
     input.shortPercentOfFloat ??
@@ -845,7 +882,8 @@ export function computeStockAssessment(input: {
     input.priceLevels,
     input.priceHistory,
     input.metrics,
-    input.pegRatio
+    input.pegRatio,
+    { analystTarget: input.analystTarget, industry: input.industry }
   );
 
   return {

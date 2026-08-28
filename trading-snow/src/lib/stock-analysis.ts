@@ -1,8 +1,12 @@
 import type { MarketSession } from "./types";
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, yahooInsiderShareChange } from "./yahoo";
-import type { YahooInsiderData } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderShareChange } from "./yahoo";
+import type { YahooInsiderData, YahooKeyStats } from "./yahoo";
+import {
+  summarizeAnalystTargets,
+  summarizeIndustryMultiples,
+} from "./analyst-targets";
 import {
   computeStockAssessment,
   type NewsSentimentSummary,
@@ -461,7 +465,8 @@ function computePriceLevels(
   metrics: Record<string, number>,
   priceHistory: { date: string; close: number }[],
   recommendations: RecommendationRow[],
-  earningsUpcoming: StockAnalysis["earningsUpcoming"]
+  earningsUpcoming: StockAnalysis["earningsUpcoming"],
+  analystTargetPrice?: { price: number; method: string } | null
 ): PriceLevels {
   const levels: PriceLevels = { support: [], resistance: [] };
   if (!Number.isFinite(price) || price <= 0) return levels;
@@ -494,7 +499,13 @@ function computePriceLevels(
   }
 
   const latestRec = recommendations[0];
-  if (latestRec) {
+  if (analystTargetPrice && saneTarget(analystTargetPrice.price)) {
+    levels.targetAnalyst = {
+      price: analystTargetPrice.price,
+      upsidePercent: ((analystTargetPrice.price - price) / price) * 100,
+      method: analystTargetPrice.method,
+    };
+  } else if (latestRec) {
     const total =
       latestRec.strongBuy +
       latestRec.buy +
@@ -518,7 +529,7 @@ function computePriceLevels(
   }
 
   const nextEps = earningsUpcoming[0]?.epsEstimate;
-  if (nextEps && forwardPe && nextEps > 0 && forwardPe > 0) {
+  if (!analystTargetPrice && nextEps && forwardPe && nextEps > 0 && forwardPe > 0) {
     const implied = nextEps * 4 * forwardPe;
     if (saneTarget(implied)) {
       if (levels.targetAnalyst) {
@@ -786,6 +797,15 @@ function buildCoreSections(
   return sections;
 }
 
+function analystSummaryFromYahoo(price: number, stats: YahooKeyStats | null) {
+  if (!stats) return null;
+  return summarizeAnalystTargets(
+    price,
+    stats.priceTargetHistory ?? [],
+    stats.targetMeanPrice
+  );
+}
+
 export async function fetchStockAnalysisExtra(
   symbol: string,
   core: Pick<
@@ -833,6 +853,11 @@ export async function fetchStockAnalysisExtra(
     core.price
   );
 
+  const peerList = (peers ?? []).filter((p) => p !== upper).slice(0, 8);
+  const peerMultiples = peerList.length ? await fetchYahooPeerMultiples(peerList) : [];
+  const analystTarget = analystSummaryFromYahoo(core.price, yahooStats);
+  const industry = summarizeIndustryMultiples(peerMultiples);
+
   const assessment = computeStockAssessment({
     price: core.price,
     metrics: core.metrics,
@@ -846,10 +871,12 @@ export async function fetchStockAnalysisExtra(
     newsSentiment,
     pegRatio: yahooStats?.pegRatio,
     shortPercentOfFloat: yahooStats?.shortPercentOfFloat,
+    analystTarget,
+    industry,
   });
 
   return {
-    peers: (peers ?? []).filter((p) => p !== upper).slice(0, 8),
+    peers: peerList,
     insiderTransactions,
     news,
     optionFlow,
@@ -872,6 +899,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     earningsHist,
     earningsUpcoming,
     recommendations,
+    yahooStats,
   ] = await Promise.all([
     fetchQuoteForSymbol(upper),
     fetchPriceHistory(upper, from, new Date()),
@@ -882,6 +910,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     >("stock/earnings?", upper),
     fetchEarningsUpcoming(upper),
     finnhubGet<RecommendationRow[]>("stock/recommendation?", upper),
+    fetchYahooKeyStats(upper),
   ]);
 
   if (!quote) return null;
@@ -897,13 +926,15 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
 
   const m = metricsRes?.metric ?? {};
   const sections = buildCoreSections(quote, profile, metricsRes);
+  const analystTarget = analystSummaryFromYahoo(quote.price, yahooStats);
 
   const priceLevels = computePriceLevels(
     quote.price,
     m,
     priceHistory,
     recommendations ?? [],
-    earningsUpcoming
+    earningsUpcoming,
+    analystTarget ? { price: analystTarget.price, method: analystTarget.label } : null
   );
 
   const earningsHistory = (earningsHist ?? []).slice(0, 8).map((e) => ({
@@ -923,6 +954,9 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     optionFlow: null,
     earningsHistory,
     priceHistory,
+    pegRatio: yahooStats?.pegRatio,
+    shortPercentOfFloat: yahooStats?.shortPercentOfFloat,
+    analystTarget,
   });
 
   return {
