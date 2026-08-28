@@ -33,6 +33,19 @@ export function isWithinBuyPriceBand(
   return pct != null && Math.abs(pct) <= band * 100;
 }
 
+/** Long setup only: stop must be below entry, and price must not already be through the stop. */
+export function isValidLongLevels(
+  entryPrice: number,
+  stop: number | null | undefined,
+  marketPrice: number
+): boolean {
+  if (!(entryPrice > 0) || !Number.isFinite(entryPrice)) return false;
+  if (stop == null || !(stop > 0) || !Number.isFinite(stop)) return true;
+  if (stop >= entryPrice) return false;
+  if (marketPrice > 0 && Number.isFinite(marketPrice) && marketPrice <= stop) return false;
+  return true;
+}
+
 export interface WyckoffBuyHit {
   timeframe: SignalTimeframe;
   phase: WyckoffResult["phase"];
@@ -57,6 +70,7 @@ export function wyckoffBuyHit(
   const entry = result.entry;
   if (!entry || entry.action === "avoid" || entry.price <= 0) return null;
   if (!isWithinBuyPriceBand(marketPrice, entry.price)) return null;
+  if (!isValidLongLevels(entry.price, entry.stop, marketPrice)) return null;
   const distPct = buyPriceDistancePct(marketPrice, entry.price);
   if (distPct == null) return null;
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Bar } from "./types";
-import { computeWyckoff } from "./wyckoff";
+import { computeWyckoff, longEntryStop } from "./wyckoff";
 
 function bar(
   index: number,
@@ -225,5 +225,31 @@ describe("computeWyckoff distribution confirmation", () => {
     const result = computeWyckoff(bars, "1d");
 
     expect(result.events.some((event) => event.event === "LPSY")).toBe(false);
+  });
+});
+
+describe("longEntryStop", () => {
+  it("keeps the stop below a ST/LPS printed under Ice", () => {
+    // Old formula: ice - 0.45*ATR = 50 - 0.18 = 49.82, above a $48.50 ST entry.
+    const stop = longEntryStop(48.5, 50, 0.4, 0.45);
+    expect(stop).toBeLessThan(48.5);
+    expect(stop).toBeCloseTo(48.5 - 0.4 * 0.45, 8);
+  });
+
+  it("still stops below Ice when buying Creek", () => {
+    const stop = longEntryStop(110, 100, 2, 0.25);
+    expect(stop).toBeLessThan(100);
+    expect(stop).toBeCloseTo(100 - 0.5, 8);
+  });
+});
+
+describe("computeWyckoff long stops", () => {
+  it("never places a long stop at or above the entry", () => {
+    for (const bars of [accumulation(), distribution()]) {
+      const result = computeWyckoff(bars, "1d");
+      if (result.entry?.stop != null && result.entry.stop > 0) {
+        expect(result.entry.stop).toBeLessThan(result.entry.price);
+      }
+    }
   });
 });

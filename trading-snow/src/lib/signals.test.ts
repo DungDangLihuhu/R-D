@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WyckoffResult } from "./indicators/ben-dang/types";
 import {
   BUY_PRICE_BAND,
+  isValidLongLevels,
   isWithinBuyPriceBand,
   wyckoffBuyHit,
 } from "./signals";
@@ -67,12 +68,12 @@ describe("wyckoffBuyHit", () => {
     expect(hit?.entryPrice).toBe(100);
   });
 
-  it("keeps wait entries at the ±5% band edge", () => {
+  it("keeps wait entries at the ±5% band edge when still above the stop", () => {
     const wait = result({
       confidence: { score: 50, level: "medium", label: "Trung bình" },
       entry: {
         price: 100,
-        stop: 95,
+        stop: 90,
         action: "wait",
         label: "LPS",
         reason: "Chờ giá về mốc",
@@ -124,5 +125,51 @@ describe("wyckoffBuyHit", () => {
   it("ignores setups with no entry or with price too far from the buy level", () => {
     expect(wyckoffBuyHit(result({ entry: undefined }), 100, "1d")).toBeNull();
     expect(wyckoffBuyHit(result(), 112, "1d")).toBeNull();
+  });
+
+  it("ignores longs whose stop sits at or above the entry", () => {
+    expect(
+      wyckoffBuyHit(
+        result({
+          entry: {
+            price: 100,
+            stop: 102,
+            action: "buy",
+            label: "ST / gần Ice",
+            reason: "ST dưới Ice nhưng cắt lỗ vẫn neo Ice",
+          },
+        }),
+        100,
+        "1d"
+      )
+    ).toBeNull();
+  });
+
+  it("ignores longs that have already broken the stop", () => {
+    expect(
+      wyckoffBuyHit(
+        result({
+          entry: {
+            price: 100,
+            stop: 97,
+            action: "wait",
+            label: "LPS",
+            reason: "Giá đã thủng cắt lỗ",
+          },
+        }),
+        96.5,
+        "1d"
+      )
+    ).toBeNull();
+  });
+});
+
+describe("isValidLongLevels", () => {
+  it("requires stop below entry and market still above the stop", () => {
+    expect(isValidLongLevels(100, 95, 100)).toBe(true);
+    expect(isValidLongLevels(100, 100, 100)).toBe(false);
+    expect(isValidLongLevels(48.5, 49.82, 48.5)).toBe(false);
+    expect(isValidLongLevels(100, 97, 96.9)).toBe(false);
+    expect(isValidLongLevels(100, null, 100)).toBe(true);
   });
 });

@@ -61,17 +61,49 @@ function actionLabel(action: WyckoffBuyHit["entryAction"]) {
   return action === "buy" ? "Có thể vào" : "Giá sát mốc";
 }
 
-function HitBadges({ hits }: { hits: WyckoffBuyHit[] }) {
+function stopClass(entryPrice: number, stop: number | null) {
+  if (stop == null || !(stop > 0)) return "text-app-muted";
+  if (stop >= entryPrice) return "font-semibold text-rose-600 dark:text-rose-300";
+  return "text-app-muted";
+}
+
+function HitLevels({
+  hits,
+  currency,
+}: {
+  hits: WyckoffBuyHit[];
+  currency: string;
+}) {
+  const bestTf = hits[0]?.timeframe;
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {hits.map((hit) => (
-        <span
-          key={hit.timeframe}
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
-        >
-          {SIGNAL_TIMEFRAME_LABELS[hit.timeframe as SignalTimeframe]} · {hit.entryLabel}
-        </span>
-      ))}
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[18rem] text-left text-xs">
+        <thead>
+          <tr className="text-[11px] text-app-muted">
+            <th className="py-1 pr-3 font-medium">Khung</th>
+            <th className="py-1 pr-3 font-medium">Mốc</th>
+            <th className="py-1 pr-3 font-medium">Giá vào</th>
+            <th className="py-1 font-medium">Cắt lỗ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {hits.map((hit) => (
+            <tr
+              key={hit.timeframe}
+              className={`tabular-nums ${hit.timeframe === bestTf ? "font-medium text-app-text" : ""}`}
+            >
+              <td className="py-0.5 pr-3 font-medium text-app-text">
+                {SIGNAL_TIMEFRAME_LABELS[hit.timeframe as SignalTimeframe]}
+              </td>
+              <td className="py-0.5 pr-3 text-app-muted">{hit.entryLabel}</td>
+              <td className="py-0.5 pr-3 text-app-text">{formatMoney(hit.entryPrice, currency)}</td>
+              <td className={`py-0.5 ${stopClass(hit.entryPrice, hit.stop)}`}>
+                {hit.stop != null && hit.stop > 0 ? formatMoney(hit.stop, currency) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -154,7 +186,7 @@ function SignalsResults({
     <>
       <PageHeader
         title="Tín hiệu"
-        description={`Mã trong danh mục có giá thị trường trong ±${bandPct}% giá nên vào Wyckoff (trang Phân tích, khung 1H/4H/1D/1W). Phân phối / tránh long không hiện. Kịch bản có điều kiện, không phải khuyến nghị mua.`}
+        description={`Mã trong danh mục có giá thị trường trong ±${bandPct}% giá nên vào Wyckoff (trang Phân tích, khung 1H/4H/1D/1W). Long có cắt lỗ ≥ giá vào hoặc giá đã thủng stop không hiện. Phân phối / tránh long không hiện. Kịch bản có điều kiện, không phải khuyến nghị mua.`}
         actions={
           <button
             type="button"
@@ -219,7 +251,7 @@ function SignalsResults({
                     >
                       {best.phaseLabel}
                     </p>
-                    <HitBadges hits={signal.hits} />
+                    <HitLevels hits={signal.hits} currency={currency} />
                     <p className="text-xs font-medium text-app-text">
                       {actionLabel(best.entryAction)}
                     </p>
@@ -238,8 +270,9 @@ function SignalsResults({
                       {formatPercent(best.distPct)} so với giá vào
                     </p>
                     {best.stop != null && best.stop > 0 && (
-                      <p className="mt-1 text-xs tabular-nums text-app-muted">
+                      <p className={`mt-1 text-xs tabular-nums ${stopClass(best.entryPrice, best.stop)}`}>
                         Cắt lỗ {formatMoney(best.stop, currency)}
+                        {best.stop >= best.entryPrice ? " (lỗi mốc)" : ""}
                       </p>
                     )}
                     <p className="mt-1 text-xs text-app-muted">

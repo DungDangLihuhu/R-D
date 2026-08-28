@@ -1264,6 +1264,26 @@ function nearLevel(price: number, target: number, atrVal: number, height: number
   return Math.abs(price - target) <= band;
 }
 
+/**
+ * Long stop must sit under both the entry and the structure low (Ice / Spring / ST).
+ * Anchoring only to Ice lets a ST/LPS print below Ice with a stop *above* the entry.
+ */
+export function longEntryStop(
+  entryPrice: number,
+  structureLow: number,
+  atrVal: number,
+  atrMult: number
+): number {
+  const floor = Math.min(entryPrice, structureLow);
+  if (!(floor > 0) || !Number.isFinite(floor)) return 0;
+  const atrPad = Number.isFinite(atrVal) && atrVal > 0 ? atrVal * Math.max(atrMult, 0) : 0;
+  const pad = Math.max(atrPad, floor * 0.002, floor * 1e-6);
+  const stop = floor - pad;
+  if (stop <= 0) return Math.min(floor * 0.85, entryPrice * 0.98);
+  if (stop >= entryPrice) return entryPrice * 0.98;
+  return stop;
+}
+
 function inDiscount(price: number, ice: number, height: number, atrVal: number): boolean {
   return price <= ice + height * 0.32 + atrVal * 0.15 && price >= ice - atrVal * 0.35;
 }
@@ -1312,7 +1332,7 @@ function computeEntry(
   if (phase === "distribution" || phase === "markdown") {
     return {
       price: ice,
-      stop: ice - lastAtr * 0.8,
+      stop: longEntryStop(ice, ice, lastAtr, 0.8),
       action: "avoid",
       label: "Ice (chờ Spring)",
       reason:
@@ -1328,7 +1348,7 @@ function computeEntry(
     const entry = Math.max(ice, Math.min(ice + height * 0.12, spring.price + lastAtr * 0.2));
     return {
       price: entry,
-      stop: Math.min(spring.price, ice) - lastAtr * 0.35,
+      stop: longEntryStop(entry, Math.min(spring.price, ice), lastAtr, 0.35),
       action: stanceAt(entry, true),
       label: "Sau Spring, trên Ice",
       reason: "Spring thành công — vào khi giá trở lại trên Ice, cắt dưới đáy Spring.",
@@ -1338,7 +1358,7 @@ function computeEntry(
   if (lps) {
     return {
       price: lps.price,
-      stop: ice - lastAtr * 0.35,
+      stop: longEntryStop(lps.price, Math.min(ice, lps.price), lastAtr, 0.35),
       action: stanceAt(lps.price),
       label: "LPS",
       reason: "Last Point of Support — điểm vào chuẩn sau SOS, không đuổi phá Creek.",
@@ -1349,7 +1369,7 @@ function computeEntry(
     const chasing = price > creek + Math.max(lastAtr * 0.35, height * 0.05);
     return {
       price: creek,
-      stop: ice - lastAtr * 0.25,
+      stop: longEntryStop(creek, ice, lastAtr, 0.25),
       action: chasing ? "wait" : stanceAt(creek),
       label: sos ? "Creek (chờ LPS)" : "Pullback Creek",
       reason: sos
@@ -1362,7 +1382,7 @@ function computeEntry(
   const entry = stNearIce ?? ice + height * 0.18;
   return {
     price: entry,
-    stop: ice - lastAtr * 0.45,
+    stop: longEntryStop(entry, Math.min(ice, stNearIce ?? ice), lastAtr, 0.45),
     action: stanceAt(entry, true),
     label: stNearIce ? "ST / gần Ice" : "Gần Ice (discount)",
     reason: "Tích lũy/sideway — mua 1/4 dưới của range, không mua giữa range hay Creek.",
