@@ -1,7 +1,7 @@
 import type { MarketSession } from "./types";
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderShareChange } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
 import type { YahooInsiderData, YahooKeyStats } from "./yahoo";
 import {
   summarizeAnalystTargets,
@@ -781,19 +781,45 @@ type FinnhubProfile = {
   finnhubIndustry?: string;
 };
 
+function hasFiniteMetrics(m: Record<string, number> | undefined | null): boolean {
+  if (!m) return false;
+  return Object.values(m).some((v) => typeof v === "number" && Number.isFinite(v));
+}
+
+/** Finnhub wins when it has a finite value; Yahoo fills the gaps. */
+export function mergeAnalysisMetrics(
+  finnhub: Record<string, number> | undefined,
+  yahoo: Record<string, number> | undefined
+): Record<string, number> {
+  const out: Record<string, number> = { ...(yahoo ?? {}) };
+  for (const [key, value] of Object.entries(finnhub ?? {})) {
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+  }
+  return out;
+}
+
+function profileFromYahoo(stats: YahooKeyStats | null, profile: FinnhubProfile | null): FinnhubProfile {
+  const next: FinnhubProfile = { ...(profile ?? {}) };
+  if (next.marketCapitalization == null && stats?.marketCap != null && stats.marketCap > 0) {
+    next.marketCapitalization = stats.marketCap / 1_000_000;
+  }
+  if (next.shareOutstanding == null && stats?.sharesOutstanding != null && stats.sharesOutstanding > 0) {
+    next.shareOutstanding = stats.sharesOutstanding / 1_000_000;
+  }
+  return next;
+}
+
 function buildCoreSections(
   quote: { price: number },
   profile: FinnhubProfile | null,
-  metricsRes: { metric?: Record<string, number> } | null
+  metrics: Record<string, number>
 ): AnalysisSection[] {
-  const sections: AnalysisSection[] = metricsRes
-    ? buildSections(metricsRes.metric ?? {}, profile ?? {}, quote.price)
-    : [];
+  if (!hasFiniteMetrics(metrics)) return [];
 
+  const sections = buildSections(metrics, profile ?? {}, quote.price);
   if (profile?.finnhubIndustry && sections[0]) {
     sections[0].metrics.unshift(metric("Ngành", profile.finnhubIndustry));
   }
-
   return sections;
 }
 
@@ -919,13 +945,25 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
   let note: string | undefined;
 
   if (profile) sources.push("Finnhub");
-  else if (upper.includes(".")) {
+
+  const yahooMetrics = yahooStats ? yahooStatsToFinnhubMetrics(yahooStats) : {};
+  const finnhubMetrics = metricsRes?.metric ?? {};
+  const m = mergeAnalysisMetrics(finnhubMetrics, yahooMetrics);
+  const profileFilled = profileFromYahoo(yahooStats, profile);
+
+  if (!hasFiniteMetrics(finnhubMetrics) && hasFiniteMetrics(yahooMetrics)) {
     note =
-      "Finnhub free chủ yếu hỗ trợ mã US — chỉ số cơ bản có thể thiếu với mã .PA.";
+      "Finnhub không có chỉ số cơ bản cho mã này (OTC, niêm yết mới, hoặc ngoài US thường gặp). Đang dùng Yahoo Finance.";
+  } else if (!hasFiniteMetrics(m)) {
+    note = upper.includes(".")
+      ? "Finnhub free chủ yếu hỗ trợ mã US — chỉ số cơ bản có thể thiếu với mã ngoài Mỹ. Yahoo cũng không trả số liệu."
+      : "Không lấy được chỉ số cơ bản từ Finnhub và Yahoo cho mã này.";
+  } else if (!profile && upper.includes(".")) {
+    note =
+      "Finnhub free chủ yếu hỗ trợ mã US — hồ sơ công ty có thể thiếu với mã .PA.";
   }
 
-  const m = metricsRes?.metric ?? {};
-  const sections = buildCoreSections(quote, profile, metricsRes);
+  const sections = buildCoreSections(quote, profileFilled, m);
   const analystTarget = analystSummaryFromYahoo(quote.price, yahooStats);
 
   const priceLevels = computePriceLevels(
