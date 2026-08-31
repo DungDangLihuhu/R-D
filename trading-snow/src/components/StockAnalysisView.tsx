@@ -567,11 +567,17 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             )}
           </div>
 
-          {data.sections.length > 0 && (
+          {data.sections.length > 0 ? (
             <div className="grid gap-4 lg:grid-cols-2">
               {data.sections.map((section) => (
                 <MetricSection key={section.id} title={section.title} metrics={section.metrics} />
               ))}
+            </div>
+          ) : (
+            <div className="app-card p-4 text-sm text-app-muted">
+              Không có chỉ số cơ bản để hiện (P/E, EPS, biên lợi nhuận…). Thường gặp với mã
+              niêm yết mới, OTC, quỹ, hoặc mã Finnhub/Yahoo không cover. Giá và chart kỹ thuật
+              vẫn lấy được nếu Yahoo có báo giá.
             </div>
           )}
 

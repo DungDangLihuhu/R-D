@@ -753,6 +753,118 @@ export interface YahooKeyStats {
   targetLowPrice?: number;
   numberOfAnalystOpinions?: number;
   priceTargetHistory?: YahooPriceTargetRow[];
+  trailingEps?: number;
+  forwardEps?: number;
+  trailingPe?: number;
+  forwardPe?: number;
+  priceToBook?: number;
+  enterpriseToRevenue?: number;
+  enterpriseToEbitda?: number;
+  profitMargins?: number;
+  grossMargins?: number;
+  operatingMargins?: number;
+  returnOnEquity?: number;
+  currentRatio?: number;
+  /** Yahoo reports this as percent (54.2 = 54.2%). */
+  debtToEquity?: number;
+  revenuePerShare?: number;
+  totalRevenue?: number;
+  freeCashflow?: number;
+  earningsGrowth?: number;
+  revenueGrowth?: number;
+  totalCash?: number;
+  sharesOutstanding?: number;
+  marketCap?: number;
+  dividendRate?: number;
+  dividendYield?: number;
+  payoutRatio?: number;
+  beta?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  fiftyTwoWeekChange?: number;
+  averageVolume10Day?: number;
+  averageVolume?: number;
+  bookValue?: number;
+}
+
+function pickYahooNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    const n = parseYahooRawNumber(v);
+    if (n != null) return n;
+  }
+  return undefined;
+}
+
+export function yahooStatsHasFundamentals(stats: YahooKeyStats): boolean {
+  return (
+    stats.pegRatio != null ||
+    stats.shortPercentOfFloat != null ||
+    stats.shortRatio != null ||
+    stats.targetMeanPrice != null ||
+    (stats.priceTargetHistory?.length ?? 0) > 0 ||
+    stats.trailingPe != null ||
+    stats.forwardPe != null ||
+    stats.trailingEps != null ||
+    stats.marketCap != null ||
+    stats.fiftyTwoWeekHigh != null ||
+    stats.profitMargins != null ||
+    stats.returnOnEquity != null ||
+    stats.beta != null
+  );
+}
+
+/**
+ * Map Yahoo quoteSummary fields onto Finnhub `stock/metric` keys used by the analysis page.
+ * Percent Yahoo fields (0–1) become Finnhub-style percents (0–100) where the UI expects that.
+ */
+export function yahooStatsToFinnhubMetrics(stats: YahooKeyStats): Record<string, number> {
+  const m: Record<string, number> = {};
+  const put = (key: string, value: number | undefined) => {
+    if (value != null && Number.isFinite(value)) m[key] = value;
+  };
+
+  put("peTTM", stats.trailingPe);
+  put("forwardPE", stats.forwardPe);
+  put("epsTTM", stats.trailingEps);
+  put("pegTTM", stats.pegRatio);
+  put("pb", stats.priceToBook);
+  put("evRevenueTTM", stats.enterpriseToRevenue);
+  put("evEbitdaTTM", stats.enterpriseToEbitda);
+  put("beta", stats.beta);
+  put("currentRatioQuarterly", stats.currentRatio);
+  if (stats.debtToEquity != null && Number.isFinite(stats.debtToEquity)) {
+    put("totalDebt/totalEquityQuarterly", stats.debtToEquity / 100);
+  }
+  put("revenuePerShareTTM", stats.revenuePerShare);
+  if (stats.marketCap != null && Number.isFinite(stats.marketCap)) {
+    put("marketCapitalization", stats.marketCap / 1_000_000);
+  }
+  if (stats.grossMargins != null) put("grossMarginTTM", stats.grossMargins * 100);
+  if (stats.operatingMargins != null) put("operatingMarginTTM", stats.operatingMargins * 100);
+  if (stats.profitMargins != null) put("netProfitMarginTTM", stats.profitMargins * 100);
+  if (stats.returnOnEquity != null) put("roeTTM", stats.returnOnEquity * 100);
+  if (stats.earningsGrowth != null) put("epsGrowthTTMYoy", stats.earningsGrowth * 100);
+  if (stats.revenueGrowth != null) put("revenueGrowthTTMYoy", stats.revenueGrowth * 100);
+  put("dividendPerShareTTM", stats.dividendRate);
+  if (stats.dividendYield != null) put("dividendYieldIndicatedAnnual", stats.dividendYield * 100);
+  put("payoutRatioTTM", stats.payoutRatio);
+  put("52WeekHigh", stats.fiftyTwoWeekHigh);
+  put("52WeekLow", stats.fiftyTwoWeekLow);
+  if (stats.fiftyTwoWeekChange != null) put("52WeekPriceReturnDaily", stats.fiftyTwoWeekChange * 100);
+  put("10DayAverageTradingVolume", stats.averageVolume10Day);
+  put("3MonthAverageTradingVolume", stats.averageVolume);
+  put("shortPercentOutstanding", stats.shortPercentOfFloat);
+  if (
+    stats.totalCash != null &&
+    stats.sharesOutstanding != null &&
+    stats.sharesOutstanding > 0
+  ) {
+    put("cashPerSharePerShareQuarterly", stats.totalCash / stats.sharesOutstanding);
+  }
+  if (stats.freeCashflow != null && stats.freeCashflow > 0 && stats.marketCap != null && stats.marketCap > 0) {
+    put("pfcfShareTTM", stats.marketCap / stats.freeCashflow);
+  }
+  return m;
 }
 
 export interface YahooPeerMultiple {
@@ -769,7 +881,7 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
 
   for (const candidate of resolveYahooSymbolCandidates(symbol)) {
     const yahoo = toYahooSymbol(candidate);
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics,financialData,upgradeDowngradeHistory&crumb=${encodeURIComponent(session.crumb)}`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics,financialData,summaryDetail,upgradeDowngradeHistory&crumb=${encodeURIComponent(session.crumb)}`;
     const res = await fetch(url, {
       headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
       next: { revalidate: 3600 },
@@ -780,6 +892,7 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
         result?: {
           defaultKeyStatistics?: Record<string, unknown>;
           financialData?: Record<string, unknown>;
+          summaryDetail?: Record<string, unknown>;
           upgradeDowngradeHistory?: {
             history?: {
               epochGradeDate?: number;
@@ -794,14 +907,49 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
     if (!result) continue;
     const ks = result.defaultKeyStatistics ?? {};
     const fd = result.financialData ?? {};
-    const pegRatio = parseYahooRawNumber(ks.pegRatio);
-    const shortPercentOfFloat = parseYahooRawNumber(ks.shortPercentOfFloat);
-    const shortRatio = parseYahooRawNumber(ks.shortRatio);
-    const targetMeanPrice = parseYahooRawNumber(fd.targetMeanPrice);
-    const targetMedianPrice = parseYahooRawNumber(fd.targetMedianPrice);
-    const targetHighPrice = parseYahooRawNumber(fd.targetHighPrice);
-    const targetLowPrice = parseYahooRawNumber(fd.targetLowPrice);
-    const numberOfAnalystOpinions = parseYahooRawNumber(fd.numberOfAnalystOpinions);
+    const sd = result.summaryDetail ?? {};
+
+    const stats: YahooKeyStats = {
+      pegRatio: pickYahooNumber(ks.pegRatio),
+      shortPercentOfFloat: pickYahooNumber(ks.shortPercentOfFloat),
+      shortRatio: pickYahooNumber(ks.shortRatio),
+      targetMeanPrice: pickYahooNumber(fd.targetMeanPrice),
+      targetMedianPrice: pickYahooNumber(fd.targetMedianPrice),
+      targetHighPrice: pickYahooNumber(fd.targetHighPrice),
+      targetLowPrice: pickYahooNumber(fd.targetLowPrice),
+      numberOfAnalystOpinions: pickYahooNumber(fd.numberOfAnalystOpinions),
+      trailingEps: pickYahooNumber(ks.trailingEps),
+      forwardEps: pickYahooNumber(ks.forwardEps),
+      trailingPe: pickYahooNumber(sd.trailingPE, ks.trailingPE),
+      forwardPe: pickYahooNumber(sd.forwardPE, fd.forwardPE),
+      priceToBook: pickYahooNumber(sd.priceToBook, ks.priceToBook),
+      enterpriseToRevenue: pickYahooNumber(ks.enterpriseToRevenue),
+      enterpriseToEbitda: pickYahooNumber(ks.enterpriseToEbitda),
+      profitMargins: pickYahooNumber(fd.profitMargins, ks.profitMargins),
+      grossMargins: pickYahooNumber(fd.grossMargins),
+      operatingMargins: pickYahooNumber(fd.operatingMargins),
+      returnOnEquity: pickYahooNumber(fd.returnOnEquity),
+      currentRatio: pickYahooNumber(fd.currentRatio),
+      debtToEquity: pickYahooNumber(fd.debtToEquity),
+      revenuePerShare: pickYahooNumber(fd.revenuePerShare),
+      totalRevenue: pickYahooNumber(fd.totalRevenue),
+      freeCashflow: pickYahooNumber(fd.freeCashflow),
+      earningsGrowth: pickYahooNumber(fd.earningsGrowth),
+      revenueGrowth: pickYahooNumber(fd.revenueGrowth),
+      totalCash: pickYahooNumber(fd.totalCash),
+      sharesOutstanding: pickYahooNumber(ks.sharesOutstanding),
+      marketCap: pickYahooNumber(sd.marketCap),
+      dividendRate: pickYahooNumber(sd.dividendRate),
+      dividendYield: pickYahooNumber(sd.dividendYield),
+      payoutRatio: pickYahooNumber(sd.payoutRatio),
+      beta: pickYahooNumber(sd.beta, ks.beta),
+      fiftyTwoWeekHigh: pickYahooNumber(sd.fiftyTwoWeekHigh),
+      fiftyTwoWeekLow: pickYahooNumber(sd.fiftyTwoWeekLow),
+      fiftyTwoWeekChange: pickYahooNumber(ks["52WeekChange"]),
+      averageVolume10Day: pickYahooNumber(sd.averageDailyVolume10Day, sd.averageVolume10days),
+      averageVolume: pickYahooNumber(sd.averageVolume),
+      bookValue: pickYahooNumber(ks.bookValue),
+    };
 
     const priceTargetHistory: YahooPriceTargetRow[] = [];
     for (const row of result.upgradeDowngradeHistory?.history ?? []) {
@@ -818,28 +966,10 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
           typeof target === "number" && Number.isFinite(target) && target > 0 ? target : undefined,
       });
     }
+    stats.priceTargetHistory = priceTargetHistory;
 
-    if (
-      pegRatio == null &&
-      shortPercentOfFloat == null &&
-      shortRatio == null &&
-      targetMeanPrice == null &&
-      !priceTargetHistory.length
-    ) {
-      continue;
-    }
-
-    return {
-      pegRatio,
-      shortPercentOfFloat,
-      shortRatio,
-      targetMeanPrice,
-      targetMedianPrice,
-      targetHighPrice,
-      targetLowPrice,
-      numberOfAnalystOpinions,
-      priceTargetHistory,
-    };
+    if (!yahooStatsHasFundamentals(stats)) continue;
+    return stats;
   }
 
   return null;
