@@ -34,7 +34,8 @@ export function formatShares(value: number): string {
 
 export function formatPnlArrow(value: number): string {
   const arrow = value >= 0 ? "▲" : "▼";
-  return `${arrow} ${Math.abs(value).toFixed(2)}%`;
+  // no-break space: mũi tên không được rớt xuống dòng riêng khi cột hẹp
+  return `${arrow} ${Math.abs(value).toFixed(2)}%`;
 }
 
 export function formatDate(date: string): string {
@@ -43,6 +44,21 @@ export function formatDate(date: string): string {
     month: "2-digit",
     year: "numeric",
   }).format(new Date(date));
+}
+
+/** Mốc thời gian làm mới giá — ngày một mình vô nghĩa khi refresh mỗi 5 phút. */
+export function formatDateTime(date: string): string {
+  const d = new Date(date);
+  const time = new Intl.DateTimeFormat("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  return sameDay ? time : `${time} ${formatDate(date)}`;
 }
 
 /** Trục chart: MM/YYYY */

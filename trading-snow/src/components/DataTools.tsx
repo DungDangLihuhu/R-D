@@ -2,10 +2,10 @@
 
 import { useRef } from "react";
 import { Plus } from "lucide-react";
-import { useApp } from "@/context/AppContext";
+import { useAppActions } from "@/context/AppContext";
 
 export function DataTools() {
-  const { addPortfolio } = useApp();
+  const { addPortfolio } = useAppActions();
   const nameRef = useRef<HTMLInputElement>(null);
 
   const create = () => {

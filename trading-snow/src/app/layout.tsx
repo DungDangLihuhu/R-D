@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   description: "Web app thống kê trading kiểu Snowball",
 };
 
-const themeInitScript = `(function(){try{var t=localStorage.getItem('trading-snow-theme');if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.dataset.theme='dark';}else{document.documentElement.classList.remove('dark');document.documentElement.dataset.theme='light';}}catch(e){}})();`;
+const themeInitScript = `(function(){try{var t=localStorage.getItem('trading-snow-theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}var d=document.documentElement;d.classList.toggle('dark',t==='dark');d.dataset.theme=t;}catch(e){}})();`;
 
 export default function RootLayout({
   children,

@@ -2,7 +2,7 @@
 
 import { RefreshCw } from "lucide-react";
 import { useApp } from "@/context/AppContext";
-import { formatDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 
 export function PriceRefresh({ compact }: { compact?: boolean }) {
   const { state, stats, priceLoading, quoteUnresolved, refreshPrices } = useApp();
@@ -10,7 +10,7 @@ export function PriceRefresh({ compact }: { compact?: boolean }) {
   if (stats.allHoldings.length === 0) return null;
 
   const updated = state.pricesUpdatedAt
-    ? formatDate(state.pricesUpdatedAt)
+    ? formatDateTime(state.pricesUpdatedAt)
     : "Chưa cập nhật";
 
   return (

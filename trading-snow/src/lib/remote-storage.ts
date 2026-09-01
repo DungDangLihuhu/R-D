@@ -28,15 +28,15 @@ export function setClientWriteKey(key: string): void {
   localStorage.setItem(WRITE_KEY_STORAGE, key.trim());
 }
 
-export async function checkCloudConfigured(): Promise<boolean> {
-  try {
-    const res = await fetch("/api/data?check=1");
-    if (!res.ok) return false;
-    const data = await res.json();
-    return Boolean(data.configured);
-  } catch {
-    return false;
-  }
+/** Cấu hình server không đổi trong một phiên — chỉ hỏi một lần cho mọi caller. */
+let configuredCheck: Promise<boolean> | null = null;
+
+export function checkCloudConfigured(): Promise<boolean> {
+  configuredCheck ??= fetch("/api/data?check=1")
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => Boolean(data?.configured))
+    .catch(() => false);
+  return configuredCheck;
 }
 
 export async function loadRemoteState(

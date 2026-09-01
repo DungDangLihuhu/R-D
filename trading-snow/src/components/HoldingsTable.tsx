@@ -111,7 +111,7 @@ function HoldingRow({
           onChange={(e) => onPriceInput(e.target.value)}
           onBlur={onSavePrice}
           onKeyDown={(e) => e.key === "Enter" && onSavePrice()}
-          className={`mt-0.5 w-full max-w-[8.5rem] rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[11px] tabular-nums ${text}`}
+          className={`mt-0.5 w-full max-w-[8.5rem] rounded border border-gray-300 bg-app-surface px-1.5 py-0.5 text-[11px] tabular-nums ${text}`}
         />
       );
     }
@@ -136,7 +136,7 @@ function HoldingRow({
       className={`rounded-lg p-1.5 transition-colors ${
         hidden
           ? "text-amber-600 hover:bg-amber-50"
-          : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          : "text-gray-400 hover:bg-app-tint hover:text-gray-600"
       }`}
     >
       {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -225,7 +225,7 @@ function HoldingRow({
         )}
       </div>
 
-      <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:items-center md:gap-3">
+      <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_2.25rem] md:items-center md:gap-3">
         <Link
           href={`/stock/${encodeURIComponent(holding.symbol)}`}
           className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
@@ -316,7 +316,7 @@ export function HoldingsTable() {
         </div>
       )}
 
-      <div className="app-table-head hidden px-4 py-2.5 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto] md:gap-3">
+      <div className="app-table-head hidden px-4 py-2.5 md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_2.25rem] md:gap-3">
         <span>Vị thế</span>
         <span className="text-right">Số lượng</span>
         <span className="text-right">Giá vốn</span>

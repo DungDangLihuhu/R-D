@@ -41,7 +41,7 @@ export function ClosedTradesTable({
           return (
             <div
               key={`${t.date}-${t.symbol}-${i}`}
-              className="rounded-lg border border-gray-200 bg-white p-3 text-sm"
+              className="rounded-lg border border-gray-200 bg-app-surface p-3 text-sm"
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <SymbolIdentity

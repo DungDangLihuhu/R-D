@@ -99,6 +99,7 @@ function HitLevels({
               <td className="py-0.5 pr-3 text-app-text">{formatMoney(hit.entryPrice, currency)}</td>
               <td className={`py-0.5 ${stopClass(hit.entryPrice, hit.stop)}`}>
                 {hit.stop != null && hit.stop > 0 ? formatMoney(hit.stop, currency) : "—"}
+                {hit.stop != null && hit.stop >= hit.entryPrice ? " (lỗi mốc)" : ""}
               </td>
             </tr>
           ))}
@@ -186,7 +187,7 @@ function SignalsResults({
     <>
       <PageHeader
         title="Tín hiệu"
-        description={`Mã trong danh mục có giá thị trường trong ±${bandPct}% giá nên vào Wyckoff (trang Phân tích, khung 1H/4H/1D/1W). Long có cắt lỗ ≥ giá vào hoặc giá đã thủng stop không hiện. Phân phối / tránh long không hiện. Kịch bản có điều kiện, không phải khuyến nghị mua.`}
+        description={`Mã trong danh mục đang có giá thị trường trong ±${bandPct}% quanh giá vào Wyckoff.`}
         actions={
           <button
             type="button"
@@ -202,7 +203,19 @@ function SignalsResults({
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <details className="text-xs text-app-muted">
+        <summary className="cursor-pointer text-app-muted marker:content-['']">
+          Cách lọc tín hiệu ▾
+        </summary>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>Quét bốn khung 1H / 4H / 1D / 1W, lấy mốc Wyckoff của trang Phân tích.</li>
+          <li>Bỏ qua lệnh long có cắt lỗ ≥ giá vào, hoặc giá đã thủng cắt lỗ.</li>
+          <li>Bỏ qua giai đoạn phân phối và các mốc được đánh dấu tránh long.</li>
+          <li>Đây là kịch bản có điều kiện, không phải khuyến nghị mua.</li>
+        </ul>
+      </details>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Mã đang quét" value={String(scanned)} />
         <StatCard
           label="Đang trong vùng mua"
@@ -257,25 +270,17 @@ function SignalsResults({
                     </p>
                     <p className="text-xs leading-relaxed text-app-muted">{best.reason}</p>
                   </div>
+                  {/* Giá vào và cắt lỗ đã nằm trong bảng bên trái — ở đây chỉ
+                      tóm tắt vị trí giá hiện tại so với mốc. */}
                   <div className="shrink-0 text-left sm:text-right">
                     <p className="text-xs text-app-muted">Giá thị trường</p>
                     <p className="text-lg font-semibold tabular-nums">
                       {formatMoney(signal.marketPrice, currency)}
                     </p>
-                    <p className="mt-2 text-xs text-app-muted">Giá vào {best.entryLabel}</p>
-                    <p className="text-sm font-semibold tabular-nums">
-                      {formatMoney(best.entryPrice, currency)}
-                    </p>
                     <p className={`mt-1 text-xs font-semibold tabular-nums ${distTone(best.distPct)}`}>
-                      {formatPercent(best.distPct)} so với giá vào
+                      {formatPercent(best.distPct)} so với {best.entryLabel}
                     </p>
-                    {best.stop != null && best.stop > 0 && (
-                      <p className={`mt-1 text-xs tabular-nums ${stopClass(best.entryPrice, best.stop)}`}>
-                        Cắt lỗ {formatMoney(best.stop, currency)}
-                        {best.stop >= best.entryPrice ? " (lỗi mốc)" : ""}
-                      </p>
-                    )}
-                    <p className="mt-1 text-xs text-app-muted">
+                    <p className="mt-2 text-xs text-app-muted">
                       Tin cậy {best.confidenceLabel} · {best.confidence}/100
                     </p>
                   </div>

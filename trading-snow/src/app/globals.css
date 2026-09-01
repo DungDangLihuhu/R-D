@@ -5,23 +5,46 @@
 @theme inline {
   --color-app-bg: var(--app-bg);
   --color-app-surface: var(--app-surface);
+  --color-app-tint: var(--tone-gray-50);
   --color-app-border: var(--app-border);
   --color-app-text: var(--app-text);
+  --color-app-secondary: var(--app-text-secondary);
   --color-app-muted: var(--app-text-muted);
+  --color-app-faint: var(--app-text-subtle);
   --color-brand: #0284c7;
   --color-brand-hover: #0369a1;
+
+  /* Thang xám chạy qua token: utility Tailwind tự đổi theo theme, kể cả khi
+     đi kèm opacity (`/60`) hay biến thể (`hover:`) — thứ mà cách ghi đè
+     bằng tên class trước đây không làm được. */
+  --color-gray-50: var(--tone-gray-50);
+  --color-gray-100: var(--tone-gray-100);
+  --color-gray-200: var(--tone-gray-200);
+  --color-gray-300: var(--tone-gray-300);
+  --color-gray-400: var(--tone-gray-400);
+  --color-gray-500: var(--tone-gray-500);
+  --color-gray-600: var(--tone-gray-600);
+  --color-gray-700: var(--tone-gray-700);
+  --color-gray-800: var(--tone-gray-800);
+  --color-gray-900: var(--tone-gray-900);
+  --color-slate-200: var(--tone-slate-200);
+  --color-slate-300: var(--tone-slate-300);
+  --color-slate-400: var(--tone-slate-400);
+  --color-slate-600: var(--tone-slate-600);
+  --color-slate-700: var(--tone-slate-700);
+  --color-slate-800: var(--tone-slate-800);
 }
 
 :root {
   --app-bg: #e8eef5;
   --app-surface: #ffffff;
-  --app-surface-glass: rgba(255, 255, 255, 0.8);
+  --app-surface-glass: rgba(255, 255, 255, 0.92);
   --app-border: #d8e2ec;
   --app-border-glass: rgba(255, 255, 255, 0.7);
   --app-text: #0f172a;
-  --app-text-muted: #64748b;
-  --app-text-subtle: #94a3b8;
   --app-text-secondary: #334155;
+  --app-text-muted: #586374;
+  --app-text-subtle: #94a3b8;
   --app-header-bg: rgba(255, 255, 255, 0.75);
   --app-header-border: rgba(255, 255, 255, 0.5);
   --app-input-bg: rgba(255, 255, 255, 0.9);
@@ -49,19 +72,38 @@
   --alert-warning-text: #78350f;
   --row-hover: rgba(14, 165, 233, 0.05);
   --empty-icon-bg: linear-gradient(135deg, #e0f2fe, #f0f9ff);
+
+  --tone-gray-50: #f9fafb;
+  --tone-gray-100: #f3f4f6;
+  --tone-gray-200: #e5e7eb;
+  --tone-gray-300: #d1d5db;
+  --tone-gray-400: #9ca3af;
+  --tone-gray-500: #6b7280;
+  --tone-gray-600: #4b5563;
+  --tone-gray-700: #374151;
+  --tone-gray-800: #1f2937;
+  --tone-gray-900: #111827;
+  --tone-slate-200: #e2e8f0;
+  --tone-slate-300: #cbd5e1;
+  --tone-slate-400: #94a3b8;
+  --tone-slate-600: #475569;
+  --tone-slate-700: #334155;
+  --tone-slate-800: #1e293b;
+
   color-scheme: light;
 }
 
 .dark {
   --app-bg: #0b1120;
   --app-surface: #1e293b;
-  --app-surface-glass: rgba(30, 41, 59, 0.85);
+  --app-surface-glass: rgba(30, 41, 59, 0.94);
   --app-border: #334155;
   --app-border-glass: rgba(51, 65, 85, 0.8);
+  /* Thang 4 bậc thật sự — trước đây cả 4 đều gần trắng nên mọi chữ nặng ngang nhau. */
   --app-text: #f8fafc;
-  --app-text-muted: #e8eef5;
-  --app-text-subtle: #d4dee9;
-  --app-text-secondary: #f8fafc;
+  --app-text-secondary: #cbd5e1;
+  --app-text-muted: #9aa8bb;
+  --app-text-subtle: #8595a9;
   --app-header-bg: rgba(15, 23, 42, 0.85);
   --app-header-border: rgba(51, 65, 85, 0.6);
   --app-input-bg: rgba(30, 41, 59, 0.9);
@@ -87,6 +129,23 @@
   --alert-warning-text: #fcd34d;
   --row-hover: rgba(14, 165, 233, 0.1);
   --empty-icon-bg: linear-gradient(135deg, #0c4a6e, #164e63);
+
+  --tone-gray-50: rgba(51, 65, 85, 0.55);
+  --tone-gray-100: var(--app-border);
+  --tone-gray-200: var(--app-border);
+  --tone-gray-300: var(--app-border);
+  --tone-gray-400: var(--app-text-subtle);
+  --tone-gray-500: var(--app-text-muted);
+  --tone-gray-600: var(--app-text-muted);
+  --tone-gray-700: var(--app-text-secondary);
+  --tone-gray-800: #334155;
+  --tone-gray-900: var(--app-text);
+  --tone-slate-200: var(--app-text-secondary);
+  --tone-slate-300: var(--app-text-secondary);
+  --tone-slate-400: var(--app-text-muted);
+  --tone-slate-600: var(--app-border);
+  --tone-slate-700: var(--app-border);
+  --tone-slate-800: rgba(51, 65, 85, 0.55);
 
   color-scheme: dark;
 }
@@ -122,6 +181,8 @@ button:not(:disabled) {
       radial-gradient(ellipse 80% 40% at 50% 100%, var(--mesh-3), transparent 55%);
   }
 
+  /* Chỉ header còn backdrop-blur — nội dung cuộn phía dưới nó. Card/input/table
+     nằm trên nền tĩnh nên blur không đổi gì về hình mà tốn hàng chục lớp compositing. */
   .app-header {
     @apply sticky top-0 z-50 shadow-sm backdrop-blur-xl;
     background: var(--app-header-bg);
@@ -137,8 +198,34 @@ button:not(:disabled) {
       0 4px 24px -8px rgba(0, 0, 0, 0.4);
   }
 
+  /* Mép mờ báo cho biết thanh nav còn cuộn được sang phải. */
+  .app-nav-scroller {
+    position: relative;
+  }
+
+  .app-nav-scroller::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 2.5rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    background: linear-gradient(
+      to right,
+      transparent,
+      color-mix(in srgb, var(--app-header-bg) 92%, transparent)
+    );
+  }
+
+  .app-nav-scroller[data-overflow="true"]::after {
+    opacity: 1;
+  }
+
   .app-card {
-    @apply relative overflow-hidden rounded-xl p-4 backdrop-blur-md transition-shadow duration-300;
+    @apply relative overflow-hidden rounded-xl p-4 transition-shadow duration-300;
     border: 1px solid var(--app-border-glass);
     background: var(--app-surface-glass);
     box-shadow: var(--shadow-glow-card);
@@ -209,7 +296,7 @@ button:not(:disabled) {
   }
 
   .app-btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm backdrop-blur-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
     border: 1px solid var(--app-border-glass);
     background: var(--app-input-bg);
     color: var(--app-text);
@@ -245,8 +332,27 @@ button:not(:disabled) {
     background: rgba(136, 19, 55, 0.42);
   }
 
+  /* Xóa một dòng: icon im lặng, chỉ đỏ lên khi hover/focus — thao tác phá hủy
+     không nên là thứ nổi nhất trong bảng. */
+  .app-btn-danger-ghost {
+    @apply inline-flex items-center justify-center rounded-lg border border-transparent bg-transparent transition-colors duration-150;
+    color: var(--app-text-subtle);
+  }
+
+  .app-btn-danger-ghost:hover,
+  .app-btn-danger-ghost:focus-visible {
+    color: #e11d48;
+    background: rgba(255, 241, 242, 0.9);
+  }
+
+  .dark .app-btn-danger-ghost:hover,
+  .dark .app-btn-danger-ghost:focus-visible {
+    color: #fda4af;
+    background: rgba(136, 19, 55, 0.35);
+  }
+
   .app-input {
-    @apply rounded-lg px-3 py-2 text-sm backdrop-blur-sm transition-all duration-200 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200/60;
+    @apply rounded-lg px-3 py-2 text-sm transition-all duration-200 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200/60;
     border: 1px solid var(--app-border);
     background: var(--app-input-bg);
     color: var(--app-text);
@@ -272,7 +378,7 @@ button:not(:disabled) {
   }
 
   .app-table-wrap {
-    @apply relative overflow-hidden rounded-xl backdrop-blur-md;
+    @apply relative overflow-hidden rounded-xl;
     border: 1px solid var(--app-border-glass);
     background: var(--app-surface-glass);
     box-shadow: var(--shadow-glow-card);
@@ -419,7 +525,7 @@ button:not(:disabled) {
   }
 
   .app-skeleton {
-    @apply animate-pulse rounded-xl backdrop-blur-sm;
+    @apply animate-pulse rounded-xl;
     border: 1px solid var(--app-border-glass);
     background: var(--app-surface-glass);
   }
@@ -444,74 +550,51 @@ button:not(:disabled) {
   }
 }
 
-/* Dark mode overrides for hardcoded Tailwind utilities in legacy components */
-.dark .text-gray-300,
-.dark .text-slate-300 {
-  color: var(--app-text-secondary);
-}
-
-.dark .text-gray-400,
-.dark .text-slate-400 {
-  color: var(--app-text-muted);
-}
-
-.dark .text-gray-500,
-.dark .text-gray-600,
-.dark .text-slate-500,
-.dark .text-slate-600 {
-  color: var(--app-text-muted);
-}
-
-.dark .text-gray-700,
-.dark .text-slate-700 {
-  color: var(--app-text-secondary);
-}
-
-.dark .text-gray-800,
-.dark .text-gray-900,
-.dark .text-slate-800,
-.dark .text-slate-900 {
-  color: var(--app-text);
-}
-
-.dark .hover\:text-gray-600:hover,
-.dark .hover\:text-gray-700:hover,
-.dark .hover\:text-gray-900:hover,
-.dark .hover\:text-slate-600:hover {
-  color: var(--app-text);
-}
-
-.dark .placeholder\:text-gray-400::placeholder {
-  color: var(--app-text-subtle);
-}
-
+/* Màu ngữ nghĩa (lãi/lỗ/cảnh báo): cùng một bậc màu vừa làm chữ, vừa làm nền,
+   vừa làm viền với sắc độ dark khác nhau, nên không gộp được vào token như
+   thang xám ở trên — giữ ghi đè tường minh cho từng vai trò. */
 .dark .text-sky-600,
 .dark .text-sky-700 {
   color: #38bdf8;
-}
-
-.dark .text-emerald-600 {
-  color: #34d399;
-}
-
-.dark .text-rose-600 {
-  color: #fb7185;
-}
-
-.dark .text-emerald-900 {
-  color: #6ee7b7;
-}
-
-.dark .text-rose-900 {
-  color: #fda4af;
 }
 
 .dark .text-sky-800 {
   color: #7dd3fc;
 }
 
+.dark .text-sky-900 {
+  color: #e0f2fe;
+}
+
+.dark .text-emerald-600 {
+  color: #34d399;
+}
+
+.dark .text-emerald-700,
+.dark .text-emerald-800 {
+  color: #6ee7b7;
+}
+
+.dark .text-emerald-900 {
+  color: #6ee7b7;
+}
+
+.dark .text-rose-600 {
+  color: #fb7185;
+}
+
+.dark .text-rose-700,
+.dark .text-rose-800 {
+  color: #fda4af;
+}
+
+.dark .text-rose-900 {
+  color: #fda4af;
+}
+
 .dark .text-violet-600,
-.dark .text-violet-700 {
+.dark .text-violet-700,
+.dark .text-violet-900 {
   color: #c4b5fd;
 }
 
@@ -519,6 +602,10 @@ button:not(:disabled) {
 .dark .text-amber-700,
 .dark .text-amber-800 {
   color: #fcd34d;
+}
+
+.dark .text-amber-900 {
+  color: #fde68a;
 }
 
 .dark .hover\:bg-sky-50:hover,
@@ -530,40 +617,14 @@ button:not(:disabled) {
   background-color: rgba(120, 53, 15, 0.35);
 }
 
-.dark .bg-amber-50 {
-  background-color: rgba(120, 53, 15, 0.28);
+.dark .bg-amber-50,
+.dark .bg-amber-50\/40,
+.dark .bg-amber-50\/60 {
+  background-color: rgba(120, 53, 15, 0.3);
 }
 
 .dark .bg-sky-50 {
   background-color: rgba(12, 74, 110, 0.45);
-}
-
-.dark .border-amber-100,
-.dark .border-amber-200 {
-  border-color: rgba(180, 83, 9, 0.45);
-}
-
-.dark .border-sky-200 {
-  border-color: rgba(14, 165, 233, 0.35);
-}
-
-.dark .text-sky-900 {
-  color: #e0f2fe;
-}
-
-.dark .text-amber-900 {
-  color: #fde68a;
-}
-
-.dark .text-violet-900 {
-  color: #c4b5fd;
-}
-
-.dark .border-gray-50,
-.dark .border-gray-200,
-.dark .border-gray-300,
-.dark .border-slate-200 {
-  border-color: var(--app-border);
 }
 
 .dark .bg-sky-100 {
@@ -572,42 +633,6 @@ button:not(:disabled) {
 
 .dark .bg-violet-100 {
   background-color: rgba(139, 92, 246, 0.28);
-}
-
-.dark .bg-white {
-  background-color: var(--app-surface);
-}
-
-.dark .bg-white\/90 {
-  background-color: var(--app-surface-glass);
-}
-
-.dark .bg-gray-50,
-.dark .bg-gray-50\/80,
-.dark .bg-gray-100 {
-  background-color: rgba(51, 65, 85, 0.55);
-}
-
-.dark .bg-amber-50\/40,
-.dark .bg-amber-50\/60 {
-  background-color: rgba(120, 53, 15, 0.35);
-}
-
-.dark .hover\:bg-gray-50:hover,
-.dark .hover\:bg-gray-100:hover,
-.dark .hover\:bg-gray-200:hover,
-.dark .hover\:bg-slate-100:hover {
-  background-color: rgba(51, 65, 85, 0.55);
-}
-
-.dark .text-emerald-700,
-.dark .text-emerald-800 {
-  color: #6ee7b7;
-}
-
-.dark .text-rose-700,
-.dark .text-rose-800 {
-  color: #fda4af;
 }
 
 .dark .bg-emerald-50,
@@ -632,17 +657,19 @@ button:not(:disabled) {
   background-color: rgba(136, 19, 55, 0.4);
 }
 
-.dark .border-gray-100,
+.dark .hover\:bg-rose-50:hover,
+.dark .hover\:bg-rose-100:hover {
+  background-color: rgba(136, 19, 55, 0.45);
+}
+
+.dark .border-amber-100,
+.dark .border-amber-200,
+.dark .border-sky-200,
 .dark .border-emerald-100,
 .dark .border-emerald-200,
 .dark .border-rose-100,
 .dark .border-rose-200 {
   border-color: var(--app-border);
-}
-
-.dark .hover\:bg-rose-50:hover,
-.dark .hover\:bg-rose-100:hover {
-  background-color: rgba(136, 19, 55, 0.45);
 }
 
 .dark select option {

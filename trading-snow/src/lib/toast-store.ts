@@ -1,5 +1,10 @@
 export type ToastVariant = "success" | "error" | "warning" | "info" | "event";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface ToastItem {
   id: string;
   title: string;
@@ -7,6 +12,7 @@ export interface ToastItem {
   variant: ToastVariant;
   duration: number;
   href?: string;
+  action?: ToastAction;
 }
 
 type Listener = (toasts: ToastItem[]) => void;
@@ -35,6 +41,7 @@ export interface ToastOptions {
   variant?: ToastVariant;
   duration?: number;
   href?: string;
+  action?: ToastAction;
 }
 
 export function showToast(opts: ToastOptions) {
@@ -45,6 +52,7 @@ export function showToast(opts: ToastOptions) {
     variant: opts.variant ?? "info",
     duration: opts.duration ?? (opts.variant === "event" ? 8000 : 5000),
     href: opts.href,
+    action: opts.action,
   };
   toasts = [...toasts.slice(-4), item];
   emit();

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { tickerLabel } from "@/lib/symbol-profile";
-import { fetchProfileLogo, getCachedLogo } from "@/lib/profile-client-cache";
+import { fetchProfileLogo } from "@/lib/profile-client-cache";
 
 export { tickerLabel };
 
@@ -32,33 +32,30 @@ export function SymbolAvatar({
   logo?: string;
   size?: "sm" | "md";
 }) {
-  const [imgSrc, setImgSrc] = useState<string | null>(logo ?? null);
+  const [fetched, setFetched] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [seenSymbol, setSeenSymbol] = useState(symbol);
 
-  useEffect(() => {
-    setImgSrc(logo ?? null);
+  if (seenSymbol !== symbol) {
+    setSeenSymbol(symbol);
+    setFetched(null);
     setFailed(false);
-  }, [logo, symbol]);
+  }
 
   useEffect(() => {
-    if (symbol === "CASH" || imgSrc || failed) return;
-
-    const cached = getCachedLogo(symbol);
-    if (cached) {
-      setImgSrc(cached);
-      return;
-    }
+    if (symbol === "CASH" || logo) return;
 
     let cancelled = false;
-    fetchProfileLogo(symbol).then((logo) => {
-      if (!cancelled && logo) setImgSrc(logo);
+    void fetchProfileLogo(symbol).then((found) => {
+      if (!cancelled && found) setFetched(found);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [symbol, imgSrc, failed]);
+  }, [symbol, logo]);
 
+  const src = failed ? null : (logo ?? fetched);
   const label = tickerLabel(symbol);
   const sizeClass =
     label.length > 4
@@ -67,13 +64,20 @@ export function SymbolAvatar({
         ? "text-[10px]"
         : "text-xs";
   const boxClass = size === "sm" ? "h-8 w-8" : "h-9 w-9";
+  const px = size === "sm" ? 32 : 36;
 
-  if (imgSrc && !failed) {
+  if (src) {
     return (
+      // eslint-disable-next-line @next/next/no-img-element -- logo đến từ CDN tùy provider, không cố định host cho next/image
       <img
-        src={imgSrc}
+        src={src}
         alt=""
-        className={`${boxClass} shrink-0 rounded-lg border border-gray-100 bg-white object-contain p-0.5`}
+        width={px}
+        height={px}
+        loading="lazy"
+        decoding="async"
+        className={`${boxClass} shrink-0 rounded-lg border object-contain p-0.5`}
+        style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}
         onError={() => setFailed(true)}
       />
     );

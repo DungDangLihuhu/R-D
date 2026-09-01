@@ -4,15 +4,16 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
   applyTheme,
-  resolveTheme,
+  getThemeServerSnapshot,
+  getThemeSnapshot,
   saveTheme,
+  subscribeTheme,
   type Theme,
 } from "@/lib/theme";
 
@@ -25,26 +26,20 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => resolveTheme());
-
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    getThemeSnapshot,
+    getThemeServerSnapshot
+  );
 
   const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
     saveTheme(next);
     applyTheme(next);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      saveTheme(next);
-      applyTheme(next);
-      return next;
-    });
-  }, []);
+    setTheme(getThemeSnapshot() === "dark" ? "light" : "dark");
+  }, [setTheme]);
 
   const value = useMemo(
     () => ({ theme, setTheme, toggleTheme }),

@@ -33,7 +33,7 @@ export function SnowballStatCard({
 
       <div className="mt-3 min-w-0 space-y-1.5">
         <p
-          className={`min-w-0 text-xl font-semibold leading-tight tabular-nums text-gray-900 sm:text-2xl ${valueClassName ?? ""}`}
+          className={`min-w-0 text-[clamp(0.95rem,4.4vw,1.5rem)] font-semibold leading-tight tabular-nums text-gray-900 ${valueClassName ?? ""}`}
         >
           {value}
         </p>
