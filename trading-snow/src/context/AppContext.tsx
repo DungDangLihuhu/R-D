@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { v4 as uuid } from "uuid";
 import { computePortfolioStats } from "@/lib/stats";
 import { hiddenSymbolSet } from "@/lib/hidden-symbols";
 import {
@@ -50,6 +49,7 @@ interface AppContextValue {
     skipped: number;
   };
   deleteTransaction: (id: string) => void;
+  restoreTransaction: (tx: Transaction) => void;
   setMarketPrice: (symbol: string, price: number) => void;
   setMarketPrices: (prices: Record<string, number>) => void;
   refreshPrices: (symbols?: string[], opts?: { notify?: boolean }) => Promise<void>;
@@ -59,7 +59,26 @@ interface AppContextValue {
   clearPortfolioTransactions: (portfolioId: string) => void;
 }
 
+type AppActions = Pick<
+  AppContextValue,
+  | "setActivePortfolioId"
+  | "toggleHiddenSymbol"
+  | "addPortfolio"
+  | "addTransaction"
+  | "importTransactions"
+  | "deleteTransaction"
+  | "restoreTransaction"
+  | "setMarketPrice"
+  | "setMarketPrices"
+  | "refreshPrices"
+  | "exportData"
+  | "importData"
+  | "clearAllTransactions"
+  | "clearPortfolioTransactions"
+>;
+
 const AppContext = createContext<AppContextValue | null>(null);
+const AppActionsContext = createContext<AppActions | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(defaultState);
@@ -133,7 +152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!hydrated || !cloudConfigured) return;
 
     const poll = async () => {
-      if (isPolling.current) return;
+      if (isPolling.current || document.hidden) return;
       isPolling.current = true;
       try {
         const remote = await loadRemoteState(syncRoom);
@@ -146,8 +165,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Tab ẩn thì ngừng poll (đỡ pin + request Upstash), quay lại thì đồng bộ ngay.
+    const onVisible = () => {
+      if (!document.hidden) void poll();
+    };
+
     const id = setInterval(poll, 20_000);
-    return () => clearInterval(id);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [hydrated, cloudConfigured, syncRoom]);
 
   const hiddenSymbols = useMemo(
@@ -178,29 +206,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return syms.length ? syms : stats.holdings.map((h) => h.symbol);
   }, [stats.allHoldings, stats.holdings]);
 
+  // Đọc giá trị mới nhất qua ref để các action giữ nguyên identity giữa các render.
+  // Action chỉ chạy từ event handler nên luôn đọc được giá trị đã commit.
+  const stateRef = useRef(state);
+  const activePortfolioIdRef = useRef(activePortfolioId);
+  const holdingSymbolsRef = useRef(holdingSymbols);
+
+  useEffect(() => {
+    stateRef.current = state;
+    activePortfolioIdRef.current = activePortfolioId;
+    holdingSymbolsRef.current = holdingSymbols;
+  });
+
   const isSymbolHidden = useCallback(
     (symbol: string) => hiddenSymbols.has(symbol.toUpperCase()),
     [hiddenSymbols]
   );
 
-  const toggleHiddenSymbol = useCallback(
-    (symbol: string) => {
-      const sym = symbol.toUpperCase();
-      setState((s) => {
-        const map = { ...(s.hiddenSymbols ?? {}) };
-        const list = [...(map[activePortfolioId] ?? [])];
-        const idx = list.indexOf(sym);
-        if (idx >= 0) list.splice(idx, 1);
-        else list.push(sym);
-        map[activePortfolioId] = list;
-        return { ...s, hiddenSymbols: map };
-      });
-    },
-    [activePortfolioId]
-  );
+  const toggleHiddenSymbol = useCallback((symbol: string) => {
+    const sym = symbol.toUpperCase();
+    const portfolioId = activePortfolioIdRef.current;
+    setState((s) => {
+      const map = { ...(s.hiddenSymbols ?? {}) };
+      const list = [...(map[portfolioId] ?? [])];
+      const idx = list.indexOf(sym);
+      if (idx >= 0) list.splice(idx, 1);
+      else list.push(sym);
+      map[portfolioId] = list;
+      return { ...s, hiddenSymbols: map };
+    });
+  }, []);
 
   const refreshPrices = useCallback(async (symbols?: string[], opts?: { notify?: boolean }) => {
-    const list = symbols ?? holdingSymbols;
+    const list = symbols ?? holdingSymbolsRef.current;
     if (list.length === 0) return;
 
     setPriceLoading(true);
@@ -306,7 +344,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setPriceLoading(false);
     }
-  }, [holdingSymbols]);
+  }, []);
 
   useEffect(() => {
     if (!hydrated || holdingSymbols.length === 0) return;
@@ -325,7 +363,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
-      id: uuid(),
+      id: crypto.randomUUID(),
       name,
       currency,
       createdAt: new Date().toISOString(),
@@ -337,7 +375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
     setState((s) => ({
       ...s,
-      transactions: [...s.transactions, { ...tx, id: uuid() }],
+      transactions: [...s.transactions, { ...tx, id: crypto.randomUUID() }],
     }));
   }, []);
 
@@ -357,7 +395,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...s,
         transactions: [
           ...s.transactions,
-          ...newTxs.map((tx) => ({ ...tx, id: uuid() })),
+          ...newTxs.map((tx) => ({ ...tx, id: crypto.randomUUID() })),
         ],
       };
     });
@@ -370,6 +408,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...s,
       transactions: s.transactions.filter((t) => t.id !== id),
     }));
+  }, []);
+
+  /** Hoàn tác xóa: giữ nguyên id cũ để không nhân bản khi bấm hai lần. */
+  const restoreTransaction = useCallback((tx: Transaction) => {
+    setState((s) =>
+      s.transactions.some((t) => t.id === tx.id)
+        ? s
+        : { ...s, transactions: [...s.transactions, tx] }
+    );
   }, []);
 
   const setMarketPrice = useCallback((symbol: string, price: number) => {
@@ -387,7 +434,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const exportData = useCallback(() => JSON.stringify(state, null, 2), [state]);
+  const exportData = useCallback(
+    () => JSON.stringify(stateRef.current, null, 2),
+    []
+  );
 
   const importData = useCallback((json: string) => {
     try {
@@ -418,23 +468,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const contextValue = useMemo<AppContextValue>(
+  // Identity ổn định: component chỉ cần action sẽ không re-render khi state đổi.
+  const actions = useMemo<AppActions>(
     () => ({
-      state,
-      activePortfolioId,
       setActivePortfolioId,
-      stats,
-      hiddenSymbols,
-      isSymbolHidden,
       toggleHiddenSymbol,
-      priceLoading,
-      quoteUnresolved,
-      cloudConfigured,
-      syncRoom,
       addPortfolio,
       addTransaction,
       importTransactions,
       deleteTransaction,
+      restoreTransaction,
       setMarketPrice,
       setMarketPrices,
       refreshPrices,
@@ -444,20 +487,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearPortfolioTransactions,
     }),
     [
-      state,
-      activePortfolioId,
-      stats,
-      hiddenSymbols,
-      isSymbolHidden,
       toggleHiddenSymbol,
-      priceLoading,
-      quoteUnresolved,
-      cloudConfigured,
-      syncRoom,
       addPortfolio,
       addTransaction,
       importTransactions,
       deleteTransaction,
+      restoreTransaction,
       setMarketPrice,
       setMarketPrices,
       refreshPrices,
@@ -468,15 +503,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  const contextValue = useMemo<AppContextValue>(
+    () => ({
+      ...actions,
+      state,
+      activePortfolioId,
+      stats,
+      hiddenSymbols,
+      isSymbolHidden,
+      priceLoading,
+      quoteUnresolved,
+      cloudConfigured,
+      syncRoom,
+    }),
+    [
+      actions,
+      state,
+      activePortfolioId,
+      stats,
+      hiddenSymbols,
+      isSymbolHidden,
+      priceLoading,
+      quoteUnresolved,
+      cloudConfigured,
+      syncRoom,
+    ]
+  );
+
   return (
-    <AppContext.Provider value={contextValue}>
-      {children}
-    </AppContext.Provider>
+    <AppActionsContext.Provider value={actions}>
+      <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>
+    </AppActionsContext.Provider>
   );
 }
 
 export function useApp() {
   const ctx = useContext(AppContext);
   if (!ctx) throw new Error("useApp must be used within AppProvider");
+  return ctx;
+}
+
+/** Chỉ các action — không re-render khi state đổi. */
+export function useAppActions() {
+  const ctx = useContext(AppActionsContext);
+  if (!ctx) throw new Error("useAppActions must be used within AppProvider");
   return ctx;
 }

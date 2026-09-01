@@ -35,18 +35,19 @@ export function Pagination({
           ← Trước
         </button>
         <label className="flex items-center gap-1.5 text-sm text-app-muted">
-          <span className="sr-only">Chọn trang</span>
-          <select
+          <span className="sr-only">Số trang</span>
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
             value={page}
-            onChange={(e) => onPageChange(Number(e.target.value))}
-            className="app-input px-2 py-1.5"
-          >
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <option key={p} value={p}>
-                Trang {p}/{totalPages}
-              </option>
-            ))}
-          </select>
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if (Number.isFinite(next) && next >= 1) onPageChange(next);
+            }}
+            className="app-input w-16 px-2 py-1.5 text-center tabular-nums"
+          />
+          <span className="tabular-nums">/ {totalPages}</span>
         </label>
         <button
           type="button"

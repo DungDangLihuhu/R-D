@@ -80,37 +80,37 @@ export function BenchmarkComparison({
 
   const portfolioInput = useMemo<PortfolioBenchmarkInput>(
     () => ({ transactions, marketPrices }),
-    [portfolioSignature, transactions, marketPrices]
-  );
-
-  const curveSignature = useMemo(
-    () =>
-      curve.length > 0
-        ? `${curve[0].date}:${curve[curve.length - 1].date}:${curve.length}`
-        : "",
-    [curve]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chủ ý: chỉ tạo lại khi nội dung đổi, không phải khi identity mảng đổi
+    [portfolioSignature]
   );
 
   const hasData = hasBenchmarkTradingData(transactions);
   const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    if (!hasData) return;
+  const benchmarkWindow = useMemo(
+    () =>
+      hasData ? resolveBenchmarkWindow(curve, range, undefined, transactions) : null,
+    [hasData, curve, range, transactions]
+  );
 
-    const benchmarkWindow = resolveBenchmarkWindow(
-      curve,
-      range,
-      undefined,
-      transactions
-    );
+  // Bật loading ngay trong render thay vì trong thân effect — setState trong
+  // effect làm React render thêm một vòng thừa trước khi hiện spinner.
+  const requestKey = benchmarkWindow
+    ? `${benchmarkWindow.from}|${benchmarkWindow.to}|${range}|${portfolioSignature}`
+    : "";
+  const [pendingKey, setPendingKey] = useState("");
+  if (requestKey && pendingKey !== requestKey) {
+    setPendingKey(requestKey);
+    setLoading(true);
+    setError(null);
+  }
+
+  useEffect(() => {
     if (!benchmarkWindow) return;
 
     const fetchFrom = extendBenchmarkFrom(benchmarkWindow.from);
     const url = `/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`;
     const requestId = ++requestIdRef.current;
-
-    setLoading(true);
-    setError(null);
 
     fetchJson<{ points?: { date: string; close: number }[]; error?: string }>(
       url,
@@ -141,7 +141,7 @@ export function BenchmarkComparison({
       .finally(() => {
         if (requestIdRef.current === requestId) setLoading(false);
       });
-  }, [curve, curveSignature, range, portfolioInput, portfolioSignature, hasData, transactions]);
+  }, [benchmarkWindow, range, portfolioInput]);
 
   if (!hasData) {
     return (

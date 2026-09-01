@@ -12,12 +12,13 @@ export default function StockPickerPage() {
   const router = useRouter();
   const { stats } = useApp();
   const symbols = [...new Set(stats.holdings.map((h) => h.symbol))];
+  const firstSymbol = symbols[0] ?? "";
 
   useEffect(() => {
-    if (symbols.length > 0) {
-      router.replace(`/stock/${encodeURIComponent(symbols[0])}`);
+    if (firstSymbol) {
+      router.replace(`/stock/${encodeURIComponent(firstSymbol)}`);
     }
-  }, [symbols.join(","), router]);
+  }, [firstSymbol, router]);
 
   if (symbols.length > 0) {
     return (

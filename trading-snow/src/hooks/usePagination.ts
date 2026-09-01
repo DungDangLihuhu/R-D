@@ -5,18 +5,15 @@ import { useMemo, useState } from "react";
 export const PAGE_SIZE = 20;
 
 export function usePagination<T>(items: T[], resetDeps: unknown[] = []) {
-  const resetKey = useMemo(
-    () => [items.length, ...resetDeps].map(String).join("\0"),
-    [items.length, resetDeps]
-  );
-  const [pageByKey, setPageByKey] = useState<Record<string, number>>({});
+  const resetKey = resetDeps.map(String).join("\0");
+  const [saved, setSaved] = useState({ key: resetKey, page: 1 });
 
   const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const page = Math.min(pageByKey[resetKey] ?? 1, totalPages);
+  // Đổi bộ lọc / portfolio thì về trang 1; xóa một hàng thì giữ nguyên trang.
+  const page = Math.min(saved.key === resetKey ? saved.page : 1, totalPages);
 
   const setPage = (next: number) => {
-    const safe = Math.min(Math.max(1, next), totalPages);
-    setPageByKey((prev) => ({ ...prev, [resetKey]: safe }));
+    setSaved({ key: resetKey, page: Math.min(Math.max(1, next), totalPages) });
   };
 
   const pageItems = useMemo(

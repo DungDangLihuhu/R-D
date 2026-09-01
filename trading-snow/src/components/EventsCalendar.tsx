@@ -350,7 +350,7 @@ function EventCard({
   qtyMap: Map<string, number>;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+    <div className="rounded-lg border border-gray-200 bg-app-surface p-3 text-sm">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <p className="font-medium">{event.symbol ?? event.title}</p>

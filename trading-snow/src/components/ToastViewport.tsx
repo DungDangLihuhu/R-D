@@ -65,6 +65,18 @@ function ToastCard({ item }: { item: ToastItem }) {
             {item.description}
           </p>
         )}
+        {item.action && (
+          <button
+            type="button"
+            onClick={() => {
+              item.action?.onClick();
+              dismissToast(item.id);
+            }}
+            className="mt-1.5 text-xs font-semibold text-sky-600 underline underline-offset-2 hover:text-sky-700"
+          >
+            {item.action.label}
+          </button>
+        )}
       </div>
       <button
         type="button"

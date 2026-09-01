@@ -366,8 +366,7 @@ function buildInsiderRows(
     position?: string;
   }[],
   yahooInsider: YahooInsiderData | null,
-  executives: { name: string; position?: string }[],
-  quotePrice: number
+  executives: { name: string; position?: string }[]
 ): InsiderRow[] {
   if (finnhubData.length > 0) {
     return finnhubData.slice(0, 12).map((t) => {
@@ -875,8 +874,7 @@ export async function fetchStockAnalysisExtra(
   const insiderTransactions = buildInsiderRows(
     insiderRes?.data ?? [],
     yahooInsider,
-    executiveRes?.executive ?? [],
-    core.price
+    executiveRes?.executive ?? []
   );
 
   const peerList = (peers ?? []).filter((p) => p !== upper).slice(0, 8);
@@ -951,14 +949,18 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
   const m = mergeAnalysisMetrics(finnhubMetrics, yahooMetrics);
   const profileFilled = profileFromYahoo(yahooStats, profile);
 
-  if (!hasFiniteMetrics(finnhubMetrics) && hasFiniteMetrics(yahooMetrics)) {
+  // Không cấu hình key thì Finnhub im lặng với mọi mã — đừng đổ lỗi cho cổ phiếu.
+  const finnhubEnabled = Boolean(getFinnhubApiKey());
+  const providerNames = finnhubEnabled ? "Finnhub và Yahoo" : "Yahoo";
+
+  if (!hasFiniteMetrics(m)) {
+    note = upper.includes(".")
+      ? `Chưa lấy được chỉ số cơ bản cho mã ngoài Mỹ này từ ${providerNames}.`
+      : `Không lấy được chỉ số cơ bản cho mã này từ ${providerNames}.`;
+  } else if (finnhubEnabled && !hasFiniteMetrics(finnhubMetrics)) {
     note =
       "Finnhub không có chỉ số cơ bản cho mã này (OTC, niêm yết mới, hoặc ngoài US thường gặp). Đang dùng Yahoo Finance.";
-  } else if (!hasFiniteMetrics(m)) {
-    note = upper.includes(".")
-      ? "Finnhub free chủ yếu hỗ trợ mã US — chỉ số cơ bản có thể thiếu với mã ngoài Mỹ. Yahoo cũng không trả số liệu."
-      : "Không lấy được chỉ số cơ bản từ Finnhub và Yahoo cho mã này.";
-  } else if (!profile && upper.includes(".")) {
+  } else if (finnhubEnabled && !profile && upper.includes(".")) {
     note =
       "Finnhub free chủ yếu hỗ trợ mã US — hồ sơ công ty có thể thiếu với mã .PA.";
   }

@@ -27,6 +27,14 @@ import {
 
 const QUOTE_REFRESH_MS = 5 * 60 * 1000;
 
+/** Trang phân tích dài hơn 4.000px — mục lục dính giúp nhảy thẳng tới phần cần xem. */
+const SECTION_LINKS = [
+  { id: "tong-quan", label: "Tổng quan" },
+  { id: "bieu-do", label: "Biểu đồ" },
+  { id: "chi-so", label: "Chỉ số" },
+  { id: "noi-bo", label: "Nội bộ" },
+];
+
 type LiveQuote = {
   price: number;
   change: number;
@@ -98,7 +106,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   const { stats, state } = useApp();
   const [data, setData] = useState<StockAnalysis | null>(null);
   const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
-  const [extraLoading, setExtraLoading] = useState(false);
+  const [extraDone, setExtraDone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(symbol);
@@ -116,7 +124,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     setShowSuggestions(false);
     setActiveIndex(-1);
     setLiveQuote(null);
+    setData(null);
+    setError(null);
+    setLoading(true);
   }
+
+  const dataSymbol = data?.symbol;
+  const extraLoading = Boolean(dataSymbol) && extraDone !== dataSymbol;
 
   const holdings = useMemo(
     () => [...new Set(stats.holdings.map((h) => h.symbol))],
@@ -134,9 +148,24 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, []);
 
+  const portfolioSuggestions = useMemo<SearchSuggestion[]>(
+    () =>
+      holdings.map((s) => ({
+        symbol: s,
+        name: "Trong danh mục",
+        source: "portfolio" as const,
+      })),
+    [holdings]
+  );
+
+  // Ô tìm kiếm khi chưa gõ gì sẽ liệt kê mã trong danh mục — thay cho dropdown
+  // riêng trước đây làm đúng cùng một việc.
+  const trimmedQuery = searchQuery.trim().toUpperCase();
+  const browsingHoldings = !trimmedQuery || trimmedQuery === symbol.toUpperCase();
+
   useEffect(() => {
     const q = searchQuery.trim();
-    if (!showSuggestions || q.length < 1) return;
+    if (!showSuggestions || browsingHoldings || q.length < 1) return;
 
     const portfolioMatches: SearchSuggestion[] = holdings
       .filter((s) => s.includes(q.toUpperCase()))
@@ -172,10 +201,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
       globalThis.clearTimeout(timer);
       controller?.abort();
     };
-  }, [searchQuery, showSuggestions, holdings]);
+  }, [searchQuery, showSuggestions, holdings, browsingHoldings]);
 
-  const visibleSuggestions =
-    showSuggestions && searchQuery.trim().length >= 1 ? suggestions : [];
+  const visibleSuggestions = !showSuggestions
+    ? []
+    : browsingHoldings
+      ? portfolioSuggestions
+      : suggestions;
 
   const goToSymbol = (next: string) => {
     const sym = next.trim().toUpperCase();
@@ -189,9 +221,6 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     if (!symbol) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setData(null);
 
     fetchJson<StockAnalysis>(`/api/stock/${encodeURIComponent(symbol)}`, {
       ttlMs: 5 * 60 * 1000,
@@ -213,12 +242,11 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   }, [symbol]);
 
   useEffect(() => {
-    if (!symbol || !data) return;
+    if (!dataSymbol) return;
 
     let cancelled = false;
-    setExtraLoading(true);
 
-    fetchJson<StockAnalysisExtra>(`/api/stock/${encodeURIComponent(symbol)}/extra`, {
+    fetchJson<StockAnalysisExtra>(`/api/stock/${encodeURIComponent(dataSymbol)}/extra`, {
       ttlMs: 10 * 60 * 1000,
     })
       .then((extra) => {
@@ -237,13 +265,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
       })
       .catch(() => {})
       .finally(() => {
-        if (!cancelled) setExtraLoading(false);
+        if (!cancelled) setExtraDone(dataSymbol);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [symbol, data?.symbol]);
+  }, [dataSymbol]);
 
   useEffect(() => {
     if (!symbol) return;
@@ -340,7 +368,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   setShowSuggestions(true);
                 }}
                 onFocus={() => {
-                  if (searchQuery.trim()) setShowSuggestions(true);
+                  setShowSuggestions(true);
                 }}
                 onKeyDown={(e) => {
                   if (!showSuggestions || !visibleSuggestions.length) return;
@@ -362,11 +390,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                 autoComplete="off"
                 role="combobox"
                 aria-expanded={showSuggestions && visibleSuggestions.length > 0}
+                aria-controls="stock-search-suggestions"
                 aria-autocomplete="list"
               />
-              {showSuggestions && searchQuery.trim() && (
+              {showSuggestions && (searchQuery.trim() || visibleSuggestions.length > 0) && (
                 <ul
-                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+                  id="stock-search-suggestions"
+                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-app-surface py-1 shadow-lg"
                   role="listbox"
                 >
                   {searchLoading && visibleSuggestions.length === 0 && (
@@ -412,24 +442,6 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
               Xem
             </button>
           </form>
-          {holdings.length > 0 && (
-            <select
-              value={holdings.includes(symbol) ? symbol : ""}
-              onChange={(e) => {
-                if (e.target.value) {
-                  router.push(`/stock/${encodeURIComponent(e.target.value)}`);
-                }
-              }}
-              className="app-input"
-            >
-              <option value="">Mã trong danh mục…</option>
-              {holdings.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          )}
         </div>
       </div>
 
@@ -447,14 +459,34 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
       {data && !loading && (
         <>
-          <div className="app-card p-4 sm:p-6">
+          <nav
+            aria-label="Mục trong trang"
+            className="sticky top-[7.5rem] z-30 -mx-1 flex gap-1 overflow-x-auto px-1 py-1 scrollbar-none"
+          >
+            {SECTION_LINKS.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                className="app-btn-secondary shrink-0 px-2.5 py-1 text-xs"
+              >
+                {s.label}
+              </a>
+            ))}
+          </nav>
+
+          <div id="tong-quan" className="app-card scroll-mt-40 p-4 sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
                 {data.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- logo đến từ CDN tùy provider, không cố định host cho next/image
                   <img
                     src={data.logo}
                     alt=""
-                    className="h-12 w-12 rounded-lg border border-gray-100 object-contain bg-white p-0.5"
+                    width={48}
+                    height={48}
+                    loading="lazy"
+                    decoding="async"
+                    className="h-12 w-12 rounded-lg border border-gray-100 object-contain bg-app-surface p-0.5"
                   />
                 ) : (
                   <SymbolAvatar symbol={data.symbol} logo={data.logo} />
@@ -466,7 +498,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                       {data.symbol}
                     </p>
                     {data.exchange && (
-                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                      <span className="rounded bg-app-tint px-2 py-0.5 text-xs text-gray-600">
                         {data.exchange}
                       </span>
                     )}
@@ -527,7 +559,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             )}
           </div>
 
-          <div className="space-y-3">
+          <div id="bieu-do" className="scroll-mt-40 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="app-segmented">
                 <button
@@ -568,7 +600,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
           </div>
 
           {data.sections.length > 0 ? (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div id="chi-so" className="grid scroll-mt-40 gap-4 lg:grid-cols-2">
               {data.sections.map((section) => (
                 <MetricSection key={section.id} title={section.title} metrics={section.metrics} />
               ))}
@@ -668,7 +700,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                           Mua {bullish}/{total} · Giữ {r.hold} · Bán {r.sell + r.strongSell}
                         </span>
                       </div>
-                      <div className="flex h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div className="flex h-2 overflow-hidden rounded-full bg-app-tint">
                         <div
                           className="bg-emerald-500"
                           style={{ width: `${(bullish / total) * 100}%` }}
@@ -690,7 +722,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
           )}
 
           {data.insiderTransactions.length > 0 && (
-            <Section title="Giao dịch nội bộ">
+            <Section title="Giao dịch nội bộ" id="noi-bo">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-left text-gray-500">
@@ -901,12 +933,14 @@ function AssessmentSignals({ assessment }: { assessment: StockAssessment }) {
 function Section({
   title,
   children,
+  id,
 }: {
   title: string;
   children: React.ReactNode;
+  id?: string;
 }) {
   return (
-    <div className="app-card p-4">
+    <div id={id} className="app-card scroll-mt-40 p-4">
       <h3 className="mb-3 font-semibold">{title}</h3>
       {children}
     </div>
@@ -927,7 +961,7 @@ function MetricSection({
         {metrics.map((m) => (
           <div
             key={m.label}
-            className="flex items-baseline justify-between gap-2 border-b border-gray-50 py-1.5 text-sm"
+            className="flex items-baseline justify-between gap-2 border-b border-app-border py-1.5 text-sm"
           >
             <dt className="text-gray-500">{m.label}</dt>
             <dd

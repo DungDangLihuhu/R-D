@@ -23,7 +23,7 @@ export default function ClosedTradesPage() {
         description="Tổng lãi/lỗ từ các lệnh bán đã chốt"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           label="Tổng lãi/lỗ đã chốt"
           value={formatMoney(stats.realizedPnl)}

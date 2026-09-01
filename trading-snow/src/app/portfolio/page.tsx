@@ -28,7 +28,7 @@ export default function PortfolioPage() {
           . Cổ phiếu .PA cần Yahoo — Finnhub free không hỗ trợ.
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard
           label="Tổng giá trị"
           value={formatMoney(
@@ -43,6 +43,7 @@ export default function PortfolioPage() {
           label="Lợi nhuận ròng"
           value={formatMoney(stats.totalProfit)}
           trend={stats.totalProfit >= 0 ? "up" : "down"}
+          className="col-span-2 sm:col-span-1"
         />
       </div>
       <HoldingsTable />
