@@ -1034,7 +1034,7 @@ function computeConfidence(
   else if (coverage < 0.6) score -= 15;
 
   if (range.kind === "range") score = Math.min(score, 40);
-  // Monthly "All" is strategic context, never an immediate buy trigger.
+  // Quarterly "All" (3mo candles) is strategic context, never an immediate buy trigger.
   if (timeframe === "all") score = Math.min(score, 65);
   // This is heuristic evidence quality, never a probability or certainty.
   score = Math.max(0, Math.min(90, Math.round(score)));
@@ -1078,7 +1078,7 @@ function buildWarnings(
     warnings.push("Sự kiện xác nhận đã cũ — không tạo giá vào mới");
   }
   if (timeframe === "all") {
-    warnings.push("Khung All dùng nến tháng, chỉ phù hợp bối cảnh dài hạn");
+    warnings.push("Khung All dùng nến quý, chỉ phù hợp bối cảnh dài hạn");
   }
   return warnings;
 }

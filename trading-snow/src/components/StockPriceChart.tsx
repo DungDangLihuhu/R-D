@@ -392,7 +392,7 @@ function PriceLevelsSummary({
           <LegendDot color={CHART_COLORS.targetAnalyst} label="Giá mục tiêu (phân tích)" dashed />
         )}
         {priceLevels.targetFundamental && (
-          <LegendDot color={CHART_COLORS.targetFundamental} label="Giá trị hợp lý (cơ bản)" dashed />
+          <LegendDot color={CHART_COLORS.targetFundamental} label="Giá nếu EPS không tăng" dashed />
         )}
         {priceLevels.support.length > 0 && (
           <LegendDot color={CHART_COLORS.support} label="Hỗ trợ" dashed />
@@ -414,7 +414,7 @@ function PriceLevelsSummary({
         )}
         {priceLevels.targetFundamental && (
           <LevelCard
-            title="Giá trị hợp lý (cơ bản)"
+            title="Giá nếu EPS không tăng"
             price={priceLevels.targetFundamental.price}
             upside={priceLevels.targetFundamental.upsidePercent}
             method={priceLevels.targetFundamental.method}

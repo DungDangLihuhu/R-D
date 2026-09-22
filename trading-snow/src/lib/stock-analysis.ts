@@ -475,24 +475,17 @@ function computePriceLevels(
 
   const epsTtm = metrics.epsTTM;
   const forwardPe = metrics.forwardPE;
-  const peTtm = metrics.peTTM;
 
+  // P/E forward = giá ÷ EPS dự phóng, nên EPS TTM × P/E forward = giá × EPS TTM ÷ EPS
+  // dự phóng: mức giá nếu EPS đứng yên ở hiện tại — không phải giá trị hợp lý độc lập.
+  // (EPS TTM × P/E TTM thì luôn bằng đúng giá hiện tại nên không vẽ.)
   if (epsTtm && forwardPe && epsTtm > 0 && forwardPe > 0) {
     const target = epsTtm * forwardPe;
     if (saneTarget(target)) {
       levels.targetFundamental = {
         price: target,
         upsidePercent: ((target - price) / price) * 100,
-        method: "EPS TTM × P/E Forward",
-      };
-    }
-  } else if (epsTtm && peTtm && epsTtm > 0 && peTtm > 0) {
-    const target = epsTtm * peTtm;
-    if (saneTarget(target)) {
-      levels.targetFundamental = {
-        price: target,
-        upsidePercent: ((target - price) / price) * 100,
-        method: "EPS TTM × P/E TTM",
+        method: "EPS TTM × P/E forward — giá nếu EPS không tăng",
       };
     }
   }
@@ -522,7 +515,7 @@ function computePriceLevels(
       levels.targetAnalyst = {
         price: consensusTarget,
         upsidePercent: ((consensusTarget - price) / price) * 100,
-        method: `Khuyến nghị ${latestRec.period}`,
+        method: `Ước tính từ khuyến nghị ${latestRec.period}`,
       };
     }
   }
@@ -537,14 +530,14 @@ function computePriceLevels(
           levels.targetAnalyst = {
             price: blended,
             upsidePercent: ((blended - price) / price) * 100,
-            method: "Khuyến nghị + EPS dự báo × P/E Forward",
+            method: "Ước tính: khuyến nghị + EPS dự báo × P/E forward",
           };
         }
       } else {
         levels.targetAnalyst = {
           price: implied,
           upsidePercent: ((implied - price) / price) * 100,
-          method: "EPS dự báo (annualized) × P/E Forward",
+          method: "Ước tính: EPS dự báo × 4 × P/E forward",
         };
       }
     }

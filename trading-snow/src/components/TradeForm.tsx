@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { formatShares } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
 import { toYahooSymbol } from "@/lib/symbol";
+import { heldQuantityAt } from "@/lib/trade-display";
 import type { AssetType, TransactionType } from "@/lib/types";
 
 const types: { value: TransactionType; label: string }[] = [
@@ -23,7 +25,7 @@ const assetTypes: { value: AssetType; label: string }[] = [
 ];
 
 export function TradeForm({ onSaved }: { onSaved?: () => void }) {
-  const { activePortfolioId, addTransaction } = useApp();
+  const { state, activePortfolioId, addTransaction } = useApp();
   const [type, setType] = useState<TransactionType>("BUY");
   const [symbol, setSymbol] = useState("");
   const [exchange, setExchange] = useState("");
@@ -35,6 +37,19 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
   const [notes, setNotes] = useState("");
 
   const isCash = type === "DEPOSIT" || type === "WITHDRAW";
+
+  // Cảnh báo (không chặn): bán vượt số đang giữ làm giá vốn phần vượt thành ước đoán.
+  const resolvedSymbol = symbol.trim() ? toYahooSymbol(symbol, exchange || undefined) : "";
+  const heldForSell = useMemo(
+    () =>
+      type === "SELL" && resolvedSymbol
+        ? heldQuantityAt(state.transactions, activePortfolioId, resolvedSymbol, date)
+        : null,
+    [type, resolvedSymbol, state.transactions, activePortfolioId, date]
+  );
+  const sellQuantity = parseFloat(quantity);
+  const oversold =
+    heldForSell != null && Number.isFinite(sellQuantity) && sellQuantity > heldForSell + 1e-9;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,6 +155,12 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
             className="mt-1 w-full app-input"
             required
           />
+          {oversold && (
+            <span className="mt-1 block text-xs text-amber-700">
+              Tới ngày này chỉ đang giữ {formatShares(heldForSell ?? 0)} {resolvedSymbol} — bán{" "}
+              {formatShares(sellQuantity)} sẽ vượt số đang giữ.
+            </span>
+          )}
         </label>
         <label className="block text-sm">
           <span className="app-label">

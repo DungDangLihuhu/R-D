@@ -566,10 +566,6 @@ function nearestAboveLevel(
     .sort((a, b) => a.price - b.price)[0];
 }
 
-function growthToPercent(raw: number): number {
-  return Math.abs(raw) <= 1 ? raw * 100 : raw;
-}
-
 function inPriceBand(value: number, price: number): boolean {
   return value > price * 0.35 && value <= price * 2.8;
 }
@@ -617,8 +613,8 @@ function fundamentalAnchors(
   };
 
   const eps = metrics.epsTTM;
-  const growthRaw = finitePositive(metrics.epsGrowthTTMYoy, metrics.epsGrowth3Y);
-  const growthPct = growthRaw != null ? growthToPercent(growthRaw) : undefined;
+  // Finnhub và yahooStatsToFinnhubMetrics đều trả tăng trưởng theo %, không đoán đơn vị.
+  const growthPct = finitePositive(metrics.epsGrowthTTMYoy, metrics.epsGrowth3Y);
 
   if (eps != null && eps > 0 && growthPct != null && growthPct >= 5) {
     const g = Math.min(growthPct, 40);
