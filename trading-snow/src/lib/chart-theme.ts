@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useTheme } from "@/context/ThemeContext";
 
+/** Recharts cần mã màu cụ thể (không đọc được CSS variable) — giữ khớp với token trong globals.css. */
 export function useChartTheme() {
   const { theme } = useTheme();
 
@@ -10,25 +11,27 @@ export function useChartTheme() {
     () =>
       theme === "dark"
         ? {
-            grid: "#334155",
-            tick: "#cbd5e1",
+            accent: "#8f92f5",
+            grid: "#262a38",
+            tick: "#989eb1",
             tooltip: {
-              background: "#1e293b",
-              border: "1px solid #475569",
-              borderRadius: "10px",
-              color: "#f8fafc",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+              background: "#171923",
+              border: "1px solid #323648",
+              borderRadius: "8px",
+              color: "#f2f3f7",
+              boxShadow: "0 14px 36px -10px rgba(0,0,0,0.7)",
             },
           }
         : {
-            grid: "#e2e8f0",
-            tick: "#64748b",
+            accent: "#5457d7",
+            grid: "#e9ebf0",
+            tick: "#6b7183",
             tooltip: {
               background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: "10px",
-              color: "#0f172a",
-              boxShadow: "0 8px 24px rgba(15,23,42,0.08)",
+              border: "1px solid #e4e6ed",
+              borderRadius: "8px",
+              color: "#14161d",
+              boxShadow: "0 10px 28px -8px rgba(20,22,29,0.16)",
             },
           },
     [theme]

@@ -554,7 +554,7 @@ function WyckoffPanel({
   const w = indicators.wyckoff;
   const phaseColors: Record<string, string> = {
     accumulation: "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800",
-    markup: "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-800",
+    markup: "bg-brand-soft text-brand-ink border-brand-line",
     distribution: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
     markdown: "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800",
     unknown: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600",
@@ -569,7 +569,7 @@ function WyckoffPanel({
       ? "border-emerald-300 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-950/40"
       : entry?.action === "avoid"
         ? "border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/40"
-        : "border-sky-300 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-950/40";
+        : "border-brand-line bg-brand-soft";
   const confidenceClass =
     w.confidence.level === "high"
       ? "text-emerald-600 dark:text-emerald-300"
@@ -707,16 +707,15 @@ function LayerToggle({
   ];
 
   return (
-    <div className="flex rounded-lg border border-gray-200 p-0.5">
+    <div className="app-segmented">
       {items.map(({ key, label }) => (
         <button
           key={key}
           type="button"
+          aria-pressed={layers[key]}
           onClick={() => onChange({ ...layers, [key]: !layers[key] })}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-            layers[key]
-              ? "bg-sky-600 text-white"
-              : "text-gray-600 hover:bg-gray-50"
+          className={`app-segmented-item px-2.5 py-1 ${
+            layers[key] ? "app-segmented-item-active" : ""
           }`}
         >
           {label}
@@ -808,16 +807,15 @@ export function BenDangChart({
           <p className="text-xs text-gray-500">Premium/Discount · Hỗ trợ/Kháng cự · Wyckoff · Volume · RSI</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-gray-200 p-0.5">
+          <div className="app-segmented">
             {TECHNICAL_CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 type="button"
+                aria-pressed={timeframe === tf}
                 onClick={() => setTimeframe(tf)}
-                className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                  timeframe === tf
-                    ? "bg-sky-600 text-white"
-                    : "text-gray-600 hover:bg-gray-50"
+                className={`app-segmented-item px-2 py-1 ${
+                  timeframe === tf ? "app-segmented-item-active" : ""
                 }`}
               >
                 {TIMEFRAME_LABELS[tf]}

@@ -58,7 +58,7 @@ export function SyncPanel() {
             Test:{" "}
             <a
               href="/api/data?check=1"
-              className="text-sky-600 underline"
+              className="text-brand-ink underline"
               target="_blank"
               rel="noreferrer"
             >
@@ -72,16 +72,16 @@ export function SyncPanel() {
   }
 
   return (
-    <div className="app-card shadow-sm">
+    <div className="app-card">
       <div className="flex items-center gap-2">
-        <Cloud className="h-4 w-4 text-sky-600" />
+        <Cloud className="h-4 w-4 text-brand-ink" />
         <h3 className="text-sm font-semibold">Đồng bộ đám mây</h3>
       </div>
 
       <div className="mt-3 space-y-2">
         <p className="text-xs text-gray-500">
           Cùng <strong>mã phòng</strong> → cùng dữ liệu trên mọi thiết bị. Phòng hiện tại:{" "}
-          <code className="text-sky-700">{room}</code>
+          <code className="text-brand-ink">{room}</code>
         </p>
         <div className="flex flex-wrap gap-2">
           <input
@@ -106,7 +106,7 @@ export function SyncPanel() {
             Tải lại
           </button>
         </div>
-        {msg && <p className="text-xs text-sky-600">{msg}</p>}
+        {msg && <p className="text-xs text-brand-ink">{msg}</p>}
       </div>
     </div>
   );

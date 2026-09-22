@@ -240,15 +240,20 @@ export function BenchmarkComparison({
                   label: formatChartMonthYear(p.date),
                 }))}
               >
-                <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
+                <CartesianGrid stroke={chartTheme.grid} vertical={false} />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: chartTheme.tick, fontSize: 11 }}
+                  axisLine={{ stroke: chartTheme.grid }}
+                  tickLine={false}
                   interval="preserveStartEnd"
                   minTickGap={28}
                 />
                 <YAxis
                   tick={{ fill: chartTheme.tick, fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={48}
                   tickFormatter={(v) => formatChartAxisPercent(Number(v))}
                   domain={["auto", "auto"]}
                 />
@@ -274,7 +279,7 @@ export function BenchmarkComparison({
                 <Line
                   type="monotone"
                   dataKey="portfolio"
-                  stroke="#0ea5e9"
+                  stroke={chartTheme.accent}
                   strokeWidth={2}
                   dot={false}
                   name="portfolio"

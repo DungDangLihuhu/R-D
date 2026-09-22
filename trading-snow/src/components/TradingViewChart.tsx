@@ -30,7 +30,7 @@ export function TradingViewChart({
     const copyright = document.createElement("div");
     copyright.className = "tradingview-widget-copyright text-center text-[10px] text-gray-400 py-1";
     copyright.innerHTML =
-      '<a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank" class="text-gray-400 hover:text-sky-600">TradingView</a>';
+      '<a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank" class="text-gray-400 hover:text-brand-ink">TradingView</a>';
     container.appendChild(copyright);
 
     const script = document.createElement("script");

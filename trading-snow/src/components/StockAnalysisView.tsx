@@ -396,7 +396,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
               {showSuggestions && (searchQuery.trim() || visibleSuggestions.length > 0) && (
                 <ul
                   id="stock-search-suggestions"
-                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-app-surface py-1 shadow-lg"
+                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto app-popover rounded-lg py-1"
                   role="listbox"
                 >
                   {searchLoading && visibleSuggestions.length === 0 && (
@@ -410,7 +410,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                       <button
                         type="button"
                         className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
-                          i === activeIndex ? "bg-sky-50 text-sky-900" : "hover:bg-gray-50"
+                          i === activeIndex ? "bg-brand-soft text-app-text" : "hover:bg-gray-50"
                         }`}
                         onMouseEnter={() => setActiveIndex(i)}
                         onClick={() => goToSymbol(s.symbol)}
@@ -539,7 +539,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                       href={data.website}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-sky-600"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-brand-ink"
                     >
                       Website <ExternalLink className="h-3 w-3" />
                     </a>
@@ -799,7 +799,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                         href={n.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-medium text-sky-700 hover:underline"
+                        className="font-medium text-brand-ink hover:underline"
                       >
                         {n.headline}
                       </a>
@@ -823,7 +823,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   <Link
                     key={p}
                     href={`/stock/${p}`}
-                    className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm hover:bg-sky-50 hover:border-sky-200"
+                    className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm hover:bg-brand-soft hover:border-brand-line"
                   >
                     {p}
                   </Link>

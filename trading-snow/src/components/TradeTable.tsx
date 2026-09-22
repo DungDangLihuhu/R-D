@@ -82,7 +82,7 @@ function TradeSummaryCard({
   feeTotal: number;
 }) {
   return (
-    <div className="app-card app-card-static p-4 text-sm">
+    <div className="app-card p-4 text-sm">
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <p className="text-xs text-gray-500">Mua</p>

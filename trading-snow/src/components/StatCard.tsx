@@ -13,13 +13,13 @@ export function StatCard({
 }) {
   const trendColor =
     trend === "up"
-      ? "text-emerald-600 glow-profit"
+      ? "text-emerald-600"
       : trend === "down"
-        ? "text-rose-600 glow-loss"
+        ? "text-rose-600"
         : "text-app-text";
 
   return (
-    <div className={`app-card app-card-static ${className}`}>
+    <div className={`app-card ${className}`}>
       <p className="text-xs font-medium text-app-muted">{label}</p>
       {/* Co giãn theo bề rộng: hai cột trên mobile không đủ chỗ cho số tiền 6 chữ số. */}
       <p

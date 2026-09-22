@@ -2,6 +2,14 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Bo góc: thẻ 10px, nút / ô nhập 6px, phần tử lồng bên trong 4px — nhỏ hơn
+   khung chứa nên các khối lồng nhau (segmented, badge trong nút) đồng tâm. */
+@theme {
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.625rem;
+}
+
 @theme inline {
   --color-app-bg: var(--app-bg);
   --color-app-surface: var(--app-surface);
@@ -11,8 +19,19 @@
   --color-app-secondary: var(--app-text-secondary);
   --color-app-muted: var(--app-text-muted);
   --color-app-faint: var(--app-text-subtle);
-  --color-brand: #0284c7;
-  --color-brand-hover: #0369a1;
+
+  /* Một màu nhấn (chàm) cho trạng thái đang chọn, link và focus. Ngoài nó ra
+     chỉ lãi/lỗ được dùng màu bão hòa, nên con số luôn là thứ nổi nhất. */
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-line: var(--brand-line);
+
+  /* Lãi/lỗ chạy qua token để đổi theo theme; bậc sáng đủ tương phản AA cho
+     chữ 11px trên nền trắng (emerald-600 gốc chỉ đạt 3,8:1). */
+  --color-emerald-600: var(--tone-up);
+  --color-rose-600: var(--tone-down);
 
   /* Thang xám chạy qua token: utility Tailwind tự đổi theo theme, kể cả khi
      đi kèm opacity (`/60`) hay biến thể (`hover:`) — thứ mà cách ghi đè
@@ -36,116 +55,110 @@
 }
 
 :root {
-  --app-bg: #e8eef5;
+  --app-bg: #f3f4f7;
   --app-surface: #ffffff;
-  --app-surface-glass: rgba(255, 255, 255, 0.92);
-  --app-border: #d8e2ec;
-  --app-border-glass: rgba(255, 255, 255, 0.7);
-  --app-text: #0f172a;
-  --app-text-secondary: #334155;
-  --app-text-muted: #586374;
-  --app-text-subtle: #94a3b8;
-  --app-header-bg: rgba(255, 255, 255, 0.75);
-  --app-header-border: rgba(255, 255, 255, 0.5);
-  --app-input-bg: rgba(255, 255, 255, 0.9);
-  --app-nav-hover: rgba(255, 255, 255, 0.8);
-  --app-pill-inactive-bg: rgba(255, 255, 255, 0.7);
-  --gradient-brand: linear-gradient(135deg, #0284c7 0%, #06b6d4 50%, #0891b2 100%);
-  --gradient-brand-soft: linear-gradient(135deg, #e0f2fe 0%, #ecfeff 100%);
-  --gradient-title: linear-gradient(to right, #0f172a, #075985, #0e7490);
-  --shadow-glow-brand: 0 4px 20px -4px rgba(14, 165, 233, 0.45);
-  --shadow-glow-card: 0 8px 32px -8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
-  --mesh-bg: #e8eef5;
-  --mesh-1: rgba(56, 189, 248, 0.18);
-  --mesh-2: rgba(99, 102, 241, 0.1);
-  --mesh-3: rgba(6, 182, 212, 0.08);
-  --card-shine: rgba(56, 189, 248, 0.35);
-  --card-shine-2: rgba(6, 182, 212, 0.35);
-  --icon-sky-bg: linear-gradient(135deg, #e0f2fe, #bae6fd);
-  --icon-sky-text: #0369a1;
-  --icon-emerald-bg: linear-gradient(135deg, #d1fae5, #a7f3d0);
-  --icon-emerald-text: #047857;
-  --icon-violet-bg: linear-gradient(135deg, #ede9fe, #ddd6fe);
-  --icon-violet-text: #6d28d9;
-  --alert-warning-bg: linear-gradient(to right, #fffbeb, #fff7ed);
-  --alert-warning-border: rgba(253, 230, 138, 0.8);
-  --alert-warning-text: #78350f;
-  --row-hover: rgba(14, 165, 233, 0.05);
-  --empty-icon-bg: linear-gradient(135deg, #e0f2fe, #f0f9ff);
+  /* Hai bậc viền: `soft` bao thẻ và chia dòng, `border` cho thứ bấm/nhập được. */
+  --app-border: #d9dce5;
+  --app-border-soft: #e4e6ed;
+  --app-text: #14161d;
+  --app-text-secondary: #3b4152;
+  --app-text-muted: #5a6172;
+  --app-text-subtle: #868c9d;
+  --app-header-bg: rgba(255, 255, 255, 0.88);
+  --app-input-bg: #ffffff;
+  --app-nav-hover: #eceef3;
+  --segment-active-bg: #ffffff;
 
-  --tone-gray-50: #f9fafb;
-  --tone-gray-100: #f3f4f6;
-  --tone-gray-200: #e5e7eb;
-  --tone-gray-300: #d1d5db;
-  --tone-gray-400: #9ca3af;
-  --tone-gray-500: #6b7280;
-  --tone-gray-600: #4b5563;
-  --tone-gray-700: #374151;
-  --tone-gray-800: #1f2937;
-  --tone-gray-900: #111827;
-  --tone-slate-200: #e2e8f0;
-  --tone-slate-300: #cbd5e1;
-  --tone-slate-400: #94a3b8;
-  --tone-slate-600: #475569;
-  --tone-slate-700: #334155;
-  --tone-slate-800: #1e293b;
+  --brand: #5457d7;
+  --brand-hover: #4649c4;
+  --brand-ink: #4447bd;
+  --brand-soft: #eeeefc;
+  --brand-line: #d5d6f6;
+  --brand-ring: rgba(84, 87, 215, 0.24);
+
+  --tone-up: #067a55;
+  --tone-down: #c8354a;
+
+  --shadow-card: 0 1px 2px rgba(20, 22, 29, 0.04);
+  --shadow-control: 0 1px 1px rgba(20, 22, 29, 0.04);
+  --shadow-pop: 0 10px 28px -8px rgba(20, 22, 29, 0.16), 0 2px 6px -2px rgba(20, 22, 29, 0.06);
+  --row-hover: rgba(84, 87, 215, 0.04);
+
+  --alert-warning-bg: #fffaeb;
+  --alert-warning-border: #f1dca6;
+  --alert-warning-text: #7a4a0c;
+
+  --tone-gray-50: #f7f8fa;
+  --tone-gray-100: #eef0f4;
+  --tone-gray-200: #e4e6ed;
+  --tone-gray-300: #d3d6df;
+  --tone-gray-400: #9aa0af;
+  --tone-gray-500: #5f6677;
+  --tone-gray-600: #4b5163;
+  --tone-gray-700: #3b4152;
+  --tone-gray-800: #272b37;
+  --tone-gray-900: #14161d;
+  --tone-slate-200: #e4e6ed;
+  --tone-slate-300: #d3d6df;
+  --tone-slate-400: #9aa0af;
+  --tone-slate-600: #4b5163;
+  --tone-slate-700: #3b4152;
+  --tone-slate-800: #272b37;
 
   color-scheme: light;
 }
 
 .dark {
-  --app-bg: #0b1120;
-  --app-surface: #1e293b;
-  --app-surface-glass: rgba(30, 41, 59, 0.94);
-  --app-border: #334155;
-  --app-border-glass: rgba(51, 65, 85, 0.8);
+  --app-bg: #0e0f16;
+  --app-surface: #171923;
+  --app-border: #323648;
+  --app-border-soft: #262a38;
   /* Thang 4 bậc thật sự — trước đây cả 4 đều gần trắng nên mọi chữ nặng ngang nhau. */
-  --app-text: #f8fafc;
-  --app-text-secondary: #cbd5e1;
-  --app-text-muted: #9aa8bb;
-  --app-text-subtle: #8595a9;
-  --app-header-bg: rgba(15, 23, 42, 0.85);
-  --app-header-border: rgba(51, 65, 85, 0.6);
-  --app-input-bg: rgba(30, 41, 59, 0.9);
-  --app-nav-hover: rgba(51, 65, 85, 0.6);
-  --app-pill-inactive-bg: rgba(30, 41, 59, 0.8);
-  --gradient-brand-soft: linear-gradient(135deg, #0c4a6e 0%, #164e63 100%);
-  --gradient-title: linear-gradient(to right, #f1f5f9, #7dd3fc, #22d3ee);
-  --shadow-glow-card: 0 8px 32px -8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(148, 163, 184, 0.08) inset;
-  --mesh-bg: #0b1120;
-  --mesh-1: rgba(14, 165, 233, 0.12);
-  --mesh-2: rgba(99, 102, 241, 0.08);
-  --mesh-3: rgba(6, 182, 212, 0.06);
-  --card-shine: rgba(56, 189, 248, 0.2);
-  --card-shine-2: rgba(6, 182, 212, 0.2);
-  --icon-sky-bg: linear-gradient(135deg, #0c4a6e, #164e63);
-  --icon-sky-text: #7dd3fc;
-  --icon-emerald-bg: linear-gradient(135deg, #064e3b, #065f46);
-  --icon-emerald-text: #6ee7b7;
-  --icon-violet-bg: linear-gradient(135deg, #4c1d95, #5b21b6);
-  --icon-violet-text: #c4b5fd;
-  --alert-warning-bg: linear-gradient(to right, rgba(120, 53, 15, 0.35), rgba(146, 64, 14, 0.25));
-  --alert-warning-border: rgba(180, 83, 9, 0.5);
-  --alert-warning-text: #fcd34d;
-  --row-hover: rgba(14, 165, 233, 0.1);
-  --empty-icon-bg: linear-gradient(135deg, #0c4a6e, #164e63);
+  --app-text: #f2f3f7;
+  --app-text-secondary: #c4c9d6;
+  --app-text-muted: #989eb1;
+  --app-text-subtle: #7d8397;
+  --app-header-bg: rgba(14, 15, 22, 0.86);
+  --app-input-bg: #12141c;
+  --app-nav-hover: #1f2230;
+  --segment-active-bg: #2c3041;
 
-  --tone-gray-50: rgba(51, 65, 85, 0.55);
-  --tone-gray-100: var(--app-border);
+  /* Nền nút đậm hơn chữ link: chữ trắng trên #5b5ee6 đạt 5:1, trên màu link thì không. */
+  --brand: #5b5ee6;
+  --brand-hover: #6a6df0;
+  --brand-ink: #a9abf9;
+  --brand-soft: #1f2040;
+  --brand-line: #363a72;
+  --brand-ring: rgba(143, 146, 245, 0.32);
+
+  --tone-up: #3fcf8e;
+  --tone-down: #ff7a8a;
+
+  --shadow-card: none;
+  --shadow-control: none;
+  --shadow-pop: 0 14px 36px -10px rgba(0, 0, 0, 0.7);
+  --row-hover: rgba(143, 146, 245, 0.06);
+
+  --alert-warning-bg: rgba(120, 72, 10, 0.22);
+  --alert-warning-border: rgba(217, 150, 40, 0.35);
+  --alert-warning-text: #f7cf6a;
+
+  --tone-gray-50: #1c1f2b;
+  --tone-gray-100: var(--app-border-soft);
   --tone-gray-200: var(--app-border);
   --tone-gray-300: var(--app-border);
   --tone-gray-400: var(--app-text-subtle);
   --tone-gray-500: var(--app-text-muted);
   --tone-gray-600: var(--app-text-muted);
   --tone-gray-700: var(--app-text-secondary);
-  --tone-gray-800: #334155;
+  --tone-gray-800: #2c3041;
   --tone-gray-900: var(--app-text);
   --tone-slate-200: var(--app-text-secondary);
   --tone-slate-300: var(--app-text-secondary);
   --tone-slate-400: var(--app-text-muted);
   --tone-slate-600: var(--app-border);
   --tone-slate-700: var(--app-border);
-  --tone-slate-800: rgba(51, 65, 85, 0.55);
+  --tone-slate-800: #1c1f2b;
 
   color-scheme: dark;
 }
@@ -159,6 +172,8 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   background-color: var(--app-bg);
   color: var(--app-text);
+  /* Ứng dụng toàn con số: chữ số cùng bề rộng để cột tiền thẳng hàng. */
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -168,34 +183,23 @@ button:not(:disabled) {
 }
 
 ::selection {
-  background: rgba(14, 165, 233, 0.22);
+  background: color-mix(in srgb, var(--brand) 20%, transparent);
   color: inherit;
 }
 
+/* Một kiểu viền focus cho mọi thứ bấm được khi dùng bàn phím (specificity 0,
+   component nào cần kiểu riêng vẫn ghi đè được). */
+:where(a, button, summary, select, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 @layer components {
-  .app-bg-mesh {
-    background-color: var(--mesh-bg);
-    background-image:
-      radial-gradient(ellipse 90% 60% at 0% -20%, var(--mesh-1), transparent 55%),
-      radial-gradient(ellipse 70% 50% at 100% 0%, var(--mesh-2), transparent 50%),
-      radial-gradient(ellipse 80% 40% at 50% 100%, var(--mesh-3), transparent 55%);
-  }
-
-  /* Chỉ header còn backdrop-blur — nội dung cuộn phía dưới nó. Card/input/table
-     nằm trên nền tĩnh nên blur không đổi gì về hình mà tốn hàng chục lớp compositing. */
+  /* Header vẫn giữ blur vì nội dung cuộn bên dưới nó; mọi lớp khác nền đặc. */
   .app-header {
-    @apply sticky top-0 z-50 shadow-sm backdrop-blur-xl;
+    @apply sticky top-0 z-50 backdrop-blur-md;
     background: var(--app-header-bg);
-    border-bottom: 1px solid var(--app-header-border);
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.05) inset,
-      0 4px 24px -8px rgba(14, 165, 233, 0.12);
-  }
-
-  .dark .app-header {
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.04) inset,
-      0 4px 24px -8px rgba(0, 0, 0, 0.4);
+    border-bottom: 1px solid var(--app-border-soft);
   }
 
   /* Mép mờ báo cho biết thanh nav còn cuộn được sang phải. */
@@ -224,59 +228,41 @@ button:not(:disabled) {
     opacity: 1;
   }
 
+  .app-nav-active {
+    color: #fff;
+    background: var(--brand);
+  }
+
+  .app-nav-inactive {
+    color: var(--app-text-muted);
+    @apply transition-colors duration-150;
+  }
+
+  .app-nav-inactive:hover {
+    background: var(--app-nav-hover);
+    color: var(--app-text);
+  }
+
+  .app-logo {
+    @apply flex h-8 w-8 items-center justify-center rounded-lg text-white;
+    background: var(--brand);
+  }
+
   .app-card {
-    @apply relative overflow-hidden rounded-xl p-4 transition-shadow duration-300;
-    border: 1px solid var(--app-border-glass);
-    background: var(--app-surface-glass);
-    box-shadow: var(--shadow-glow-card);
-  }
-
-  .app-card:hover {
-    box-shadow:
-      0 12px 40px -12px rgba(14, 165, 233, 0.15),
-      0 0 0 1px rgba(255, 255, 255, 0.07) inset;
-  }
-
-  .dark .app-card:hover {
-    box-shadow:
-      0 12px 40px -12px rgba(14, 165, 233, 0.2),
-      0 0 0 1px rgba(148, 163, 184, 0.1) inset;
-  }
-
-  .app-card-static:hover {
-    box-shadow: var(--shadow-glow-card);
-  }
-
-  .app-card::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      var(--card-shine),
-      var(--card-shine-2),
-      transparent
-    );
-    pointer-events: none;
+    @apply relative overflow-hidden rounded-xl p-4;
+    border: 1px solid var(--app-border-soft);
+    background: var(--app-surface);
+    box-shadow: var(--shadow-card);
   }
 
   .app-card-section-title {
     color: var(--app-text);
-    @apply mb-4 font-semibold;
-  }
-
-  .app-brand-text {
-    background: var(--gradient-title);
-    @apply bg-clip-text text-transparent;
+    @apply mb-4 text-[15px] font-semibold tracking-tight;
   }
 
   .app-page-title {
-    background: var(--gradient-title);
-    @apply bg-clip-text text-2xl font-bold tracking-tight text-transparent;
+    color: var(--app-text);
+    @apply text-2xl font-semibold tracking-tight;
   }
 
   .app-page-desc {
@@ -285,51 +271,36 @@ button:not(:disabled) {
   }
 
   .app-btn-primary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
-    background: var(--gradient-brand);
-    box-shadow: var(--shadow-glow-brand);
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--brand);
+    box-shadow: var(--shadow-control);
   }
 
   .app-btn-primary:hover:not(:disabled) {
-    filter: brightness(1.05);
-    box-shadow: 0 6px 24px -4px rgba(14, 165, 233, 0.55);
+    background: var(--brand-hover);
   }
 
   .app-btn-secondary {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
-    border: 1px solid var(--app-border-glass);
-    background: var(--app-input-bg);
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
     color: var(--app-text);
-    box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.06);
-  }
-
-  .dark .app-btn-secondary {
-    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-control);
   }
 
   .app-btn-secondary:hover:not(:disabled) {
-    filter: brightness(1.03);
-    box-shadow: 0 4px 12px -4px rgba(14, 165, 233, 0.12);
+    background: var(--tone-gray-50);
   }
 
   .app-btn-danger {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium text-rose-600 transition-colors duration-200;
-    border-color: rgba(244, 63, 94, 0.28);
-    background: rgba(255, 241, 242, 0.9);
-  }
-
-  .dark .app-btn-danger {
-    color: #fda4af;
-    border-color: rgba(244, 63, 94, 0.35);
-    background: rgba(136, 19, 55, 0.28);
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors duration-150;
+    color: var(--tone-down);
+    border-color: color-mix(in srgb, var(--tone-down) 30%, transparent);
+    background: color-mix(in srgb, var(--tone-down) 6%, var(--app-surface));
   }
 
   .app-btn-danger:hover:not(:disabled) {
-    background: rgba(255, 228, 230, 1);
-  }
-
-  .dark .app-btn-danger:hover:not(:disabled) {
-    background: rgba(136, 19, 55, 0.42);
+    background: color-mix(in srgb, var(--tone-down) 12%, var(--app-surface));
   }
 
   /* Xóa một dòng: icon im lặng, chỉ đỏ lên khi hover/focus — thao tác phá hủy
@@ -341,22 +312,24 @@ button:not(:disabled) {
 
   .app-btn-danger-ghost:hover,
   .app-btn-danger-ghost:focus-visible {
-    color: #e11d48;
-    background: rgba(255, 241, 242, 0.9);
-  }
-
-  .dark .app-btn-danger-ghost:hover,
-  .dark .app-btn-danger-ghost:focus-visible {
-    color: #fda4af;
-    background: rgba(136, 19, 55, 0.35);
+    color: var(--tone-down);
+    background: color-mix(in srgb, var(--tone-down) 10%, transparent);
   }
 
   .app-input {
-    @apply rounded-lg px-3 py-2 text-sm transition-all duration-200 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-200/60;
+    @apply rounded-lg px-3 py-2 text-sm transition-[border-color,box-shadow] duration-150 focus:outline-none;
     border: 1px solid var(--app-border);
     background: var(--app-input-bg);
     color: var(--app-text);
-    box-shadow: 0 1px 4px -1px rgba(15, 23, 42, 0.05);
+  }
+
+  .app-input::placeholder {
+    color: var(--app-text-subtle);
+  }
+
+  .app-input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-ring);
   }
 
   .app-label {
@@ -367,49 +340,31 @@ button:not(:disabled) {
   .app-empty {
     @apply flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center;
     border-color: var(--app-border);
-    background: color-mix(in srgb, var(--app-surface-glass) 70%, transparent);
+    background: color-mix(in srgb, var(--app-surface) 60%, transparent);
   }
 
   .app-empty-icon {
-    @apply mb-3 flex h-11 w-11 items-center justify-center rounded-xl;
-    color: var(--icon-sky-text);
-    background: var(--empty-icon-bg);
-    box-shadow: 0 0 16px rgba(56, 189, 248, 0.22);
+    @apply mb-3 flex h-10 w-10 items-center justify-center rounded-lg;
+    color: var(--brand-ink);
+    background: var(--brand-soft);
   }
 
   .app-table-wrap {
     @apply relative overflow-hidden rounded-xl;
-    border: 1px solid var(--app-border-glass);
-    background: var(--app-surface-glass);
-    box-shadow: var(--shadow-glow-card);
-  }
-
-  .app-table-wrap::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      var(--card-shine),
-      var(--card-shine-2),
-      transparent
-    );
-    pointer-events: none;
+    border: 1px solid var(--app-border-soft);
+    background: var(--app-surface);
+    box-shadow: var(--shadow-card);
   }
 
   .app-table-head {
     color: var(--app-text-muted);
-    background: color-mix(in srgb, var(--app-surface) 55%, transparent);
+    background: var(--tone-gray-50);
     @apply border-b text-xs font-medium;
-    border-color: var(--app-border);
+    border-color: var(--app-border-soft);
   }
 
   .app-row {
-    @apply transition-colors;
+    @apply transition-colors duration-100;
   }
 
   .app-row:hover {
@@ -418,8 +373,8 @@ button:not(:disabled) {
 
   .app-segmented {
     @apply inline-flex rounded-lg p-0.5;
-    background: color-mix(in srgb, var(--app-surface) 70%, #94a3b8 12%);
-    border: 1px solid var(--app-border-glass);
+    background: var(--tone-gray-100);
+    border: 1px solid var(--app-border-soft);
   }
 
   .app-segmented-item {
@@ -432,76 +387,34 @@ button:not(:disabled) {
   }
 
   .app-segmented-item-active {
-    @apply text-sky-700 shadow-sm;
-    background: var(--app-surface);
-  }
-
-  .dark .app-segmented-item-active {
-    @apply text-sky-300;
+    color: var(--brand-ink);
+    background: var(--segment-active-bg);
+    box-shadow: 0 1px 2px rgba(20, 22, 29, 0.08);
   }
 
   .app-footer {
     color: var(--app-text-muted);
-    border-top: 1px solid var(--app-header-border);
-    background: color-mix(in srgb, var(--app-header-bg) 80%, transparent);
-  }
-
-  .dark .app-input {
-    box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.25);
-  }
-
-  .dark .app-input:focus {
-    @apply ring-sky-500/30;
-  }
-
-  .app-nav-active {
-    @apply text-white;
-    background: var(--gradient-brand);
-    box-shadow: var(--shadow-glow-brand);
-  }
-
-  .app-nav-inactive {
-    color: var(--app-text-muted);
-    @apply transition-all duration-200;
-  }
-
-  .app-nav-inactive:hover {
-    background: var(--app-nav-hover);
-    color: var(--app-text);
-  }
-
-  .app-logo-glow {
-    @apply flex h-8 w-8 items-center justify-center rounded-lg text-white;
-    background: var(--gradient-brand);
-    box-shadow: 0 4px 16px -2px rgba(14, 165, 233, 0.55);
+    border-top: 1px solid var(--app-border-soft);
   }
 
   .app-badge-cloud {
-    @apply hidden items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium sm:inline-flex;
-    background: var(--gradient-brand-soft);
-    color: var(--icon-sky-text);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    @apply hidden items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium sm:inline-flex;
+    color: var(--brand-ink);
+    background: var(--brand-soft);
+    border-color: var(--brand-line);
   }
 
-  .app-icon-sky {
-    border-radius: 0.5rem;
-    color: var(--icon-sky-text);
-    background: var(--icon-sky-bg);
-    box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+  .app-icon {
+    border-radius: var(--radius-lg);
+    color: var(--brand-ink);
+    background: var(--brand-soft);
   }
 
-  .app-icon-emerald {
-    border-radius: 0.5rem;
-    color: var(--icon-emerald-text);
-    background: var(--icon-emerald-bg);
-    box-shadow: 0 0 14px rgba(16, 185, 129, 0.3);
-  }
-
-  .app-icon-violet {
-    border-radius: 0.5rem;
-    color: var(--icon-violet-text);
-    background: var(--icon-violet-bg);
-    box-shadow: 0 0 14px rgba(139, 92, 246, 0.3);
+  .app-callout {
+    @apply rounded-lg border px-3 py-2;
+    color: var(--app-text-secondary);
+    background: var(--brand-soft);
+    border-color: var(--brand-line);
   }
 
   .app-alert-warning {
@@ -509,25 +422,36 @@ button:not(:disabled) {
     border: 1px solid var(--alert-warning-border);
     background: var(--alert-warning-bg);
     color: var(--alert-warning-text);
-    box-shadow: 0 4px 16px -6px rgba(245, 158, 11, 0.25);
   }
 
   .app-pill-active {
-    @apply text-white;
-    background: var(--gradient-brand);
-    box-shadow: 0 2px 12px -2px rgba(14, 165, 233, 0.45);
+    color: #fff;
+    background: var(--brand);
+    border: 1px solid var(--brand);
   }
 
   .app-pill-inactive {
     color: var(--app-text-muted);
-    background: var(--app-pill-inactive-bg);
-    @apply shadow-sm transition-all hover:brightness-105;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    @apply transition-colors;
+  }
+
+  .app-pill-inactive:hover {
+    color: var(--app-text);
+    background: var(--tone-gray-50);
+  }
+
+  .app-popover {
+    border: 1px solid var(--app-border-soft);
+    background: var(--app-surface);
+    box-shadow: var(--shadow-pop);
   }
 
   .app-skeleton {
     @apply animate-pulse rounded-xl;
-    border: 1px solid var(--app-border-glass);
-    background: var(--app-surface-glass);
+    border: 1px solid var(--app-border-soft);
+    background: var(--app-surface);
   }
 }
 
@@ -540,54 +464,19 @@ button:not(:disabled) {
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
-
-  .glow-profit {
-    text-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
-  }
-
-  .glow-loss {
-    text-shadow: 0 0 20px rgba(244, 63, 94, 0.3);
-  }
 }
 
-/* Màu ngữ nghĩa (lãi/lỗ/cảnh báo): cùng một bậc màu vừa làm chữ, vừa làm nền,
-   vừa làm viền với sắc độ dark khác nhau, nên không gộp được vào token như
-   thang xám ở trên — giữ ghi đè tường minh cho từng vai trò. */
-.dark .text-sky-600,
-.dark .text-sky-700 {
-  color: #38bdf8;
-}
-
-.dark .text-sky-800 {
-  color: #7dd3fc;
-}
-
-.dark .text-sky-900 {
-  color: #e0f2fe;
-}
-
-.dark .text-emerald-600 {
-  color: #34d399;
-}
-
+/* Màu ngữ nghĩa (lãi/lỗ/cảnh báo) ở các bậc ngoài 600: cùng một bậc màu vừa
+   làm chữ, vừa làm nền, vừa làm viền với sắc độ dark khác nhau, nên không gộp
+   được vào token như thang xám ở trên — giữ ghi đè tường minh cho từng vai trò. */
 .dark .text-emerald-700,
-.dark .text-emerald-800 {
-  color: #6ee7b7;
-}
-
+.dark .text-emerald-800,
 .dark .text-emerald-900 {
   color: #6ee7b7;
 }
 
-.dark .text-rose-600 {
-  color: #fb7185;
-}
-
 .dark .text-rose-700,
-.dark .text-rose-800 {
-  color: #fda4af;
-}
-
+.dark .text-rose-800,
 .dark .text-rose-900 {
   color: #fda4af;
 }
@@ -608,11 +497,6 @@ button:not(:disabled) {
   color: #fde68a;
 }
 
-.dark .hover\:bg-sky-50:hover,
-.dark .hover\:bg-sky-50\/80:hover {
-  background-color: rgba(14, 165, 233, 0.16);
-}
-
 .dark .hover\:bg-amber-50:hover {
   background-color: rgba(120, 53, 15, 0.35);
 }
@@ -621,14 +505,6 @@ button:not(:disabled) {
 .dark .bg-amber-50\/40,
 .dark .bg-amber-50\/60 {
   background-color: rgba(120, 53, 15, 0.3);
-}
-
-.dark .bg-sky-50 {
-  background-color: rgba(12, 74, 110, 0.45);
-}
-
-.dark .bg-sky-100 {
-  background-color: rgba(14, 165, 233, 0.22);
 }
 
 .dark .bg-violet-100 {
@@ -664,7 +540,6 @@ button:not(:disabled) {
 
 .dark .border-amber-100,
 .dark .border-amber-200,
-.dark .border-sky-200,
 .dark .border-emerald-100,
 .dark .border-emerald-200,
 .dark .border-rose-100,
@@ -673,6 +548,6 @@ button:not(:disabled) {
 }
 
 .dark select option {
-  background: #1e293b;
-  color: #f8fafc;
+  background: var(--app-surface);
+  color: var(--app-text);
 }

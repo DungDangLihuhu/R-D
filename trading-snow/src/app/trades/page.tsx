@@ -57,7 +57,7 @@ export default function TradesPage() {
           type="button"
           onClick={() => setShowManualForm((v) => !v)}
           className={`app-btn-secondary ${
-            showManualForm ? "border-sky-300 bg-sky-50 text-sky-700" : ""
+            showManualForm ? "border-brand-line bg-brand-soft text-brand-ink" : ""
           }`}
         >
           <PenLine className="h-4 w-4" />

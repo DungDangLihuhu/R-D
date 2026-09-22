@@ -66,19 +66,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <div className="app-bg-mesh flex min-h-screen flex-col overflow-x-hidden text-app-text">
+    <div className="flex min-h-screen bg-app-bg flex-col overflow-x-hidden text-app-text">
       <header className="app-header">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link
             href="/"
             className="group flex items-center gap-2.5 font-semibold text-app-text transition-opacity hover:opacity-90"
           >
-            <span className="app-logo-glow transition-transform duration-300 group-hover:scale-105">
+            <span className="app-logo">
               <Snowflake className="h-4 w-4" />
             </span>
-            <span className="app-brand-text tracking-tight">
-              Trading Snow
-            </span>
+            <span className="tracking-tight">Trading Snow</span>
           </Link>
           <div className="flex flex-wrap items-center gap-2">
             <label className="relative">
@@ -116,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   href={href}
                   data-active={active}
                   aria-current={active ? "page" : undefined}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                  className={`flex shrink-0 scroll-mx-10 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
                     active ? "app-nav-active" : "app-nav-inactive"
                   }`}
                 >

@@ -24,7 +24,6 @@ import { useChartHistory } from "@/hooks/useChartHistory";
 import { useChartTheme } from "@/lib/chart-theme";
 
 const CHART_COLORS = {
-  price: "#0ea5e9",
   targetAnalyst: "#8b5cf6",
   targetFundamental: "#f59e0b",
   support: "#10b981",
@@ -113,14 +112,14 @@ function ChartTooltip({
   const p = payload[0].payload;
   if (chartStyle === "line") {
     return (
-      <div className="rounded-lg border border-gray-200 bg-app-surface px-3 py-2 text-xs shadow-md">
+      <div className="app-popover rounded-lg px-3 py-2 text-xs">
         <p className="text-gray-500">{p.label}</p>
         <p className="font-semibold tabular-nums">{formatMoney(p.close, currency)}</p>
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-gray-200 bg-app-surface px-3 py-2 text-xs shadow-md">
+    <div className="app-popover rounded-lg px-3 py-2 text-xs">
       <p className="mb-1 text-gray-500">{p.label}</p>
       <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
         <span className="text-gray-500">Mở</span>
@@ -164,41 +163,38 @@ export function StockPriceChart({
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="font-semibold">Phân tích cơ bản</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-gray-200 p-0.5">
+          <div className="app-segmented">
             {FUNDAMENTAL_CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf}
                 type="button"
+                aria-pressed={timeframe === tf}
                 onClick={() => setTimeframe(tf)}
-                className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                  timeframe === tf
-                    ? "bg-sky-600 text-white"
-                    : "text-gray-600 hover:bg-gray-50"
+                className={`app-segmented-item px-2 py-1 ${
+                  timeframe === tf ? "app-segmented-item-active" : ""
                 }`}
               >
                 {TIMEFRAME_LABELS[tf]}
               </button>
             ))}
           </div>
-          <div className="flex rounded-lg border border-gray-200 p-0.5">
+          <div className="app-segmented">
             <button
               type="button"
+              aria-pressed={chartStyle === "line"}
               onClick={() => setChartStyle("line")}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                chartStyle === "line"
-                  ? "bg-gray-800 text-white"
-                  : "text-gray-600 hover:bg-gray-50"
+              className={`app-segmented-item px-2.5 py-1 ${
+                chartStyle === "line" ? "app-segmented-item-active" : ""
               }`}
             >
               Đường
             </button>
             <button
               type="button"
+              aria-pressed={chartStyle === "candle"}
               onClick={() => setChartStyle("candle")}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                chartStyle === "candle"
-                  ? "bg-gray-800 text-white"
-                  : "text-gray-600 hover:bg-gray-50"
+              className={`app-segmented-item px-2.5 py-1 ${
+                chartStyle === "candle" ? "app-segmented-item-active" : ""
               }`}
             >
               Nến
@@ -224,10 +220,12 @@ export function StockPriceChart({
           <div className="min-w-0 w-full h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={points} barCategoryGap="20%">
-                <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
+                <CartesianGrid stroke={chartTheme.grid} vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={{ fill: chartTheme.tick, fontSize: 10 }}
+                  axisLine={{ stroke: chartTheme.grid }}
+                  tickLine={false}
                   interval="preserveStartEnd"
                   minTickGap={24}
                   tickFormatter={(value) => {
@@ -237,6 +235,8 @@ export function StockPriceChart({
                 />
                 <YAxis
                   tick={{ fill: chartTheme.tick, fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
                   domain={yDomain}
                   width={64}
                   tickFormatter={formatChartPrice}
@@ -289,7 +289,7 @@ export function StockPriceChart({
                   <Line
                     type="monotone"
                     dataKey="close"
-                    stroke={CHART_COLORS.price}
+                    stroke={chartTheme.accent}
                     strokeWidth={2}
                     dot={false}
                   />
@@ -381,11 +381,13 @@ function PriceLevelsSummary({
   currency: string;
   chartStyle: ChartStyle;
 }) {
+  const chartTheme = useChartTheme();
+
   return (
     <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
       <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
         <LegendDot
-          color={chartStyle === "candle" ? CHART_COLORS.candleUp : CHART_COLORS.price}
+          color={chartStyle === "candle" ? CHART_COLORS.candleUp : chartTheme.accent}
           label={chartStyle === "candle" ? "Nến" : "Giá đóng cửa"}
         />
         {priceLevels.targetAnalyst && (
