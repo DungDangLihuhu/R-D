@@ -155,3 +155,13 @@ describe("computeBuySellPrices sell blend", () => {
     expect(sellNote).toContain("giá ≥ PT CTCK 3 tháng");
   });
 });
+
+describe("computeBuySellPrices growth units", () => {
+  it("treats EPS growth as a percent on both sides of 1%", () => {
+    const note = (growth: number) =>
+      computeBuySellPrices(100, levels(), undefined, { epsTTM: 5, epsGrowthTTMYoy: growth }).buyNote;
+    // Trước đây 1,00% bị nhân 100 lần thành 100% và bị chấm "rẻ", còn 1,01% thì không.
+    expect(note(1)).not.toContain("rẻ vs định giá");
+    expect(note(1)).toBe(note(1.01));
+  });
+});

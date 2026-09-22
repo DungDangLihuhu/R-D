@@ -75,7 +75,7 @@ export default function AnalyticsPage() {
         </div>
         <div className="app-card min-w-0">
           <h2 className="app-card-section-title">Lợi nhuận ròng</h2>
-          <EquityChart data={stats.equityCurve} />
+          <EquityChart data={stats.profitCurve} />
         </div>
       </div>
 

@@ -57,29 +57,36 @@ export function isChartTimeframe(value: string): value is ChartTimeframe {
   return (CHART_TIMEFRAMES as readonly string[]).includes(value);
 }
 
-function formatChartLabel(date: Date, timeframe: ChartTimeframe): string {
+/**
+ * Nhãn chạy trên server (Vercel = UTC), nên luôn format theo múi giờ của sàn —
+ * không truyền thì phiên Mỹ mở cửa 9:30 hiện thành "13:30".
+ */
+function formatChartLabel(
+  date: Date,
+  timeframe: ChartTimeframe,
+  timeZone = "America/New_York"
+): string {
   if (timeframe === "1h" || timeframe === "4h") {
     return date.toLocaleString("vi-VN", {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone,
     });
   }
   if (timeframe === "1d") {
-    return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+    return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", timeZone });
   }
   if (timeframe === "1w") {
     return date.toLocaleDateString("vi-VN", {
       day: "2-digit",
       month: "2-digit",
       year: "2-digit",
+      timeZone,
     });
   }
-  if (timeframe === "1m" || timeframe === "all") {
-    return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
-  }
-  return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
+  return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric", timeZone });
 }
 
 function localDateKey(date: string, timeZone: string): string {
@@ -270,7 +277,7 @@ export function aggregateTo4h(
       const date = new Date(bars[0].date);
       result.push({
         date: date.toISOString(),
-        label: formatChartLabel(date, "4h"),
+        label: formatChartLabel(date, "4h", timeZone),
         open: bars[0].open,
         high: Math.max(...bars.map((b) => b.high)),
         low: Math.min(...bars.map((b) => b.low)),
@@ -301,6 +308,7 @@ function parseYahooOhlc(
   timeframe: ChartTimeframe
 ): OhlcPoint[] {
   const timestamps: number[] = result?.timestamp ?? [];
+  const timeZone = result?.meta?.exchangeTimezoneName ?? "America/New_York";
   const quote = result?.indicators?.quote?.[0];
   const opens = quote?.open ?? [];
   const highs = quote?.high ?? [];
@@ -329,7 +337,7 @@ function parseYahooOhlc(
     const volume = volumes[i] ?? 0;
     points.push({
       date: date.toISOString(),
-      label: formatChartLabel(date, timeframe),
+      label: formatChartLabel(date, timeframe, timeZone),
       open,
       high,
       low,

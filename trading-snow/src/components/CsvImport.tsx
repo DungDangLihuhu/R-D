@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
+import { OversellNotice } from "@/components/OversellNotice";
 import { useApp } from "@/context/AppContext";
 import {
   csvRowsToTransactions,
@@ -11,6 +12,7 @@ import {
   type CsvRow,
 } from "@/lib/csv-import";
 import { formatDate, formatMoney } from "@/lib/format";
+import { findNewOversells } from "@/lib/trade-display";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
 
@@ -38,11 +40,19 @@ export function CsvImport() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const result = parseBrokerCsv(reader.result as string, format);
-      setPreview(result.rows);
-      setParseResult(result);
-      setErrors(result.errors);
-      setDetectedFormat(result.format);
+      try {
+        const result = parseBrokerCsv(reader.result as string, format);
+        setPreview(result.rows);
+        setParseResult(result);
+        setErrors(result.errors);
+        setDetectedFormat(result.format);
+      } catch (err) {
+        setPreview(null);
+        setParseResult(null);
+        setErrors([
+          `Không đọc được file: ${err instanceof Error ? err.message : String(err)}`,
+        ]);
+      }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -54,8 +64,36 @@ export function CsvImport() {
     return filterDuplicateTransactions(state.transactions, txs);
   }, [preview, activePortfolioId, state.transactions]);
 
+  const oversells = useMemo(
+    () =>
+      importPreview
+        ? findNewOversells(state.transactions, importPreview.transactions, activePortfolioId)
+        : [],
+    [importPreview, state.transactions, activePortfolioId]
+  );
+
   const confirmImport = () => {
     if (!preview || preview.length === 0 || !importPreview) return;
+
+    // Holdings là snapshot, không phải lịch sử: import lại vào ngày khác sẽ không bị
+    // chống trùng (khóa có ngày) và cộng dồn thêm một lượt vị thế + khoản nạp.
+    const importedHoldingsBefore =
+      parseResult?.format === "snowball_holdings" &&
+      state.transactions.some(
+        (t) =>
+          t.portfolioId === activePortfolioId &&
+          t.type === "DEPOSIT" &&
+          t.notes?.startsWith("Snowball Holdings")
+      );
+    if (
+      importedHoldingsBefore &&
+      !confirm(
+        "Portfolio này đã từng import Snowball Holdings.\n\nImport lại sẽ CỘNG THÊM vị thế và khoản nạp, không thay thế bản cũ. Tiếp tục?"
+      )
+    ) {
+      return;
+    }
+
     const { added, skipped } = importTransactions(importPreview.transactions);
 
     if (parseResult?.marketPrices && Object.keys(parseResult.marketPrices).length > 0) {
@@ -167,6 +205,8 @@ export function CsvImport() {
           </ul>
         </div>
       )}
+
+      <OversellNotice oversells={oversells} />
 
       {preview && importPreview && importPreview.transactions.length > 0 && (
         <>

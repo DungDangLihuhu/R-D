@@ -1,4 +1,5 @@
 import type { Transaction } from "./types";
+import { compareTransactionsChronologically } from "./transaction-order";
 
 export interface TradePnl {
   pnl: number;
@@ -17,7 +18,7 @@ export function computeTradeDisplay(
 ): { pnlByTxId: Map<string, TradePnl>; summary: TradeSummary } {
   const sorted = [...transactions]
     .filter((t) => t.portfolioId === portfolioId)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort(compareTransactionsChronologically);
 
   const positions = new Map<string, { quantity: number; totalCost: number }>();
   const pnlByTxId = new Map<string, TradePnl>();
@@ -67,6 +68,79 @@ export function computeTradeDisplay(
 
 export function tradeGross(tx: Transaction): number {
   return tx.quantity * tx.price;
+}
+
+type PositionTx = Pick<Transaction, "portfolioId" | "type" | "symbol" | "quantity" | "date">;
+
+export interface Oversell {
+  symbol: string;
+  date: string;
+  sold: number;
+  held: number;
+}
+
+/**
+ * Lệnh bán vượt số cổ phiếu đang giữ tại thời điểm đó. Hay gặp khi file thiếu lệnh
+ * mua hoặc có split chưa ghi — app vẫn tính được nhưng giá vốn phần vượt là đoán.
+ */
+export function findOversells(
+  transactions: PositionTx[],
+  portfolioId: string
+): Oversell[] {
+  const held = new Map<string, number>();
+  const oversells: Oversell[] = [];
+  const trades = transactions
+    .filter(
+      (t) => t.portfolioId === portfolioId && (t.type === "BUY" || t.type === "SELL")
+    )
+    .sort(compareTransactionsChronologically);
+
+  for (const tx of trades) {
+    const quantity = held.get(tx.symbol) ?? 0;
+    if (tx.type === "BUY") {
+      held.set(tx.symbol, quantity + tx.quantity);
+      continue;
+    }
+    if (tx.quantity > quantity + 1e-9) {
+      oversells.push({ symbol: tx.symbol, date: tx.date, sold: tx.quantity, held: quantity });
+    }
+    held.set(tx.symbol, Math.max(0, quantity - tx.quantity));
+  }
+  return oversells;
+}
+
+/** Chỉ những lần bán vượt phát sinh do thêm `incoming` — bỏ qua các trường hợp đã có sẵn. */
+export function findNewOversells(
+  existing: PositionTx[],
+  incoming: PositionTx[],
+  portfolioId: string
+): Oversell[] {
+  const key = (o: Oversell) => `${o.symbol}|${o.date}|${o.sold}`;
+  const before = new Set(findOversells(existing, portfolioId).map(key));
+  return findOversells([...existing, ...incoming], portfolioId).filter(
+    (o) => !before.has(key(o))
+  );
+}
+
+/** Số cổ phiếu đang giữ tính tới hết ngày `day` (YYYY-MM-DD). */
+export function heldQuantityAt(
+  transactions: PositionTx[],
+  portfolioId: string,
+  symbol: string,
+  day: string
+): number {
+  let quantity = 0;
+  const trades = transactions
+    .filter(
+      (t) =>
+        t.portfolioId === portfolioId && t.symbol === symbol && t.date.slice(0, 10) <= day
+    )
+    .sort(compareTransactionsChronologically);
+  for (const tx of trades) {
+    if (tx.type === "BUY") quantity += tx.quantity;
+    else if (tx.type === "SELL") quantity = Math.max(0, quantity - tx.quantity);
+  }
+  return quantity;
 }
 
 export function isCashSymbol(symbol: string) {

@@ -1,4 +1,5 @@
 import type { Transaction } from "./types";
+import { compareTransactionsChronologically } from "./transaction-order";
 
 export interface CashFlow {
   date: Date;
@@ -15,15 +16,17 @@ export function computeTotalProfit(
 }
 
 /**
- * Snowball IRR cash flows: purchases, sales, dividends (net fees), terminal NAV.
- * Deposits/withdrawals only when there are no buy/sell trades.
+ * Snowball IRR cash flows: purchases, sales, dividends (net fees), then the current
+ * value of the holdings still open as the terminal flow ("sum of all holding values,
+ * excluding cash"). Sale proceeds are already inflows, so realized P&L must not be
+ * added to the terminal value again. Deposits/withdrawals only when there are no trades.
  */
 export function buildIrrCashFlows(
   transactions: Transaction[],
   terminalValue: number,
   asOf = new Date()
 ): CashFlow[] {
-  const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const sorted = [...transactions].sort(compareTransactionsChronologically);
   const hasTrades = sorted.some(
     (t) => t.type === "BUY" || t.type === "SELL"
   );

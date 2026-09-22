@@ -1,9 +1,20 @@
 export function formatMoney(value: number, currency = "USD"): string {
+  // -0 và số âm rất nhỏ làm tròn về 0 sẽ in thành "-0,00 US$".
+  const normalized = Math.abs(value) < 0.005 ? 0 : value;
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
     currency,
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(normalized);
+}
+
+/** Nhãn trục biểu đồ tiền: `−$550`, `$1,5k`, `$23k`, `$1,2M` — không để mọi mức dưới 500 thành "$0k". */
+export function formatAxisMoney(value: number): string {
+  const sign = value < 0 ? "−" : "";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${sign}$${formatNumber(abs / 1_000_000, 1)}M`;
+  if (abs >= 1_000) return `${sign}$${formatNumber(abs / 1_000, abs >= 10_000 ? 0 : 1)}k`;
+  return `${sign}$${formatNumber(abs, 0)}`;
 }
 
 export function formatPercent(value: number): string {

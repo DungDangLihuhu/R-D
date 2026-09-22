@@ -11,6 +11,7 @@ import {
   computeTotalProfit,
 } from "./portfolio-snowball";
 import { isTransactionHidden } from "./hidden-symbols";
+import { compareTransactionsChronologically } from "./transaction-order";
 
 interface PositionState {
   quantity: number;
@@ -26,7 +27,7 @@ function computePortfolioStatsInternal(
 ): PortfolioStats {
   const sorted = [...transactions]
     .filter((t) => t.portfolioId === portfolioId)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort(compareTransactionsChronologically);
 
   const positions = new Map<string, PositionState>();
   const closedTrades: ClosedTrade[] = [];
@@ -40,6 +41,7 @@ function computePortfolioStatsInternal(
   let realizedPnl = 0;
 
   const equityPoints: { date: string; equity: number }[] = [];
+  const profitPoints: { date: string; value: number }[] = [];
   const tradingEquityPoints: { date: string; equity: number }[] = [];
   const monthlyMap = new Map<string, number>();
 
@@ -61,10 +63,11 @@ function computePortfolioStatsInternal(
   };
 
   const snapshotEquity = (date: string, useMarket = false) => {
-    equityPoints.push({
-      date,
-      equity: cashBalance + holdingsValueAtPrices(useMarket),
-    });
+    const equity = cashBalance + holdingsValueAtPrices(useMarket);
+    equityPoints.push({ date, equity });
+    // Trừ nạp ròng tới thời điểm này: không có thì bằng đúng giá trị, có thì khoản
+    // nạp không bị vẽ thành tiền lãi.
+    profitPoints.push({ date, value: equity - (totalDeposits - totalWithdrawals) });
     tradingEquityPoints.push({
       date,
       equity: holdingsValueAtPrices(useMarket) + realizedPnl,
@@ -137,6 +140,10 @@ function computePortfolioStatsInternal(
     equityPoints[lastIdx] = {
       date: equityPoints[lastIdx].date,
       equity: cashBalance + marketHoldings,
+    };
+    profitPoints[lastIdx] = {
+      date: profitPoints[lastIdx].date,
+      value: cashBalance + marketHoldings - (totalDeposits - totalWithdrawals),
     };
     tradingEquityPoints[lastIdx] = {
       date: tradingEquityPoints[lastIdx].date,
@@ -219,8 +226,22 @@ function computePortfolioStatsInternal(
     totalDeposits,
     totalWithdrawals
   );
+
+  const lastProfit = profitPoints[profitPoints.length - 1];
+  if (!lastProfit || Math.abs(lastProfit.value - totalProfit) > 0.01) {
+    profitPoints.push({ date: now, value: totalProfit });
+  } else {
+    lastProfit.date = now;
+    lastProfit.value = totalProfit;
+  }
+
+  // Snowball: có ghi nạp tiền thì lợi nhuận tính theo "All cash movements"
+  // (giá trị − nạp ròng), nên % phải chia cho nạp ròng của cùng chế độ đó; không ghi
+  // nạp tiền thì invested = giá vốn vị thế đang giữ.
+  const netDeposits = totalDeposits - totalWithdrawals;
+  const profitBase = totalDeposits > 0 ? netDeposits : holdingsCost;
   const totalProfitPercent =
-    holdingsCost > 0 ? (totalProfit / holdingsCost) * 100 : 0;
+    profitBase > 0 ? (totalProfit / profitBase) * 100 : null;
 
   let dailyHoldingsProfit = 0;
   for (const h of holdings) {
@@ -237,7 +258,12 @@ function computePortfolioStatsInternal(
   const profitExDivSalesPercent =
     holdingsCost > 0 ? (profitExDivSales / holdingsCost) * 100 : 0;
 
-  const irrFlows = buildIrrCashFlows(sorted, tradingValue);
+  // Dòng tiền phải cùng tập mã với giá trị cuối kỳ (bỏ mã đang ẩn), và giá trị cuối kỳ
+  // chỉ là giá trị vị thế còn giữ — tiền bán đã nằm trong dòng tiền SELL (Snowball).
+  const irrFlows = buildIrrCashFlows(
+    sorted.filter((tx) => !isTransactionHidden(tx, hiddenSymbols)),
+    holdingsValue
+  );
   const irr = computePortfolioIrr(irrFlows);
 
   return {
@@ -263,6 +289,7 @@ function computePortfolioStatsInternal(
     closedTrades,
     monthlyPnl,
     equityCurve: equityPoints,
+    profitCurve: profitPoints,
     tradingEquityCurve: tradingEquityPoints,
     holdingsValue,
     holdingsCost,

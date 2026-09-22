@@ -1,6 +1,7 @@
 import type { Transaction } from "./types";
 import type { HistoryPoint } from "./yahoo";
 import { downsampleMonthly } from "./format";
+import { compareTransactionsChronologically } from "./transaction-order";
 
 export type BenchmarkRange = "ytd" | "6m" | "1y" | "5y" | "all";
 
@@ -260,7 +261,7 @@ function buildPortfolioReturnSeries(
 ): ReplaySnapshot[] {
   const sorted = [...transactions]
     .filter((t) => t.type === "BUY" || t.type === "SELL")
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort(compareTransactionsChronologically);
 
   const positions = new Map<string, PositionState>();
   const lastPrices = new Map<string, number>();

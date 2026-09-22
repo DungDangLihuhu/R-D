@@ -79,13 +79,16 @@ export interface PortfolioStats {
   closedTrades: ClosedTrade[];
   monthlyPnl: { month: string; pnl: number }[];
   equityCurve: { date: string; equity: number }[];
+  /** Lợi nhuận ròng theo thời gian = giá trị − nạp ròng tới ngày đó; điểm cuối = totalProfit */
+  profitCurve: { date: string; value: number }[];
   /** Vị thế + lãi/lỗ đã chốt theo thời gian (dùng cho benchmark) */
   tradingEquityCurve: { date: string; equity: number }[];
   holdingsValue: number;
   holdingsCost: number;
   totalFees: number;
   totalProfit: number;
-  totalProfitPercent: number;
+  /** null khi không có mẫu số (đã đóng hết vị thế và không ghi nạp tiền) */
+  totalProfitPercent: number | null;
   dailyHoldingsProfit: number;
   dailyHoldingsProfitPercent: number;
   profitExDivSales: number;

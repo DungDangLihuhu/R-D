@@ -60,7 +60,25 @@ const SNOWBALL_EVENT_MAP: Record<string, TransactionType | null> = {
   cash_convert: null,
 };
 
-function parseCsvLine(line: string): string[] {
+type Delimiter = "," | ";" | "\t";
+
+/**
+ * Đoán dấu phân cách từ dòng tiêu đề. Chỉ tách theo đúng một dấu — tách cả `,` lẫn `;`
+ * sẽ cắt đôi số có dấu phẩy thập phân (`189,50`) trong file Excel xuất ở máy Việt Nam.
+ */
+function detectDelimiter(headerLine: string): Delimiter {
+  const counts: Record<Delimiter, number> = { ",": 0, ";": 0, "\t": 0 };
+  let inQuotes = false;
+  for (const ch of headerLine) {
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && (ch === "," || ch === ";" || ch === "\t")) counts[ch]++;
+  }
+  if (counts[";"] > counts[","] && counts[";"] >= counts["\t"]) return ";";
+  if (counts["\t"] > counts[","]) return "\t";
+  return ",";
+}
+
+function parseCsvLine(line: string, delimiter: Delimiter): string[] {
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -68,7 +86,7 @@ function parseCsvLine(line: string): string[] {
     const ch = line[i];
     if (ch === '"') {
       inQuotes = !inQuotes;
-    } else if ((ch === "," || ch === ";") && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current.trim());
       current = "";
     } else {
@@ -105,17 +123,52 @@ function colIndex(headers: string[], ...candidates: string[]): number {
   return -1;
 }
 
-function parseDate(raw: string): string | null {
+type DateOrder = "mdy" | "dmy";
+
+const NUMERIC_DATE = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/;
+
+/**
+ * Broker Mỹ ghi m/d/y, file tự làm ở Việt Nam thường là d/m/y. Chỉ cần một dòng có
+ * số đầu > 12 (hoặc số giữa > 12) là biết cả file; không phân biệt được thì giữ m/d/y.
+ */
+function detectDateOrder(
+  lines: string[],
+  iDate: number,
+  delimiter: Delimiter
+): DateOrder {
+  for (let i = 1; i < lines.length; i++) {
+    const match = (parseCsvLine(lines[i], delimiter)[iDate] ?? "").trim().match(NUMERIC_DATE);
+    if (!match) continue;
+    if (Number(match[1]) > 12) return "dmy";
+    if (Number(match[2]) > 12) return "mdy";
+  }
+  return "mdy";
+}
+
+function toIso(date: Date): string | null {
+  return isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function parseDate(raw: string, order: DateOrder = "mdy"): string | null {
   const s = raw.trim();
   if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(s).toISOString();
-  const mdy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  if (mdy) {
-    const [, m, d, y] = mdy;
-    return new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`).toISOString();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return toIso(new Date(s));
+  const numeric = s.match(NUMERIC_DATE);
+  if (numeric) {
+    const [, first, second, y] = numeric;
+    const [m, d] = order === "dmy" ? [second, first] : [first, second];
+    return toIso(new Date(`${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`));
   }
   const parsed = new Date(s);
-  return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  if (isNaN(parsed.getTime())) return null;
+  // Ngày dạng chữ không có giờ ("Jan 5, 2024") được JS đọc theo giờ địa phương; lấy
+  // đúng ngày lịch để UTC+7 không đẩy lùi sang hôm trước.
+  if (!/\d{1,2}:\d{2}/.test(s)) {
+    return new Date(
+      Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+    ).toISOString();
+  }
+  return parsed.toISOString();
 }
 
 function parseType(raw: string): TransactionType | null {
@@ -128,8 +181,23 @@ function parseType(raw: string): TransactionType | null {
   return null;
 }
 
+/**
+ * Chấp nhận cả `1,234.56` lẫn `1.234,56` và `189,50`. Có cả hai dấu thì dấu đứng sau
+ * là dấu thập phân; chỉ có dấu phẩy thì `1,234` / `12,345,678` là phân tách nghìn,
+ * còn `189,50` / `1,5` là dấu phẩy thập phân.
+ */
 function parseNum(raw: string): number {
-  const n = parseFloat(String(raw).replace(/[,$]/g, ""));
+  let s = String(raw).replace(/[\s$€ ]/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    s = lastComma > lastDot ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    const commas = s.split(",").length - 1;
+    const decimals = s.length - lastComma - 1;
+    s = commas === 1 && decimals !== 3 ? s.replace(",", ".") : s.replace(/,/g, "");
+  }
+  const n = parseFloat(s);
   return isNaN(n) ? 0 : Math.abs(n);
 }
 
@@ -151,7 +219,8 @@ function resolveSymbol(
 
 function parseSnowballHoldings(
   headers: string[],
-  lines: string[]
+  lines: string[],
+  delimiter: Delimiter
 ): CsvParseResult {
   const iSymbol = colIndex(headers, "holding");
   const iQty = colIndex(headers, "shares");
@@ -175,7 +244,7 @@ function parseSnowballHoldings(
   }
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLine(lines[i], delimiter);
     if (cols.every((c) => !c)) continue;
 
     const symbol = resolveSymbol(cols, headers, iSymbol, {
@@ -237,7 +306,8 @@ function parseSnowballHoldings(
 
 function parseSnowballTransactions(
   headers: string[],
-  lines: string[]
+  lines: string[],
+  delimiter: Delimiter
 ): CsvParseResult {
   const iEvent = colIndex(headers, "event");
   const iDate = colIndex(headers, "date");
@@ -259,18 +329,27 @@ function parseSnowballTransactions(
     };
   }
 
+  const dateOrder = detectDateOrder(lines, iDate, delimiter);
+
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLine(lines[i], delimiter);
     if (cols.every((c) => !c)) continue;
 
     const eventRaw = (cols[iEvent] ?? "").trim();
     const type = parseType(eventRaw);
     if (type === null) {
-      if (eventRaw) errors.push(`Dòng ${i + 1}: bỏ qua event "${eventRaw}"`);
+      if (eventRaw.toLowerCase() === "split") {
+        const rawSymbol = iSymbol >= 0 ? cols[iSymbol] : "";
+        errors.push(
+          `Dòng ${i + 1}: chưa hỗ trợ split${rawSymbol ? ` ${rawSymbol}` : ""} (${cols[iDate] ?? ""}) — số lượng sau ngày này sẽ lệch, cần thêm lệnh điều chỉnh tay`
+        );
+      } else if (eventRaw) {
+        errors.push(`Dòng ${i + 1}: bỏ qua event "${eventRaw}"`);
+      }
       continue;
     }
 
-    const date = parseDate(cols[iDate] ?? "");
+    const date = parseDate(cols[iDate] ?? "", dateOrder);
     const symbol =
       iSymbol >= 0
         ? resolveSymbol(cols, headers, iSymbol, {
@@ -314,7 +393,8 @@ function parseSnowballTransactions(
 function parseGenericTransactions(
   headers: string[],
   lines: string[],
-  format: CsvFormat
+  format: CsvFormat,
+  delimiter: Delimiter
 ): CsvParseResult {
   const iDate = colIndex(headers, "date", "tradedate", "datetime", "time");
   const iSymbol = colIndex(headers, "symbol", "ticker", "instrument", "holding");
@@ -360,12 +440,13 @@ function parseGenericTransactions(
   }
 
   const rows: CsvRow[] = [];
+  const dateOrder = detectDateOrder(lines, iDate, delimiter);
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]);
+    const cols = parseCsvLine(lines[i], delimiter);
     if (cols.every((c) => !c)) continue;
 
-    const date = parseDate(cols[iDate] ?? "");
+    const date = parseDate(cols[iDate] ?? "", dateOrder);
     const symbol = resolveSymbol(cols, headers, iSymbol, {
       exchangeCol: iExchange,
       countryCol: iCountry,
@@ -415,17 +496,18 @@ export function parseBrokerCsv(
     };
   }
 
-  const headers = parseCsvLine(lines[0]);
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = parseCsvLine(lines[0], delimiter);
   const detected = format === "auto" ? detectFormat(headers) : format;
 
   if (detected === "snowball_holdings") {
-    return parseSnowballHoldings(headers, lines);
+    return parseSnowballHoldings(headers, lines, delimiter);
   }
   if (detected === "snowball_transactions") {
-    return parseSnowballTransactions(headers, lines);
+    return parseSnowballTransactions(headers, lines, delimiter);
   }
 
-  return parseGenericTransactions(headers, lines, detected);
+  return parseGenericTransactions(headers, lines, detected, delimiter);
 }
 
 export function csvRowsToTransactions(

@@ -6,6 +6,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,6 +15,7 @@ import {
 import type { PortfolioStats } from "@/lib/types";
 import {
   downsampleMonthly,
+  formatAxisMoney,
   formatChartMonthYear,
   formatDate,
   formatMonthKey,
@@ -21,7 +23,10 @@ import {
 } from "@/lib/format";
 import { useChartTheme } from "@/lib/chart-theme";
 
-export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
+const PROFIT_COLOR = "#10b981";
+const LOSS_COLOR = "#f43f5e";
+
+export function EquityChart({ data }: { data: PortfolioStats["profitCurve"] }) {
   const theme = useChartTheme();
 
   if (data.length < 2) {
@@ -58,7 +63,7 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
         />
         <YAxis
           tick={{ fill: theme.tick, fontSize: 11 }}
-          tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+          tickFormatter={formatAxisMoney}
         />
         <Tooltip
           contentStyle={theme.tooltip}
@@ -70,7 +75,7 @@ export function EquityChart({ data }: { data: PortfolioStats["equityCurve"] }) {
         />
         <Area
           type="monotone"
-          dataKey="equity"
+          dataKey="value"
           stroke="#0ea5e9"
           fill="url(#eq)"
           strokeWidth={2}
@@ -110,19 +115,18 @@ export function MonthlyPnlChart({ data }: { data: PortfolioStats["monthlyPnl"] }
         />
         <YAxis
           tick={{ fill: theme.tick, fontSize: 11 }}
-          tickFormatter={(v) => `$${v}`}
+          tickFormatter={formatAxisMoney}
         />
         <Tooltip
           contentStyle={theme.tooltip}
           formatter={(v) => [formatMoney(Number(v ?? 0)), "P&L"]}
           labelFormatter={(label) => `Tháng ${label}`}
         />
-        <Bar
-          dataKey="pnl"
-          fill="#0ea5e9"
-          radius={[4, 4, 0, 0]}
-          activeBar={{ fill: "#38bdf8" }}
-        />
+        <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
+          {chartData.map((d) => (
+            <Cell key={d.month} fill={d.pnl >= 0 ? PROFIT_COLOR : LOSS_COLOR} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
     </div>

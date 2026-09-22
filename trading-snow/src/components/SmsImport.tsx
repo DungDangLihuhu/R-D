@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { MessageSquareText } from "lucide-react";
+import { OversellNotice } from "@/components/OversellNotice";
 import { useApp } from "@/context/AppContext";
 import {
   parseBankSms,
@@ -9,6 +10,7 @@ import {
   type ParsedSmsTrade,
 } from "@/lib/sms-import";
 import { formatMoney } from "@/lib/format";
+import { findNewOversells } from "@/lib/trade-display";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
 
@@ -20,6 +22,8 @@ export function SmsImport() {
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<ParsedSmsTrade[] | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  // Tin nhắn không mang ngày khớp lệnh — để người dùng chọn thay vì mặc định hôm nay.
+  const [tradeDate, setTradeDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const handleParse = () => {
     const result = parseBankSms(text);
@@ -29,9 +33,22 @@ export function SmsImport() {
 
   const importPreview = useMemo(() => {
     if (!preview || preview.length === 0) return null;
-    const txs = smsTradesToTransactions(preview, activePortfolioId);
+    const txs = smsTradesToTransactions(
+      preview,
+      activePortfolioId,
+      "STOCK",
+      new Date(tradeDate).toISOString()
+    );
     return filterDuplicateTransactions(state.transactions, txs);
-  }, [preview, activePortfolioId, state.transactions]);
+  }, [preview, activePortfolioId, state.transactions, tradeDate]);
+
+  const oversells = useMemo(
+    () =>
+      importPreview
+        ? findNewOversells(state.transactions, importPreview.transactions, activePortfolioId)
+        : [],
+    [importPreview, state.transactions, activePortfolioId]
+  );
 
   const confirmImport = () => {
     if (!preview || preview.length === 0 || !importPreview) return;
@@ -93,7 +110,16 @@ export function SmsImport() {
         className="app-input w-full"
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 text-sm">
+          <span className="app-label">Ngày khớp lệnh</span>
+          <input
+            type="date"
+            value={tradeDate}
+            onChange={(e) => setTradeDate(e.target.value)}
+            className="app-input py-1.5"
+          />
+        </label>
         <button
           type="button"
           onClick={handleParse}
@@ -120,6 +146,8 @@ export function SmsImport() {
           </ul>
         </div>
       )}
+
+      <OversellNotice oversells={oversells} />
 
       {preview && importPreview && importPreview.transactions.length > 0 && (
         <>

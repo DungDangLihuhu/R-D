@@ -10,6 +10,8 @@ import {
   type DividendEventLike,
 } from "@/lib/portfolio-snowball";
 
+const DIVIDEND_BATCH_SIZE = 20;
+
 function formatSignedMoney(value: number): string {
   const prefix = value > 0 ? "+" : value < 0 ? "−" : "";
   return `${prefix}${formatMoney(Math.abs(value))}`;
@@ -32,14 +34,23 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
     if (!symbols) return;
 
     let cancelled = false;
-    fetch(`/api/dividends?symbols=${encodeURIComponent(symbols)}`)
-      .then((r) => (r.ok ? r.json() : { events: [] }))
-      .then((data: { events?: DividendEventLike[] }) => {
-        if (!cancelled) setDividendEvents(data.events ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setDividendEvents([]);
-      });
+    // /api/dividends chỉ nhận 20 mã mỗi lần — chia lô để danh mục lớn không bị thiếu.
+    const list = symbols.split(",");
+    const chunks: string[] = [];
+    for (let i = 0; i < list.length; i += DIVIDEND_BATCH_SIZE) {
+      chunks.push(list.slice(i, i + DIVIDEND_BATCH_SIZE).join(","));
+    }
+
+    Promise.all(
+      chunks.map((chunk) =>
+        fetch(`/api/dividends?symbols=${encodeURIComponent(chunk)}`)
+          .then((r) => (r.ok ? r.json() : { events: [] }))
+          .then((data: { events?: DividendEventLike[] }) => data.events ?? [])
+          .catch(() => [] as DividendEventLike[])
+      )
+    ).then((batches) => {
+      if (!cancelled) setDividendEvents(batches.flat());
+    });
 
     return () => {
       cancelled = true;
@@ -85,10 +96,14 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
         valueClassName={
           stats.totalProfit >= 0 ? "text-emerald-600 glow-profit" : "text-rose-600 glow-loss"
         }
-        badge={{
-          text: formatSignedPercent(stats.totalProfitPercent),
-          positive: stats.totalProfitPercent >= 0,
-        }}
+        badge={
+          stats.totalProfitPercent == null
+            ? undefined
+            : {
+                text: formatSignedPercent(stats.totalProfitPercent),
+                positive: stats.totalProfitPercent >= 0,
+              }
+        }
       />
       <SnowballStatCard
         label="IRR"

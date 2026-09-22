@@ -39,7 +39,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="app-card min-w-0 lg:col-span-2">
           <h2 className="app-card-section-title">Lợi nhuận ròng</h2>
-          <EquityChart data={stats.equityCurve} />
+          <EquityChart data={stats.profitCurve} />
         </div>
         <div className="app-card space-y-3">
           <h2 className="app-card-section-title">Tóm tắt</h2>
