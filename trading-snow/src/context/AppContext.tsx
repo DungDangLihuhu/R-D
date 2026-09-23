@@ -39,6 +39,8 @@ import type {
   Transaction,
 } from "@/lib/types";
 
+const PRICE_REFRESH_MS = 5 * 60 * 1000;
+
 interface AppContextValue {
   state: AppState;
   activePortfolioId: string;
@@ -427,20 +429,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Tự lấy giá mỗi 5 phút khi tab đang mở, và ngay khi có mã mới chưa có giá. Trước
+  // đây chỉ kiểm tra lúc mở app nên để trang mở lâu thì giá đứng yên.
+  const holdingSymbolsKey = holdingSymbols.join(",");
+  const autoRefreshing = useRef(false);
+
   useEffect(() => {
-    if (!hydrated || holdingSymbols.length === 0) return;
-    const stale =
-      !state.pricesUpdatedAt ||
-      Date.now() - new Date(state.pricesUpdatedAt).getTime() > 5 * 60 * 1000;
-    if (!stale) return;
+    if (!hydrated || !holdingSymbolsKey) return;
 
-    const symbols = [...holdingSymbols];
-    const tid = globalThis.setTimeout(() => {
-      void refreshPrices(symbols);
-    }, 0);
+    const refreshIfStale = async () => {
+      if (autoRefreshing.current || document.hidden) return;
+      const { pricesUpdatedAt, marketPrices } = stateRef.current;
+      const symbols = holdingSymbolsRef.current;
+      const stale =
+        !pricesUpdatedAt ||
+        Date.now() - new Date(pricesUpdatedAt).getTime() > PRICE_REFRESH_MS ||
+        symbols.some((s) => marketPrices[s] == null);
+      if (!stale) return;
+      autoRefreshing.current = true;
+      try {
+        await refreshPrices(symbols);
+      } finally {
+        autoRefreshing.current = false;
+      }
+    };
 
-    return () => globalThis.clearTimeout(tid);
-  }, [hydrated, holdingSymbols, refreshPrices, state.pricesUpdatedAt]);
+    const onVisible = () => {
+      if (!document.hidden) void refreshIfStale();
+    };
+
+    // Lùi một nhịp: refreshPrices bật trạng thái loading ngay khi chạy.
+    const first = globalThis.setTimeout(() => void refreshIfStale(), 0);
+    const id = globalThis.setInterval(() => void refreshIfStale(), 60_000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      globalThis.clearTimeout(first);
+      globalThis.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [hydrated, holdingSymbolsKey, refreshPrices]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
