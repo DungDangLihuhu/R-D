@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -29,9 +29,11 @@ import {
   formatMoney,
   formatPercent,
 } from "@/lib/format";
+import { usePriceHistory } from "@/hooks/usePriceHistory";
 import { fetchJson } from "@/lib/fetch-cache";
 import { useChartTheme } from "@/lib/chart-theme";
 import type { PortfolioStats, Transaction } from "@/lib/types";
+import type { HistoryPoint } from "@/lib/yahoo";
 
 function formatChartAxisPercent(value: number): string {
   const pct = value - 100;
@@ -56,10 +58,12 @@ export function BenchmarkComparison({
   marketPrices: Record<string, number>;
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
-  const [comparison, setComparison] = useState<ComparisonResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [bench, setBench] = useState<
+    { url: string; points: HistoryPoint[] } | { url: string; error: string } | null
+  >(null);
+  const [shown, setShown] = useState<ComparisonResult | null>(null);
   const chartTheme = useChartTheme();
+  const { series: closes, status: historyStatus } = usePriceHistory(transactions);
 
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 
@@ -85,7 +89,6 @@ export function BenchmarkComparison({
   );
 
   const hasData = hasBenchmarkTradingData(transactions);
-  const requestIdRef = useRef(0);
 
   const benchmarkWindow = useMemo(
     () =>
@@ -93,55 +96,60 @@ export function BenchmarkComparison({
     [hasData, curve, range, transactions]
   );
 
-  // Bật loading ngay trong render thay vì trong thân effect — setState trong
-  // effect làm React render thêm một vòng thừa trước khi hiện spinner.
-  const requestKey = benchmarkWindow
-    ? `${benchmarkWindow.from}|${benchmarkWindow.to}|${range}|${portfolioSignature}`
+  const benchUrl = benchmarkWindow
+    ? `/api/benchmark?from=${extendBenchmarkFrom(benchmarkWindow.from)}&to=${benchmarkWindow.to}`
     : "";
-  const [pendingKey, setPendingKey] = useState("");
-  if (requestKey && pendingKey !== requestKey) {
-    setPendingKey(requestKey);
-    setLoading(true);
-    setError(null);
-  }
 
   useEffect(() => {
-    if (!benchmarkWindow) return;
+    if (!benchUrl) return;
+    let cancelled = false;
 
-    const fetchFrom = extendBenchmarkFrom(benchmarkWindow.from);
-    const url = `/api/benchmark?from=${fetchFrom}&to=${benchmarkWindow.to}`;
-    const requestId = ++requestIdRef.current;
-
-    fetchJson<{ points?: { date: string; close: number }[]; error?: string }>(
-      url,
-      { ttlMs: 15 * 60 * 1000 }
-    )
+    fetchJson<{ points?: HistoryPoint[]; error?: string }>(benchUrl, {
+      ttlMs: 15 * 60 * 1000,
+    })
       .then((data) => {
-        if (requestIdRef.current !== requestId) return;
-        if (data.error) {
-          setError(data.error);
-          setComparison(null);
-          return;
-        }
-        const result = buildBenchmarkComparison(
-          portfolioInput,
-          data.points ?? [],
-          benchmarkWindow,
-          range
+        if (cancelled) return;
+        setBench(
+          data.error
+            ? { url: benchUrl, error: data.error }
+            : { url: benchUrl, points: data.points ?? [] }
         );
-        setComparison(result);
-        if (!result) {
-          setError("Không tải được dữ liệu S&P 500 cho khoảng thời gian này");
-        }
       })
       .catch(() => {
-        if (requestIdRef.current !== requestId) return;
-        setError("Không tải được dữ liệu S&P 500");
-      })
-      .finally(() => {
-        if (requestIdRef.current === requestId) setLoading(false);
+        if (!cancelled) setBench({ url: benchUrl, error: "Không tải được dữ liệu S&P 500" });
       });
-  }, [benchmarkWindow, range, portfolioInput]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [benchUrl]);
+
+  const benchReady = bench && bench.url === benchUrl ? bench : null;
+  // Chờ giá lịch sử của các mã trong danh mục: không có nó thì giữa các lệnh vị thế bị
+  // định giá theo giá khớp gần nhất và đường danh mục phẳng rồi vọt ở điểm cuối.
+  const historyPending = historyStatus === "loading";
+
+  const comparison = useMemo(() => {
+    if (!benchReady || "error" in benchReady || !benchmarkWindow || historyPending) return null;
+    return buildBenchmarkComparison(
+      { ...portfolioInput, priceHistory: closes ?? undefined },
+      benchReady.points,
+      benchmarkWindow,
+      range
+    );
+  }, [benchReady, benchmarkWindow, historyPending, portfolioInput, closes, range]);
+
+  const loading = Boolean(benchUrl) && (!benchReady || historyPending);
+  const error =
+    benchReady && "error" in benchReady
+      ? benchReady.error
+      : benchReady && !loading && !comparison
+        ? "Không tải được dữ liệu S&P 500 cho khoảng thời gian này"
+        : null;
+
+  // Đổi khung thời gian thì giữ biểu đồ cũ trong lúc tải, không nháy trống.
+  if (comparison && comparison !== shown) setShown(comparison);
+  const display = comparison ?? (loading ? shown : null);
 
   if (!hasData) {
     return (
@@ -161,13 +169,13 @@ export function BenchmarkComparison({
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
             S&P 500: 0% đầu kỳ · Danh mục: (Δ lãi chốt + Δ float) / cost mở · &quot;Tất cả&quot;: tích lũy
-            {comparison?.clampedToHistory && (
-              <> · Từ {formatDate(comparison.from)} (ngày trade đầu)</>
+            {display?.clampedToHistory && (
+              <> · Từ {formatDate(display.from)} (ngày trade đầu)</>
             )}
-            {comparison && (
+            {display && (
               <>
                 {" "}
-                · {formatDate(comparison.from)} – {formatDate(comparison.to)}
+                · {formatDate(display.from)} – {formatDate(display.to)}
               </>
             )}
           </p>
@@ -189,15 +197,15 @@ export function BenchmarkComparison({
         </div>
       </div>
 
-      {loading && !comparison && (
+      {loading && !display && (
         <p className="text-sm text-gray-500">Đang tải dữ liệu S&P 500...</p>
       )}
 
-      {error && !loading && !comparison && (
+      {error && !loading && !display && (
         <p className="text-sm text-rose-600">{error}</p>
       )}
 
-      {comparison && (
+      {display && (
         <div className={loading ? "pointer-events-none opacity-60" : undefined}>
           {loading && (
             <p className="mb-2 text-xs text-gray-400">Đang cập nhật khoảng thời gian...</p>
@@ -205,27 +213,27 @@ export function BenchmarkComparison({
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
               label="Danh mục"
-              value={formatPercent(comparison.portfolioReturn)}
-              trend={comparison.portfolioReturn >= 0 ? "up" : "down"}
+              value={formatPercent(display.portfolioReturn)}
+              trend={display.portfolioReturn >= 0 ? "up" : "down"}
               sub={
-                comparison.holdingsCost > 0
-                  ? `Cost mở: ${formatMoney(comparison.holdingsCost)}`
-                  : comparison.realizedPnl !== 0
-                    ? `Đã chốt: ${formatMoney(comparison.realizedPnl)}`
+                display.holdingsCost > 0
+                  ? `Cost mở: ${formatMoney(display.holdingsCost)}`
+                  : display.realizedPnl !== 0
+                    ? `Đã chốt: ${formatMoney(display.realizedPnl)}`
                     : undefined
               }
             />
             <StatCard
               label="S&P 500"
-              value={formatPercent(comparison.sp500Return)}
-              trend={comparison.sp500Return >= 0 ? "up" : "down"}
+              value={formatPercent(display.sp500Return)}
+              trend={display.sp500Return >= 0 ? "up" : "down"}
             />
             <StatCard
               label="Vượt / thua S&P 500"
-              value={formatPercent(comparison.outperformance)}
-              trend={comparison.outperformance >= 0 ? "up" : "down"}
+              value={formatPercent(display.outperformance)}
+              trend={display.outperformance >= 0 ? "up" : "down"}
               sub={
-                comparison.outperformance >= 0
+                display.outperformance >= 0
                   ? "Đánh bại thị trường"
                   : "Kém thị trường"
               }
@@ -235,10 +243,12 @@ export function BenchmarkComparison({
           <div className="min-w-0 w-full">
             <ResponsiveContainer width="100%" height={300}>
               <LineChart
-                data={comparison.points.map((p) => ({
-                  ...p,
-                  label: formatChartMonthYear(p.date),
-                }))}
+                data={display.points.map((p, i, all) => {
+                  // Điểm đầu kỳ và điểm cuối tháng đầu cùng một tháng — chỉ ghi nhãn một lần.
+                  const label = formatChartMonthYear(p.date);
+                  const repeated = i > 0 && formatChartMonthYear(all[i - 1].date) === label;
+                  return { ...p, label: repeated ? "" : label };
+                })}
               >
                 <CartesianGrid stroke={chartTheme.grid} vertical={false} />
                 <XAxis

@@ -86,6 +86,13 @@ export function formatChartMonthYear(date: string): string {
   return `${mm}/${yyyy}`;
 }
 
+export function formatChartDayMonth(date: string): string {
+  const d = new Date(date);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}`;
+}
+
 /** Tháng P&L dạng YYYY-MM → MM/YYYY */
 export function formatMonthKey(month: string): string {
   const [year, mon] = month.split("-");

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo } from "react";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
+import { ProfitCurvePanel } from "@/components/ProfitCurvePanel";
 import { useApp } from "@/context/AppContext";
 import { filterHiddenTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
@@ -13,13 +14,6 @@ const BenchmarkComparison = dynamic(
     import("@/components/BenchmarkComparison").then((m) => m.BenchmarkComparison),
   {
     loading: () => <div className="app-skeleton h-80" />,
-  }
-);
-
-const EquityChart = dynamic(
-  () => import("@/components/Charts").then((m) => m.EquityChart),
-  {
-    loading: () => <div className="app-skeleton h-64" />,
   }
 );
 
@@ -73,10 +67,7 @@ export default function AnalyticsPage() {
           <h2 className="app-card-section-title">P&L theo tháng</h2>
           <MonthlyPnlChart data={stats.monthlyPnl} />
         </div>
-        <div className="app-card min-w-0">
-          <h2 className="app-card-section-title">Lợi nhuận ròng</h2>
-          <EquityChart data={stats.profitCurve} />
-        </div>
+        <ProfitCurvePanel />
       </div>
 
       <BenchmarkComparison

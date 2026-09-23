@@ -44,6 +44,18 @@ export interface HistoryPoint {
   close: number;
 }
 
+/** Một lần chia tách: `ratio` = cổ mới / cổ cũ (NVDA 10/06/2024 → 10). */
+export interface SplitEvent {
+  date: string;
+  ratio: number;
+}
+
+export interface CloseHistory {
+  /** Giá đóng cửa ngày — Yahoo đã chia sẵn theo các lần split về sau. */
+  points: HistoryPoint[];
+  splits: SplitEvent[];
+}
+
 export interface YahooInsiderTransaction {
   name: string;
   date: string;
@@ -180,15 +192,23 @@ export async function fetchPriceHistory(
   from: Date,
   to: Date
 ): Promise<HistoryPoint[]> {
+  return (await fetchCloseHistory(symbol, from, to)).points;
+}
+
+export async function fetchCloseHistory(
+  symbol: string,
+  from: Date,
+  to: Date
+): Promise<CloseHistory> {
   const yahoo = toYahooSymbol(symbol);
   const period1 = Math.floor(from.getTime() / 1000);
   const period2 = Math.floor(to.getTime() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?interval=1d&period1=${period1}&period2=${period2}`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?interval=1d&period1=${period1}&period2=${period2}&events=split`;
   const res = await fetch(url, {
     headers: YAHOO_HEADERS,
     next: { revalidate: 3600 },
   });
-  if (!res.ok) return [];
+  if (!res.ok) return { points: [], splits: [] };
 
   const json = await res.json();
   const result = json?.chart?.result?.[0];
@@ -204,7 +224,18 @@ export async function fetchPriceHistory(
       close,
     });
   }
-  return points;
+
+  const rawSplits: Record<string, { date?: number; numerator?: number; denominator?: number }> =
+    result?.events?.splits ?? {};
+  const splits: SplitEvent[] = Object.values(rawSplits)
+    .map((s) => ({
+      date: new Date((s.date ?? 0) * 1000).toISOString().slice(0, 10),
+      ratio: (s.numerator ?? 0) / (s.denominator ?? 0),
+    }))
+    .filter((s) => Number.isFinite(s.ratio) && s.ratio > 0 && s.ratio !== 1)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return { points, splits };
 }
 
 interface YahooChartMeta {

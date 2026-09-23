@@ -1,20 +1,13 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { DataTools } from "@/components/DataTools";
 import { PageHeader } from "@/components/PageHeader";
 import { PriceRefresh } from "@/components/PriceRefresh";
+import { ProfitCurvePanel } from "@/components/ProfitCurvePanel";
 import { SyncPanel } from "@/components/SyncPanel";
 import { useApp } from "@/context/AppContext";
 import { formatMoney } from "@/lib/format";
-
-const EquityChart = dynamic(
-  () => import("@/components/Charts").then((m) => m.EquityChart),
-  {
-    loading: () => <div className="app-skeleton h-64" />,
-  }
-);
 
 export default function DashboardPage() {
   const { stats } = useApp();
@@ -37,10 +30,7 @@ export default function DashboardPage() {
       <DashboardMetrics stats={stats} />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="app-card min-w-0 lg:col-span-2">
-          <h2 className="app-card-section-title">Lợi nhuận ròng</h2>
-          <EquityChart data={stats.profitCurve} />
-        </div>
+        <ProfitCurvePanel className="lg:col-span-2" />
         <div className="app-card space-y-3">
           <h2 className="app-card-section-title">Tóm tắt</h2>
           <Row label="Win rate" value={`${stats.winRate.toFixed(1)}%`} />

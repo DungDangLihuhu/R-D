@@ -14,8 +14,8 @@ import {
 } from "recharts";
 import type { PortfolioStats } from "@/lib/types";
 import {
-  downsampleMonthly,
   formatAxisMoney,
+  formatChartDayMonth,
   formatChartMonthYear,
   formatDate,
   formatMonthKey,
@@ -26,6 +26,9 @@ import { useChartTheme } from "@/lib/chart-theme";
 const PROFIT_COLOR = "#10b981";
 const LOSS_COLOR = "#f43f5e";
 
+const SHORT_RANGE_MS = 180 * 86_400_000;
+
+/** `data` đã được lấy mẫu (theo phiên/tuần hoặc theo tháng) và xếp theo ngày tăng dần. */
 export function EquityChart({ data }: { data: PortfolioStats["profitCurve"] }) {
   const theme = useChartTheme();
 
@@ -37,17 +40,14 @@ export function EquityChart({ data }: { data: PortfolioStats["profitCurve"] }) {
     );
   }
 
-  const chartData = downsampleMonthly(
-    [...data].sort((a, b) => a.date.localeCompare(b.date))
-  ).map((d) => ({
-    ...d,
-    label: formatChartMonthYear(d.date),
-  }));
+  // Lịch sử ngắn thì trục ghi ngày/tháng, dài thì tháng/năm.
+  const span = Date.parse(data[data.length - 1].date) - Date.parse(data[0].date);
+  const formatLabel = span <= SHORT_RANGE_MS ? formatChartDayMonth : formatChartMonthYear;
 
   return (
     <div className="min-w-0 w-full">
       <ResponsiveContainer width="100%" height={280}>
-      <AreaChart data={chartData}>
+      <AreaChart data={data}>
         <defs>
           <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={theme.accent} stopOpacity={0.18} />
@@ -56,12 +56,13 @@ export function EquityChart({ data }: { data: PortfolioStats["profitCurve"] }) {
         </defs>
         <CartesianGrid stroke={theme.grid} vertical={false} />
         <XAxis
-          dataKey="label"
+          dataKey="date"
           tick={{ fill: theme.tick, fontSize: 11 }}
+          tickFormatter={(date: string) => formatLabel(date)}
           axisLine={{ stroke: theme.grid }}
           tickLine={false}
           interval="preserveStartEnd"
-          minTickGap={28}
+          minTickGap={36}
         />
         <YAxis
           tick={{ fill: theme.tick, fontSize: 11 }}
