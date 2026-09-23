@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { NotificationWatcher } from "@/components/NotificationWatcher";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { SyncBadge } from "@/components/SyncPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -33,7 +34,8 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { state, activePortfolioId, setActivePortfolioId, cloudConfigured } = useApp();
+  const { hydrated, state, activePortfolioId, setActivePortfolioId, cloudConfigured } =
+    useApp();
   const navRef = useRef<HTMLElement>(null);
   const navWrapRef = useRef<HTMLDivElement>(null);
 
@@ -127,7 +129,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl min-w-0 flex-1 px-4 py-6 sm:py-8">
-        {children}
+        {hydrated ? children : <PageSkeleton />}
       </main>
       <footer className="app-footer mt-auto">
         <p className="mx-auto max-w-6xl px-4 py-5 text-center text-xs leading-relaxed">

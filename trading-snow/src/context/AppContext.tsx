@@ -42,6 +42,8 @@ import type {
 const PRICE_REFRESH_MS = 5 * 60 * 1000;
 
 interface AppContextValue {
+  /** Đã đọc xong dữ liệu trong máy — trước đó state là bản trống mặc định. */
+  hydrated: boolean;
   state: AppState;
   activePortfolioId: string;
   setActivePortfolioId: (id: string) => void;
@@ -614,6 +616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo<AppContextValue>(
     () => ({
       ...actions,
+      hydrated,
       state,
       activePortfolioId,
       stats,
@@ -626,6 +629,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       actions,
+      hydrated,
       state,
       activePortfolioId,
       stats,
