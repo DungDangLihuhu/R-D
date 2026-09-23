@@ -21,6 +21,8 @@ export type PriceHistoryStatus = "idle" | "loading" | "ready" | "failed";
 export function usePriceHistory(transactions: Transaction[]): {
   series: CloseSeries | null;
   status: PriceHistoryStatus;
+  /** Giá gốc Yahoo kèm lịch sử split, chưa quy đổi — để đối chiếu với lệnh đã ghi. */
+  raw: Record<string, CloseHistory> | null;
 } {
   // Chuỗi thay vì mảng làm khóa: thêm một lệnh của mã cũ không bắt tải lại.
   const { symbolsCsv, from, currenciesCsv } = useMemo(() => {
@@ -96,10 +98,13 @@ export function usePriceHistory(transactions: Transaction[]): {
   }, [symbolsCsv, from, currenciesCsv]);
 
   return useMemo(() => {
-    if (!requestKey) return { series: null, status: "idle" as const };
-    if (!loaded || loaded.key !== requestKey) return { series: null, status: "loading" as const };
+    if (!requestKey) return { series: null, status: "idle" as const, raw: null };
+    if (!loaded || loaded.key !== requestKey) {
+      return { series: null, status: "loading" as const, raw: null };
+    }
+    const raw = loaded.history;
     // Thiếu tỷ giá thì không vẽ lẫn EUR với USD — để biểu đồ rơi về đường tính sẵn.
-    if (loaded.fxFailed) return { series: null, status: "failed" as const };
+    if (loaded.fxFailed) return { series: null, status: "failed" as const, raw };
 
     const series: CloseSeries = {};
     for (const symbol of symbolsCsv.split(",")) {
@@ -122,7 +127,7 @@ export function usePriceHistory(transactions: Transaction[]): {
       }));
     }
     return Object.keys(series).length > 0
-      ? { series, status: "ready" as const }
-      : { series: null, status: "failed" as const };
+      ? { series, status: "ready" as const, raw }
+      : { series: null, status: "failed" as const, raw };
   }, [requestKey, loaded, symbolsCsv, transactions]);
 }

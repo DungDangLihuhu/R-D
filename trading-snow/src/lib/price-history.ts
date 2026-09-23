@@ -187,3 +187,70 @@ export function buildMarketProfitCurve(
   curve.push({ date: now.toISOString(), value: finalProfit });
   return curve;
 }
+
+export interface MissingSplit {
+  symbol: string;
+  /** Ngày split theo Yahoo (YYYY-MM-DD). */
+  date: string;
+  ratio: number;
+  /** Số cổ đang ghi trong app ngay trước ngày split. */
+  sharesBefore: number;
+}
+
+const SPLIT_MATCH_DAYS = 7;
+
+/**
+ * Split Yahoo có mà lệnh chưa ghi: đang giữ cổ phiếu qua ngày split, không có lệnh SPLIT
+ * nào gần ngày đó, và các lệnh trước split ghi theo giá khớp gốc — tức số cổ trong app
+ * đang lệch đúng bằng hệ số split. Lệnh ghi theo giá broker đã điều chỉnh thì không cần.
+ */
+export function findMissingSplits(
+  history: Record<string, CloseHistory>,
+  transactions: Transaction[]
+): MissingSplit[] {
+  const missing: MissingSplit[] = [];
+
+  for (const [symbol, { points, splits }] of Object.entries(history)) {
+    if (splits.length === 0 || points.length === 0) continue;
+    const trades = transactions
+      .filter((t) => t.symbol.toUpperCase() === symbol)
+      .sort(compareTransactionsChronologically);
+    if (trades.length === 0) continue;
+    const actual = unadjustForSplits(points, splits);
+
+    for (const split of splits) {
+      const splitDay = Date.parse(split.date);
+      const recorded = trades.some(
+        (t) =>
+          t.type === "SPLIT" &&
+          Math.abs(Date.parse(t.date.slice(0, 10)) - splitDay) <= SPLIT_MATCH_DAYS * DAY_MS
+      );
+      if (recorded) continue;
+
+      let shares = 0;
+      let actualVotes = 0;
+      let adjustedVotes = 0;
+      for (const t of trades) {
+        const day = t.date.slice(0, 10);
+        if (day >= split.date) break;
+        if (t.type === "BUY") shares += t.quantity;
+        else if (t.type === "SELL") shares = Math.max(0, shares - t.quantity);
+        else if (t.type === "SPLIT" && t.quantity > 0) shares *= t.quantity;
+        if ((t.type !== "BUY" && t.type !== "SELL") || !(t.price > 0)) continue;
+        const adjustedClose = closeOnOrBefore(points, day);
+        const actualClose = closeOnOrBefore(actual, day);
+        if (!adjustedClose || !actualClose) continue;
+        const offAdjusted = Math.abs(Math.log(t.price / adjustedClose));
+        const offActual = Math.abs(Math.log(t.price / actualClose));
+        if (offActual < offAdjusted) actualVotes++;
+        else if (offAdjusted < offActual) adjustedVotes++;
+      }
+
+      if (shares > 1e-9 && actualVotes > adjustedVotes) {
+        missing.push({ symbol, date: split.date, ratio: split.ratio, sharesBefore: shares });
+      }
+    }
+  }
+
+  return missing.sort((a, b) => b.date.localeCompare(a.date));
+}

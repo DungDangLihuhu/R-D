@@ -1,6 +1,7 @@
 "use client";
 
 import { HoldingsTable } from "@/components/HoldingsTable";
+import { MissingSplitsNotice } from "@/components/MissingSplitsNotice";
 import { PageHeader } from "@/components/PageHeader";
 import { PriceRefresh } from "@/components/PriceRefresh";
 import { StatCard } from "@/components/StatCard";
@@ -28,6 +29,7 @@ export default function PortfolioPage() {
           . Cổ phiếu .PA cần Yahoo — Finnhub free không hỗ trợ.
         </div>
       )}
+      <MissingSplitsNotice />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard
           label="Tổng giá trị"
