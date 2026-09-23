@@ -61,12 +61,22 @@ export function checkCloudConfigured(): Promise<boolean> {
   return configuredCheck;
 }
 
+/**
+ * `since`: phiên bản đang có ở máy này. Cloud chưa đổi thì trả `unchanged` mà không tải
+ * cả state — poll 20 giây/lần chỉ tốn vài chục byte.
+ */
 export async function loadRemoteState(
-  room: string
-): Promise<{ state: AppState; updatedAt: string } | null> {
-  const res = await fetch(`/api/data?room=${encodeURIComponent(room)}`);
+  room: string,
+  since?: string | null
+): Promise<
+  { state: AppState; updatedAt: string } | { unchanged: true; updatedAt: string } | null
+> {
+  const params = new URLSearchParams({ room });
+  if (since) params.set("since", since);
+  const res = await fetch(`/api/data?${params}`);
   if (!res.ok) return null;
   const data = await res.json();
+  if (data.unchanged) return { unchanged: true, updatedAt: data.updatedAt as string };
   if (!data.state) return null;
   return { state: data.state as AppState, updatedAt: data.updatedAt as string };
 }

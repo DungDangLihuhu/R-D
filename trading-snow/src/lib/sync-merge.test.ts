@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mergeSyncedState, sameSyncedContent, syncBaseOf } from "./sync-merge";
+import {
+  isBlankState,
+  localOnlyTransactionCount,
+  mergeSyncedState,
+  sameSyncedContent,
+  syncBaseOf,
+} from "./sync-merge";
 import type { AppState, Transaction } from "./types";
 
 function tx(id: string): Transaction {
@@ -65,5 +71,16 @@ describe("sameSyncedContent", () => {
     const a = state(["a"], { marketPrices: { B: 2, A: 1 } });
     const b = state(["a"], { marketPrices: { A: 1, B: 2 }, marketQuotes: {}, hiddenSymbols: { p: [] } });
     expect(sameSyncedContent(a, b)).toBe(true);
+  });
+});
+
+describe("first sync of a device", () => {
+  it("treats a fresh device as blank so it never overwrites the cloud with nothing", () => {
+    expect(isBlankState(state([]))).toBe(true);
+    expect(isBlankState(state(["a"]))).toBe(false);
+  });
+
+  it("counts trades that exist only on this device", () => {
+    expect(localOnlyTransactionCount(state(["a", "b", "x"]), state(["a", "b"]))).toBe(1);
   });
 });
