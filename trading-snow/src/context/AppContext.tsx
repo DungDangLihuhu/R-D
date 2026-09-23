@@ -16,8 +16,17 @@ import {
   checkCloudConfigured,
   getSyncRoomId,
   loadRemoteState,
+  loadSyncBase,
   saveRemoteState,
+  saveSyncBase,
 } from "@/lib/remote-storage";
+import {
+  emptySyncBase,
+  mergeSyncedState,
+  sameSyncedContent,
+  syncBaseOf,
+  type SyncBase,
+} from "@/lib/sync-merge";
 import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
 import { defaultState, loadState, saveState } from "@/lib/storage";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
@@ -87,11 +96,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [priceLoading, setPriceLoading] = useState(false);
   const [quoteUnresolved, setQuoteUnresolved] = useState<string[]>([]);
   const [cloudConfigured, setCloudConfigured] = useState(false);
+  // Chỉ đẩy lên cloud sau khi đã nhận (hoặc gộp) bản cloud lúc mở app — trước đó state
+  // local có thể là bản cũ/trống và sẽ đè lên dữ liệu thật.
+  const [cloudReady, setCloudReady] = useState(false);
   const [syncRoom, setSyncRoom] = useState("shared");
 
-  const lastRemoteUpdatedAt = useRef<string | null>(null);
+  // Bản cloud gần nhất mà state ở máy này dựa vào — để gộp khi máy khác cũng vừa đổi.
+  const syncBaseRef = useRef<SyncBase | null>(null);
+  // State đã khớp cloud (vừa nhận về hoặc vừa lưu xong) thì không đẩy lại: trước đây mỗi
+  // lần poll nhận bản mới lại ghi ngược lên cloud, hai máy cùng mở ghi đè nhau mỗi 20 giây.
+  const syncedStateRef = useRef<AppState | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSaving = useRef(false);
   const isPolling = useRef(false);
+
+  const rememberSyncBase = useCallback((base: SyncBase) => {
+    syncBaseRef.current = base;
+    saveSyncBase(base);
+  }, []);
+
+  const syncBaseFor = useCallback(
+    (room: string) => (syncBaseRef.current?.room === room ? syncBaseRef.current : null),
+    []
+  );
+
+  /**
+   * Nhận bản cloud. Có `base` thì gộp với thay đổi chưa đồng bộ ở máy này (giữ lệnh
+   * thêm ở cả hai bên, bỏ lệnh một bên đã xóa); không có thì cloud thắng như trước.
+   */
+  const applyRemoteState = useCallback(
+    (room: string, remote: { state: AppState; updatedAt: string }, base: SyncBase | null) => {
+      setState((current) => {
+        const merged = base ? mergeSyncedState(base, current, remote.state) : remote.state;
+        if (merged === remote.state || sameSyncedContent(merged, remote.state)) {
+          syncedStateRef.current = remote.state;
+          return remote.state;
+        }
+        return merged;
+      });
+      rememberSyncBase(syncBaseOf(room, remote.updatedAt, remote.state));
+    },
+    [rememberSyncBase]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -111,55 +157,90 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (!configured) return;
 
+      const stored = loadSyncBase();
+      syncBaseRef.current = stored?.room === room ? stored : null;
+
       const remote = await loadRemoteState(room);
       if (cancelled) return;
 
       if (remote) {
-        lastRemoteUpdatedAt.current = remote.updatedAt;
-        setState(remote.state);
-        saveState(remote.state);
+        // Có base thì thay đổi lưu local nhưng chưa kịp đẩy lên (mất mạng, đóng tab)
+        // được gộp vào; lần đầu chưa có base thì cloud thắng, tránh hồi sinh lệnh đã xóa.
+        applyRemoteState(room, remote, syncBaseFor(room));
         setActivePortfolioId(remote.state.portfolios[0]?.id ?? "default");
       } else if (local.transactions.length > 0 || local.portfolios.length > 1) {
-        const ts = await saveRemoteState(room, local);
-        if (ts) lastRemoteUpdatedAt.current = ts;
+        const base = emptySyncBase(room);
+        const result = await saveRemoteState(room, local, base.updatedAt);
+        if (cancelled) return;
+        if (result.status === "saved") {
+          syncedStateRef.current = local;
+          rememberSyncBase(syncBaseOf(room, result.updatedAt, local));
+        } else if (result.status === "conflict") {
+          applyRemoteState(room, result, base);
+        }
       }
+      setCloudReady(true);
     }
 
     init();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyRemoteState, rememberSyncBase, syncBaseFor]);
 
   useEffect(() => {
     if (!hydrated) return;
     saveState(state);
 
-    if (!cloudConfigured) return;
+    if (!cloudConfigured || !cloudReady || state === syncedStateRef.current) return;
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const ts = await saveRemoteState(syncRoom, state);
-      if (ts) lastRemoteUpdatedAt.current = ts;
+      saveTimer.current = null;
+      isSaving.current = true;
+      try {
+        // Chưa từng đồng bộ phòng này: coi như cloud trống, lỡ có máy khác vừa tạo thì
+        // gộp hợp (không xóa gì) thay vì ghi đè.
+        const base = syncBaseFor(syncRoom) ?? emptySyncBase(syncRoom);
+        const result = await saveRemoteState(syncRoom, state, base.updatedAt);
+        if (result.status === "saved") {
+          syncedStateRef.current = state;
+          rememberSyncBase(syncBaseOf(syncRoom, result.updatedAt, state));
+        } else if (result.status === "conflict") {
+          applyRemoteState(syncRoom, result, base);
+        }
+      } finally {
+        isSaving.current = false;
+      }
     }, 800);
 
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = null;
     };
-  }, [state, hydrated, cloudConfigured, syncRoom]);
+  }, [
+    state,
+    hydrated,
+    cloudConfigured,
+    cloudReady,
+    syncRoom,
+    applyRemoteState,
+    rememberSyncBase,
+    syncBaseFor,
+  ]);
 
   useEffect(() => {
-    if (!hydrated || !cloudConfigured) return;
+    if (!hydrated || !cloudConfigured || !cloudReady) return;
 
     const poll = async () => {
-      if (isPolling.current || document.hidden) return;
+      // Đang chờ/đang lưu thì để lượt lưu tự xử lý xung đột, poll lúc này chỉ gây đua.
+      if (isPolling.current || isSaving.current || saveTimer.current || document.hidden) return;
       isPolling.current = true;
       try {
         const remote = await loadRemoteState(syncRoom);
-        if (!remote || remote.updatedAt === lastRemoteUpdatedAt.current) return;
-        lastRemoteUpdatedAt.current = remote.updatedAt;
-        setState(remote.state);
-        saveState(remote.state);
+        const base = syncBaseFor(syncRoom);
+        if (!remote || remote.updatedAt === base?.updatedAt) return;
+        applyRemoteState(syncRoom, remote, base);
       } finally {
         isPolling.current = false;
       }
@@ -176,7 +257,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, cloudConfigured, syncRoom]);
+  }, [hydrated, cloudConfigured, cloudReady, syncRoom, applyRemoteState, syncBaseFor]);
 
   const hiddenSymbols = useMemo(
     () => hiddenSymbolSet(state.hiddenSymbols?.[activePortfolioId]),
