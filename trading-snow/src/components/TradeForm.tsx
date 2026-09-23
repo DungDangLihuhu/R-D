@@ -26,7 +26,7 @@ const assetTypes: { value: AssetType; label: string }[] = [
 ];
 
 export function TradeForm({ onSaved }: { onSaved?: () => void }) {
-  const { state, activePortfolioId, addTransaction } = useApp();
+  const { state, activePortfolioId, addTransaction, currencyOf } = useApp();
   const [type, setType] = useState<TransactionType>("BUY");
   const [symbol, setSymbol] = useState("");
   const [exchange, setExchange] = useState("");
@@ -58,6 +58,18 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
     Number.isFinite(sellQuantity) &&
     sellQuantity > heldForSell + 1e-9;
   const splitHasNoPosition = isSplit && heldForSell === 0;
+
+  // Giá nhập theo tiền niêm yết của sàn (EUR với .PA…); app tự quy ra USD theo tỷ giá ngày khớp.
+  const listedCurrency = resolvedSymbol ? currencyOf(resolvedSymbol) : "USD";
+  const foreignListing =
+    !isCash && resolvedSymbol !== "" && (listedCurrency !== "USD" || resolvedSymbol.includes("."));
+  const priceLabel = isCash
+    ? "Tỷ giá (1)"
+    : listedCurrency !== "USD"
+      ? `Giá (${listedCurrency})`
+      : foreignListing
+        ? "Giá (theo tiền của sàn)"
+        : "Giá";
 
   const resetFields = () => {
     setSymbol("");
@@ -244,9 +256,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
               )}
             </label>
             <label className="block text-sm">
-              <span className="app-label">
-                {isCash ? "Tỷ giá (1)" : "Giá"}
-              </span>
+              <span className="app-label">{priceLabel}</span>
               <input
                 type="number"
                 step="any"
@@ -255,6 +265,11 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
                 className="mt-1 w-full app-input"
                 required
               />
+              {foreignListing && (
+                <span className="mt-1 block text-xs text-gray-400">
+                  Quy ra USD theo tỷ giá ngày khớp.
+                </span>
+              )}
             </label>
             <label className="block text-sm">
               <span className="app-label">Phí</span>

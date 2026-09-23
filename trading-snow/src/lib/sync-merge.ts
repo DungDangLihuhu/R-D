@@ -98,6 +98,7 @@ export function mergeSyncedState(base: SyncBase, local: AppState, remote: AppSta
     transactions,
     marketPrices: { ...older.marketPrices, ...newer.marketPrices },
     marketQuotes: { ...(older.marketQuotes ?? {}), ...(newer.marketQuotes ?? {}) },
+    fxRates: { ...(older.fxRates ?? {}), ...(newer.fxRates ?? {}) },
     pricesUpdatedAt: newer.pricesUpdatedAt ?? older.pricesUpdatedAt ?? null,
     hiddenSymbols,
   };
@@ -120,6 +121,7 @@ function normalized(state: AppState) {
     ...state,
     marketPrices: state.marketPrices ?? {},
     marketQuotes: state.marketQuotes ?? {},
+    fxRates: state.fxRates ?? {},
     pricesUpdatedAt: state.pricesUpdatedAt ?? null,
     hiddenSymbols: Object.fromEntries(
       Object.entries(state.hiddenSymbols ?? {}).filter(([, list]) => list.length > 0)

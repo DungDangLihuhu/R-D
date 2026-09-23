@@ -12,6 +12,24 @@ import {
   QUOTE_MAX_SYMBOLS,
 } from "@/lib/quote-providers";
 import { fetchQuoteFinnhubOne, fetchQuotes } from "@/lib/yahoo";
+import { currencyUnit } from "@/lib/fx";
+import { fxSeries, mapLimited } from "@/lib/fx-server";
+
+/** Tỷ giá hiện tại ra USD cho các đồng tiền niêm yết của những mã vừa lấy giá. */
+async function currentFxRates(currencies: (string | undefined)[]): Promise<Record<string, number>> {
+  const bases = [
+    ...new Set(currencies.map((c) => currencyUnit(c).base).filter((b) => b !== "USD")),
+  ];
+  if (bases.length === 0) return {};
+  const from = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+  const series = await mapLimited(bases, 3, (b) => fxSeries(b, from));
+  const fx: Record<string, number> = {};
+  bases.forEach((b, i) => {
+    const current = series[i]?.current;
+    if (current && current > 0) fx[b] = current;
+  });
+  return fx;
+}
 
 async function runQuoteCheck() {
   const finnhubKey = getFinnhubApiKey();
@@ -80,10 +98,12 @@ export async function GET(req: NextRequest) {
   try {
     const result = await fetchQuotesForSymbols(list);
     const finnhub = inspectFinnhubKey();
+    const fx = await currentFxRates(result.quotes.map((q) => q.currency));
 
     return NextResponse.json({
       quotes: result.quotes,
       prices: result.prices,
+      fx,
       updatedAt: new Date().toISOString(),
       unresolved: result.unresolved,
       requested: result.requested,

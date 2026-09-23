@@ -15,6 +15,7 @@ import {
   formatPnlArrow,
   formatShares,
 } from "@/lib/format";
+import { isUsdCurrency } from "@/lib/fx";
 
 // Bảng (màn rộng) và thẻ (mobile) là hai danh sách riêng: bảng mang vai trò table/row/cell
 // cho trình đọc màn hình, thẻ là list — không trộn hai kiểu trong cùng một hàng.
@@ -67,6 +68,7 @@ function HoldingRow({
   layout,
   holding,
   quote,
+  priceCurrency,
   editing,
   priceInput,
   hidden,
@@ -78,6 +80,8 @@ function HoldingRow({
   layout: "table" | "card";
   holding: Holding;
   quote?: MarketQuote;
+  /** Tiền tệ niêm yết — giá sửa tay nhập theo tiền này, bảng vẫn hiện USD. */
+  priceCurrency: string;
   editing: boolean;
   priceInput: string;
   hidden: boolean;
@@ -109,17 +113,24 @@ function HoldingRow({
       align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
 
     if (editing) {
+      const foreign = !isUsdCurrency(priceCurrency);
       return (
-        <input
-          autoFocus
-          type="number"
-          step="any"
-          value={priceInput}
-          onChange={(e) => onPriceInput(e.target.value)}
-          onBlur={onSavePrice}
-          onKeyDown={(e) => e.key === "Enter" && onSavePrice()}
-          className={`mt-0.5 w-full max-w-[8.5rem] rounded border border-gray-300 bg-app-surface px-1.5 py-0.5 text-[11px] tabular-nums ${text}`}
-        />
+        <span className={`mt-0.5 flex w-full flex-col ${items}`}>
+          <input
+            autoFocus
+            type="number"
+            step="any"
+            value={priceInput}
+            aria-label={`Giá ${holding.symbol} (${priceCurrency})`}
+            onChange={(e) => onPriceInput(e.target.value)}
+            onBlur={onSavePrice}
+            onKeyDown={(e) => e.key === "Enter" && onSavePrice()}
+            className={`w-full max-w-[8.5rem] rounded border border-gray-300 bg-app-surface px-1.5 py-0.5 text-[11px] tabular-nums ${text}`}
+          />
+          {foreign && (
+            <span className="mt-0.5 text-[10px] text-app-faint">Nhập theo {priceCurrency}</span>
+          )}
+        </span>
       );
     }
 
@@ -302,8 +313,16 @@ function HoldingRow({
 }
 
 export function HoldingsTable() {
-  const { stats, state, setMarketPrice, isSymbolHidden, toggleHiddenSymbol } =
-    useApp();
+  const {
+    stats,
+    state,
+    usd,
+    usdRate,
+    currencyOf,
+    setMarketPrice,
+    isSymbolHidden,
+    toggleHiddenSymbol,
+  } = useApp();
   const [editing, setEditing] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
 
@@ -331,19 +350,22 @@ export function HoldingsTable() {
   };
 
   const renderRow = (h: Holding, layout: "table" | "card") => {
-    const market = h.marketPrice ?? h.avgCost;
+    // Bảng hiện USD, nhưng giá sửa tay lưu theo tiền niêm yết như giá Yahoo trả về.
+    const nativePrice =
+      state.marketPrices[h.symbol] ?? (h.marketPrice ?? h.avgCost) / usdRate(h.symbol);
     return (
       <HoldingRow
         key={h.symbol}
         layout={layout}
         holding={h}
         hidden={isSymbolHidden(h.symbol)}
-        quote={state.marketQuotes?.[h.symbol]}
+        quote={usd.marketQuotes[h.symbol]}
+        priceCurrency={currencyOf(h.symbol)}
         editing={editing === h.symbol}
         priceInput={priceInput}
         onEditStart={() => {
           setEditing(h.symbol);
-          setPriceInput(String(market));
+          setPriceInput(String(Math.round(nativePrice * 10_000) / 10_000));
         }}
         onPriceInput={setPriceInput}
         onSavePrice={() => savePrice(h.symbol)}
@@ -391,6 +413,8 @@ export function HoldingsTable() {
 
       <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500">
         Giá từ Yahoo Finance (+ Finnhub/Twelve Data nếu cấu hình). Pre-market &amp; after-hours khi Yahoo có dữ liệu. Bấm tên mã → Phân tích. Bấm giá/cp sửa thủ công. Icon mắt = tạm ẩn mã khỏi chỉ số.
+        {holdings.some((h) => !isUsdCurrency(currencyOf(h.symbol))) &&
+          " Mã niêm yết ngoại tệ quy ra USD: giá vốn theo tỷ giá ngày mua, giá trị theo tỷ giá hiện tại."}
       </p>
 
       <Pagination

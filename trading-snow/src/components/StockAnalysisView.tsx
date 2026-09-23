@@ -10,6 +10,7 @@ import { SymbolAvatar } from "@/components/SymbolAvatar";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
 import { useApp } from "@/context/AppContext";
 import { fetchJson } from "@/lib/fetch-cache";
+import { currentUsdRate, formatNativeMoney, isUsdCurrency } from "@/lib/fx";
 import {
   formatDate,
   formatMoney,
@@ -106,6 +107,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   const { stats, state } = useApp();
   const [data, setData] = useState<StockAnalysis | null>(null);
   const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
+  // Tỷ giá đi kèm lượt lấy giá — để hiện giá quy USD của mã niêm yết ngoại tệ.
+  const [liveFx, setLiveFx] = useState<Record<string, number>>({});
   const [extraDone, setExtraDone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -292,7 +295,9 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             changePercent: number;
             marketSession?: MarketSession;
           }[];
+          fx?: Record<string, number>;
         };
+        if (!cancelled && json.fx) setLiveFx(json.fx);
         const row =
           json.quotes?.find((q) => q.symbol.toUpperCase() === symbol.toUpperCase()) ??
           json.quotes?.[0];
@@ -322,6 +327,9 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
   );
 
   const holding = stats.holdings.find((h) => h.symbol === symbol);
+  const usdPerUnit = data
+    ? currentUsdRate(data.currency, { ...(state.fxRates ?? {}), ...liveFx })
+    : null;
   const ctxQuote = toLiveQuote(state.marketQuotes?.[symbol]);
   const analysisQuote = data
     ? toLiveQuote({
@@ -506,8 +514,13 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   <div className="mt-2">
                     <div className="flex flex-wrap items-baseline gap-3">
                       <span className="text-2xl font-semibold tabular-nums">
-                        {formatMoney(quote?.price ?? data.price, data.currency)}
+                        {formatNativeMoney(quote?.price ?? data.price, data.currency)}
                       </span>
+                      {!isUsdCurrency(data.currency) && usdPerUnit != null && (
+                        <span className="text-sm text-gray-500 tabular-nums">
+                          ≈ {formatMoney((quote?.price ?? data.price) * usdPerUnit)}
+                        </span>
+                      )}
                       <span
                         className={`text-sm font-medium tabular-nums ${
                           (quote?.changePercent ?? data.changePercent) >= 0

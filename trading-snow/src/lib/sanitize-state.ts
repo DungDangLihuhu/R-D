@@ -68,6 +68,10 @@ function sanitizeTransaction(raw: unknown): Transaction | null {
   };
   const notes = text(r.notes);
   if (notes) tx.notes = notes;
+  const currency = text(r.currency);
+  if (currency) tx.currency = currency;
+  const fxRate = finite(r.fxRate);
+  if (fxRate != null && fxRate > 0) tx.fxRate = fxRate;
   return tx;
 }
 
@@ -176,6 +180,7 @@ export function sanitizeAppState(raw: unknown): { state: AppState; dropped: numb
     marketQuotes,
     pricesUpdatedAt: validDate(r.pricesUpdatedAt),
     hiddenSymbols,
+    fxRates: numberRecord(r.fxRates),
   };
 
   return { state, dropped: r.transactions.length - transactions.length };

@@ -6,7 +6,7 @@ import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { ProfitCurvePanel } from "@/components/ProfitCurvePanel";
 import { useApp } from "@/context/AppContext";
-import { filterHiddenTransactions } from "@/lib/hidden-symbols";
+import { visiblePortfolioTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
 
 const BenchmarkComparison = dynamic(
@@ -25,15 +25,14 @@ const MonthlyPnlChart = dynamic(
 );
 
 export default function AnalyticsPage() {
-  const { stats, state, activePortfolioId, hiddenSymbols } = useApp();
-  const transactions = useMemo(
-    () =>
-      filterHiddenTransactions(
-        state.transactions,
-        activePortfolioId,
-        hiddenSymbols
-      ).filter((t) => t.portfolioId === activePortfolioId),
+  const { stats, state, usd, activePortfolioId, hiddenSymbols } = useApp();
+  const nativeTransactions = useMemo(
+    () => visiblePortfolioTransactions(state.transactions, activePortfolioId, hiddenSymbols),
     [state.transactions, activePortfolioId, hiddenSymbols]
+  );
+  const transactions = useMemo(
+    () => visiblePortfolioTransactions(usd.transactions, activePortfolioId, hiddenSymbols),
+    [usd.transactions, activePortfolioId, hiddenSymbols]
   );
 
   return (
@@ -73,7 +72,8 @@ export default function AnalyticsPage() {
       <BenchmarkComparison
         equityCurve={stats.equityCurve}
         transactions={transactions}
-        marketPrices={state.marketPrices}
+        nativeTransactions={nativeTransactions}
+        marketPrices={usd.marketPrices}
       />
     </div>
   );

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { usePriceHistory, type PriceHistoryStatus } from "@/hooks/usePriceHistory";
 import { downsampleMonthly } from "@/lib/format";
-import { filterHiddenTransactions } from "@/lib/hidden-symbols";
+import { visiblePortfolioTransactions } from "@/lib/hidden-symbols";
 import { buildMarketProfitCurve } from "@/lib/price-history";
 
 /**
@@ -15,24 +15,28 @@ export function useProfitCurve(): {
   points: { date: string; value: number }[];
   status: PriceHistoryStatus;
 } {
-  const { state, stats, activePortfolioId, hiddenSymbols } = useApp();
+  const { state, usd, stats, activePortfolioId, hiddenSymbols } = useApp();
 
-  const transactions = useMemo(
-    () =>
-      filterHiddenTransactions(state.transactions, activePortfolioId, hiddenSymbols).filter(
-        (t) => t.portfolioId === activePortfolioId
-      ),
+  // Lịch sử giá chọn kiểu giá bằng lệnh gốc (tiền niêm yết), đường lợi nhuận tính bằng USD.
+  const nativeTransactions = useMemo(
+    () => visiblePortfolioTransactions(state.transactions, activePortfolioId, hiddenSymbols),
     [state.transactions, activePortfolioId, hiddenSymbols]
   );
+  const usdTransactions = useMemo(
+    () => visiblePortfolioTransactions(usd.transactions, activePortfolioId, hiddenSymbols),
+    [usd.transactions, activePortfolioId, hiddenSymbols]
+  );
 
-  const { series, status } = usePriceHistory(transactions);
+  const { series, status } = usePriceHistory(nativeTransactions);
 
   return useMemo(() => {
-    const market = series ? buildMarketProfitCurve(transactions, series, stats.totalProfit) : null;
+    const market = series
+      ? buildMarketProfitCurve(usdTransactions, series, stats.totalProfit)
+      : null;
     if (market) return { points: market, status };
     const fallback = downsampleMonthly(
       [...stats.profitCurve].sort((a, b) => a.date.localeCompare(b.date))
     );
     return { points: fallback, status: status === "ready" ? ("failed" as const) : status };
-  }, [series, status, transactions, stats.totalProfit, stats.profitCurve]);
+  }, [series, status, usdTransactions, stats.totalProfit, stats.profitCurve]);
 }

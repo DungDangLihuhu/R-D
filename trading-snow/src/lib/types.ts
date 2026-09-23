@@ -24,6 +24,10 @@ export interface Transaction {
   fee: number;
   date: string;
   notes?: string;
+  /** Tiền tệ của `price`/`fee` (USD, EUR, GBp…) — theo sàn niêm yết của mã. */
+  currency?: string;
+  /** Số USD cho 1 đơn vị `currency` vào ngày giao dịch (đã tính đơn vị lẻ như GBp). */
+  fxRate?: number;
 }
 
 export interface Holding {
@@ -110,6 +114,8 @@ export interface AppState {
   pricesUpdatedAt?: string | null;
   /** portfolioId → danh sách mã tạm ẩn khỏi chỉ số */
   hiddenSymbols?: Record<string, string[]>;
+  /** Tỷ giá hiện tại: số USD cho 1 đơn vị tiền (EUR → 1,14), cập nhật cùng lúc với giá. */
+  fxRates?: Record<string, number>;
 }
 
 export interface DividendCalendarItem {

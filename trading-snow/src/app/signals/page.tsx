@@ -70,9 +70,12 @@ function stopClass(entryPrice: number, stop: number | null) {
 function HitLevels({
   hits,
   currency,
+  rate,
 }: {
   hits: WyckoffBuyHit[];
   currency: string;
+  /** Quy giá niêm yết ra tiền của danh mục (USD). */
+  rate: number;
 }) {
   const bestTf = hits[0]?.timeframe;
   return (
@@ -96,9 +99,11 @@ function HitLevels({
                 {SIGNAL_TIMEFRAME_LABELS[hit.timeframe as SignalTimeframe]}
               </td>
               <td className="py-0.5 pr-3 text-app-muted">{hit.entryLabel}</td>
-              <td className="py-0.5 pr-3 text-app-text">{formatMoney(hit.entryPrice, currency)}</td>
+              <td className="py-0.5 pr-3 text-app-text">
+                {formatMoney(hit.entryPrice * rate, currency)}
+              </td>
               <td className={`py-0.5 ${stopClass(hit.entryPrice, hit.stop)}`}>
-                {hit.stop != null && hit.stop > 0 ? formatMoney(hit.stop, currency) : "—"}
+                {hit.stop != null && hit.stop > 0 ? formatMoney(hit.stop * rate, currency) : "—"}
                 {hit.stop != null && hit.stop >= hit.entryPrice ? " (lỗi mốc)" : ""}
               </td>
             </tr>
@@ -113,10 +118,12 @@ function SignalsResults({
   symbolsKey,
   currency,
   marketQuotes,
+  usdRate,
 }: {
   symbolsKey: string;
   currency: string;
   marketQuotes?: Record<string, MarketQuote>;
+  usdRate: (symbol: string) => number;
 }) {
   const [data, setData] = useState<{ key: string; payload: SignalsResponse } | null>(
     null
@@ -264,7 +271,11 @@ function SignalsResults({
                     >
                       {best.phaseLabel}
                     </p>
-                    <HitLevels hits={signal.hits} currency={currency} />
+                    <HitLevels
+                      hits={signal.hits}
+                      currency={currency}
+                      rate={usdRate(signal.symbol)}
+                    />
                     <p className="text-xs font-medium text-app-text">
                       {actionLabel(best.entryAction)}
                     </p>
@@ -275,7 +286,7 @@ function SignalsResults({
                   <div className="shrink-0 text-left sm:text-right">
                     <p className="text-xs text-app-muted">Giá thị trường</p>
                     <p className="text-lg font-semibold tabular-nums">
-                      {formatMoney(signal.marketPrice, currency)}
+                      {formatMoney(signal.marketPrice * usdRate(signal.symbol), currency)}
                     </p>
                     <p className={`mt-1 text-xs font-semibold tabular-nums ${distTone(best.distPct)}`}>
                       {formatPercent(best.distPct)} so với {best.entryLabel}
@@ -295,7 +306,7 @@ function SignalsResults({
 }
 
 export default function SignalsPage() {
-  const { stats, state, activePortfolioId } = useApp();
+  const { stats, state, activePortfolioId, usdRate } = useApp();
   const portfolio = state.portfolios.find((p) => p.id === activePortfolioId);
   const currency = portfolio?.currency ?? "USD";
   const symbols = useMemo(
@@ -336,6 +347,7 @@ export default function SignalsPage() {
         symbolsKey={symbolsKey}
         currency={currency}
         marketQuotes={state.marketQuotes}
+        usdRate={usdRate}
       />
     </div>
   );

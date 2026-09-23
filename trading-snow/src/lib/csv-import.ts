@@ -17,6 +17,8 @@ export interface CsvRow {
   price: number;
   fee: number;
   notes?: string;
+  /** Tiền tệ của giá theo file (cột Currency của Snowball); không có thì app tự tra theo mã. */
+  currency?: string;
 }
 
 export interface CsvParseResult {
@@ -317,6 +319,7 @@ function parseSnowballTransactions(
   const iFee = colIndex(headers, "feetax", "feetax", "fee");
   const iCountry = colIndex(headers, "country");
   const iExchange = colIndex(headers, "exchange", "market");
+  const iCurrency = colIndex(headers, "currency");
 
   const errors: string[] = [];
   const rows: CsvRow[] = [];
@@ -391,6 +394,7 @@ function parseSnowballTransactions(
       continue;
     }
 
+    const currency = iCurrency >= 0 ? cols[iCurrency]?.trim() : "";
     rows.push({
       date,
       symbol: isCash ? "CASH" : symbol,
@@ -399,6 +403,7 @@ function parseSnowballTransactions(
       price,
       fee,
       notes: `Snowball: ${eventRaw}`,
+      ...(!isCash && currency ? { currency } : {}),
     });
   }
 
@@ -540,5 +545,6 @@ export function csvRowsToTransactions(
     fee: r.fee,
     date: r.date,
     notes: r.notes ? r.notes : "Import CSV",
+    ...(r.currency ? { currency: r.currency } : {}),
   }));
 }

@@ -15,11 +15,13 @@ import {
 import {
   formatDate,
   formatMoney,
+  formatNumber,
   formatPnlArrow,
   formatShares,
   formatSplitRatio,
 } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
+import { formatNativeMoney, isUsdCurrency } from "@/lib/fx";
 import type { Transaction, TransactionType } from "@/lib/types";
 
 // Cột thao tác rộng cố định để hàng tiêu đề và hàng dữ liệu ăn khớp nhau. Bảng (màn
@@ -152,19 +154,29 @@ function moneyOrDash(tx: Transaction, value: number) {
 function TradeRow({
   layout,
   tx,
+  native,
   companyName,
   companyLogo,
   pnl,
   onDelete,
 }: {
   layout: "table" | "card";
+  /** Lệnh đã quy ra USD để hiển thị. */
   tx: Transaction;
+  /** Lệnh gốc theo tiền niêm yết — hiện khi rê chuột vào giá. */
+  native: Transaction;
   companyName: string;
   companyLogo?: string;
   pnl?: { pnl: number; pnlPercent: number };
   onDelete: () => void;
 }) {
   const cash = isCashSymbol(tx.symbol);
+  const nativeHint =
+    native.currency && !isUsdCurrency(native.currency) && tx.type !== "SPLIT"
+      ? `${formatNativeMoney(native.price, native.currency)} × tỷ giá ${
+          native.fxRate ? formatNumber(native.fxRate, 4) : "hiện tại"
+        }`
+      : undefined;
 
   const deleteBtn = (
     <button
@@ -214,7 +226,7 @@ function TradeRow({
           <span className="text-right">Tổng</span>
         </div>
         <div className="mt-1 grid grid-cols-3 gap-2 text-sm font-medium tabular-nums">
-          <span>{moneyOrDash(tx, tx.price)}</span>
+          <span title={nativeHint}>{moneyOrDash(tx, tx.price)}</span>
           <span className="text-center">{moneyOrDash(tx, tx.fee)}</span>
           <span className={`text-right ${grossTone(tx)}`}>
             {formatSignedGross(tx)}
@@ -282,7 +294,7 @@ function TradeRow({
         <p role="cell" className="text-right text-sm font-medium tabular-nums">
           {quantityLabel(tx)}
         </p>
-        <p role="cell" className="text-right text-sm tabular-nums">
+        <p role="cell" className="text-right text-sm tabular-nums" title={nativeHint}>
           {moneyOrDash(tx, tx.price)}
         </p>
         <p role="cell" className="text-right text-sm tabular-nums text-gray-500">
@@ -322,21 +334,26 @@ function TradeRow({
 }
 
 export function TradeTable() {
-  const { state, activePortfolioId, deleteTransaction, restoreTransaction } =
+  const { state, usd, activePortfolioId, deleteTransaction, restoreTransaction } =
     useApp();
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDesc, setSortDesc] = useState(true);
 
+  // Bảng hiện USD; lệnh gốc (tiền niêm yết) dùng cho hoàn tác xóa và chú thích giá.
   const { pnlByTxId, summary } = useMemo(
-    () => computeTradeDisplay(state.transactions, activePortfolioId),
-    [state.transactions, activePortfolioId]
+    () => computeTradeDisplay(usd.transactions, activePortfolioId),
+    [usd.transactions, activePortfolioId]
+  );
+  const originals = useMemo(
+    () => new Map(state.transactions.map((t) => [t.id, t])),
+    [state.transactions]
   );
 
   const portfolioTrades = useMemo(
-    () => state.transactions.filter((t) => t.portfolioId === activePortfolioId),
-    [state.transactions, activePortfolioId]
+    () => usd.transactions.filter((t) => t.portfolioId === activePortfolioId),
+    [usd.transactions, activePortfolioId]
   );
 
   const trades = useMemo(() => {
@@ -400,6 +417,7 @@ export function TradeTable() {
       key={tx.id}
       layout={layout}
       tx={tx}
+      native={originals.get(tx.id) ?? tx}
       companyName={state.marketQuotes?.[tx.symbol]?.name ?? tx.symbol}
       companyLogo={state.marketQuotes?.[tx.symbol]?.logo}
       pnl={pnlByTxId.get(tx.id)}
@@ -408,13 +426,14 @@ export function TradeTable() {
   );
 
   const handleDelete = (tx: Transaction) => {
+    const original = originals.get(tx.id) ?? tx;
     deleteTransaction(tx.id);
     toast.show({
       title: `Đã xóa ${typeLabels[tx.type]} ${tx.symbol}`,
       description: `${formatDate(tx.date)} · ${formatMoney(tradeGross(tx))}`,
       variant: "warning",
       duration: 8000,
-      action: { label: "Hoàn tác", onClick: () => restoreTransaction(tx) },
+      action: { label: "Hoàn tác", onClick: () => restoreTransaction(original) },
     });
   };
 

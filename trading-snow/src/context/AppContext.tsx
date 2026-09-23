@@ -11,6 +11,15 @@ import {
   type ReactNode,
 } from "react";
 import { computePortfolioStats } from "@/lib/stats";
+import {
+  annotateTransactions,
+  currentUsdRate,
+  needsFxAnnotation,
+  symbolCurrencies,
+  toUsdPrices,
+  toUsdQuotes,
+  toUsdTransactions,
+} from "@/lib/fx";
 import { hiddenSymbolSet } from "@/lib/hidden-symbols";
 import {
   checkCloudConfigured,
@@ -29,6 +38,7 @@ import {
   syncBaseOf,
   type SyncBase,
 } from "@/lib/sync-merge";
+import { fetchFxLookup } from "@/lib/fx-client";
 import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
 import { sanitizeAppState } from "@/lib/sanitize-state";
 import { defaultState, loadState, saveState } from "@/lib/storage";
@@ -36,6 +46,7 @@ import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
 import type {
   AppState,
+  MarketQuote,
   MarketSession,
   Portfolio,
   PortfolioStats,
@@ -47,7 +58,18 @@ const PRICE_REFRESH_MS = 5 * 60 * 1000;
 interface AppContextValue {
   /** Đã đọc xong dữ liệu trong máy — trước đó state là bản trống mặc định. */
   hydrated: boolean;
+  /** Dữ liệu gốc: giá/lệnh theo tiền tệ niêm yết (EUR cho mã .PA…). */
   state: AppState;
+  /** Cùng dữ liệu đó quy ra USD — dùng cho mọi số tiền hiển thị trong danh mục. */
+  usd: {
+    transactions: Transaction[];
+    marketPrices: Record<string, number>;
+    marketQuotes: Record<string, MarketQuote>;
+  };
+  /** Số USD cho 1 đơn vị giá niêm yết của mã theo tỷ giá hiện tại (1 với mã Mỹ). */
+  usdRate: (symbol: string) => number;
+  /** Tiền tệ niêm yết của mã (USD khi chưa biết). */
+  currencyOf: (symbol: string) => string;
   activePortfolioId: string;
   setActivePortfolioId: (id: string) => void;
   stats: PortfolioStats;
@@ -289,22 +311,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [state.hiddenSymbols, activePortfolioId]
   );
 
+  // Mọi phép tính chạy trên bản USD: giá vốn theo tỷ giá ngày giao dịch, giá thị trường
+  // theo tỷ giá hiện tại. Trước đây giá EUR của mã .PA được cộng thẳng như USD.
+  const currencies = useMemo(
+    () =>
+      symbolCurrencies({ transactions: state.transactions, marketQuotes: state.marketQuotes }),
+    [state.transactions, state.marketQuotes]
+  );
+  const usd = useMemo(
+    () => ({
+      transactions: toUsdTransactions(state.transactions, state.fxRates),
+      marketPrices: toUsdPrices(state.marketPrices, currencies, state.fxRates),
+      marketQuotes: toUsdQuotes(state.marketQuotes ?? {}, currencies, state.fxRates),
+    }),
+    [state.transactions, state.marketPrices, state.marketQuotes, state.fxRates, currencies]
+  );
+  const usdRate = useCallback(
+    (symbol: string) => currentUsdRate(currencies[symbol], state.fxRates) ?? 1,
+    [currencies, state.fxRates]
+  );
+  const currencyOf = useCallback((symbol: string) => currencies[symbol] ?? "USD", [currencies]);
+
   const stats = useMemo(
     () =>
       computePortfolioStats(
-        state.transactions,
+        usd.transactions,
         activePortfolioId,
-        state.marketPrices,
-        state.marketQuotes ?? {},
+        usd.marketPrices,
+        usd.marketQuotes,
         hiddenSymbols
       ),
-    [
-      state.transactions,
-      state.marketPrices,
-      state.marketQuotes,
-      activePortfolioId,
-      hiddenSymbols,
-    ]
+    [usd, activePortfolioId, hiddenSymbols]
   );
 
   const holdingSymbols = useMemo(() => {
@@ -359,7 +396,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         shortName?: string;
         logo?: string;
         marketSession?: MarketSession;
+        currency?: string;
       }[] = [];
+      const mergedFx: Record<string, number> = {};
       let mergedUnresolved: string[] = [];
       let truncated = false;
 
@@ -385,7 +424,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               shortName?: string;
               logo?: string;
               marketSession?: MarketSession;
+              currency?: string;
             }[];
+            fx?: Record<string, number>;
             unresolved?: string[];
             truncated?: boolean;
           };
@@ -395,6 +436,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       for (const data of batchResults) {
         Object.assign(mergedPrices, data.prices ?? {});
         mergedQuotes.push(...(data.quotes ?? []));
+        Object.assign(mergedFx, data.fx ?? {});
         mergedUnresolved = [...mergedUnresolved, ...(data.unresolved ?? [])];
         if (data.truncated) truncated = true;
       }
@@ -415,6 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               name: q.shortName,
               logo: q.logo,
               marketSession: q.marketSession,
+              currency: q.currency,
             };
           }
         }
@@ -422,6 +465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...s,
           marketPrices,
           marketQuotes,
+          fxRates: { ...(s.fxRates ?? {}), ...mergedFx },
           pricesUpdatedAt: updatedAt,
         };
       });
@@ -462,12 +506,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const refreshIfStale = async () => {
       if (autoRefreshing.current || document.hidden) return;
-      const { pricesUpdatedAt, marketPrices } = stateRef.current;
+      const current = stateRef.current;
+      const { pricesUpdatedAt, marketPrices } = current;
       const symbols = holdingSymbolsRef.current;
+      const listed = symbolCurrencies(current);
       const stale =
         !pricesUpdatedAt ||
         Date.now() - new Date(pricesUpdatedAt).getTime() > PRICE_REFRESH_MS ||
-        symbols.some((s) => marketPrices[s] == null);
+        symbols.some((s) => marketPrices[s] == null) ||
+        // Mã ngoại tệ mà chưa có tỷ giá: lấy ngay, đừng để giá EUR hiện như USD tới 5 phút.
+        symbols.some((s) => currentUsdRate(listed[s], current.fxRates) == null);
       if (!stale) return;
       autoRefreshing.current = true;
       try {
@@ -491,6 +539,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [hydrated, holdingSymbolsKey, refreshPrices]);
+
+  // Gắn tiền tệ niêm yết và tỷ giá ngày giao dịch cho lệnh còn thiếu (lệnh cũ, lệnh vừa
+  // nhập tay/import, lệnh từ máy khác). Mỗi nhóm lệnh chỉ hỏi server một lần mỗi phiên.
+  const fxAttempted = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const pending = state.transactions.filter(needsFxAnnotation);
+    if (pending.length === 0) return;
+    const key = pending
+      .map((t) => t.id)
+      .sort()
+      .join(",");
+    const attempted = fxAttempted.current;
+    if (attempted.has(key)) return;
+    attempted.add(key);
+
+    let cancelled = false;
+    const symbols = [...new Set(pending.map((t) => t.symbol.toUpperCase()))];
+    const firstDay = pending
+      .reduce((min, t) => (t.date < min ? t.date : min), pending[0].date)
+      .slice(0, 10);
+    const from = new Date(Date.parse(firstDay) - 7 * 86_400_000).toISOString().slice(0, 10);
+
+    fetchFxLookup(symbols, from)
+      .then((lookup) => {
+        if (!cancelled) setState((s) => annotateTransactions(s, lookup));
+      })
+      .catch(() => {
+        // Mất mạng / Yahoo lỗi: tạm quy đổi theo tỷ giá hiện tại, lần mở app sau thử lại.
+      });
+
+    return () => {
+      // Bị hủy giữa chừng (lệnh đổi trước khi server trả lời) thì cho lượt sau hỏi lại.
+      cancelled = true;
+      attempted.delete(key);
+    };
+  }, [hydrated, state.transactions]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
@@ -639,6 +725,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...actions,
       hydrated,
       state,
+      usd,
+      usdRate,
+      currencyOf,
       activePortfolioId,
       stats,
       hiddenSymbols,
@@ -652,6 +741,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       actions,
       hydrated,
       state,
+      usd,
+      usdRate,
+      currencyOf,
       activePortfolioId,
       stats,
       hiddenSymbols,
