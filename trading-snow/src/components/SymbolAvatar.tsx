@@ -6,23 +6,6 @@ import { fetchProfileLogo } from "@/lib/profile-client-cache";
 
 export { tickerLabel };
 
-const AVATAR_COLORS = [
-  "bg-sky-100 text-sky-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-700",
-  "bg-violet-100 text-violet-700",
-  "bg-rose-100 text-rose-700",
-  "bg-cyan-100 text-cyan-700",
-];
-
-function avatarColor(symbol: string) {
-  let hash = 0;
-  for (let i = 0; i < symbol.length; i++) {
-    hash = symbol.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
 export function SymbolAvatar({
   symbol,
   logo,
@@ -77,7 +60,8 @@ export function SymbolAvatar({
         loading="lazy"
         decoding="async"
         className={`${boxClass} shrink-0 rounded-lg border object-contain p-0.5`}
-        style={{ borderColor: "var(--app-border)", background: "var(--app-surface)" }}
+        // Nền trắng cả ở theme tối: logo nền trong suốt màu đen (Apple, X…) sẽ biến mất trên nền tối.
+        style={{ borderColor: "var(--app-border-soft)", background: "#fff" }}
         onError={() => setFailed(true)}
       />
     );
@@ -85,7 +69,9 @@ export function SymbolAvatar({
 
   return (
     <div
-      className={`flex ${boxClass} shrink-0 items-center justify-center rounded-lg px-0.5 font-bold leading-none ${sizeClass} ${avatarColor(symbol)}`}
+      // Ô chữ trung tính, cùng khung với ô logo — màu bão hòa để dành cho lãi/lỗ.
+      className={`flex ${boxClass} shrink-0 items-center justify-center rounded-lg border px-0.5 font-semibold leading-none text-app-secondary ${sizeClass}`}
+      style={{ borderColor: "var(--app-border-soft)", background: "var(--tone-gray-50)" }}
       title={symbol}
     >
       {label.slice(0, 4)}

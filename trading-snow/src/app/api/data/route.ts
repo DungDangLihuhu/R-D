@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   checkWriteKey,
+  compareAndSetPayload,
   getCloudConfigStatus,
   getRedis,
   normalizeRoomId,
@@ -64,7 +65,21 @@ export async function PUT(req: NextRequest) {
 
   const updatedAt = new Date().toISOString();
   const payload: StoredPayload = { state: body, updatedAt };
-  await redis.set(redisKey(room), payload);
+
+  // Client gửi phiên bản nó dựa vào; bản trên cloud đã khác (máy khác vừa lưu) thì trả
+  // 409 kèm bản đó để client gộp. Client cũ không gửi header thì vẫn ghi đè như trước.
+  const baseUpdatedAt = req.headers.get("x-base-updated-at");
+  if (baseUpdatedAt === null) {
+    await redis.set(redisKey(room), payload);
+  } else {
+    const current = await compareAndSetPayload(redis, redisKey(room), baseUpdatedAt, payload);
+    if (current) {
+      return NextResponse.json(
+        { conflict: true, state: current.state, updatedAt: current.updatedAt },
+        { status: 409 }
+      );
+    }
+  }
 
   return NextResponse.json({ ok: true, updatedAt });
 }

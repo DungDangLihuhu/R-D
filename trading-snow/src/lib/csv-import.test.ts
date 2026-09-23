@@ -46,10 +46,17 @@ describe("parseBrokerCsv numbers and delimiters", () => {
 });
 
 describe("Snowball transactions", () => {
-  it("explains what an unsupported split does to later quantities", () => {
+  it("imports a split with the Price column as the ratio (Snowball template)", () => {
     const r = parseBrokerCsv(
-      "Event,Date,Symbol,Price,Quantity\nsplit,2024-06-10,NVDA,0,10"
+      "Event,Date,Symbol,Price,Quantity\nBuy,2024-01-05,NVDA,500,10\nSplit,2024-06-10,NVDA,10,100"
     );
-    expect(r.errors[0]).toMatch(/chưa hỗ trợ split NVDA/);
+    expect(r.errors).toEqual([]);
+    expect(r.rows[1]).toMatchObject({ type: "SPLIT", symbol: "NVDA", quantity: 10, price: 0, fee: 0 });
+  });
+
+  it("reports a split row without a usable ratio instead of importing it", () => {
+    const r = parseBrokerCsv("Event,Date,Symbol,Price,Quantity\nSplit,2024-06-10,NVDA,0,100");
+    expect(r.rows).toHaveLength(0);
+    expect(r.errors[0]).toMatch(/split NVDA/);
   });
 });

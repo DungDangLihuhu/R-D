@@ -10,7 +10,7 @@ export function SymbolIdentity({
   logo,
   size = "md",
   className = "",
-  nameClassName = "truncate text-sm font-semibold leading-tight text-sky-800",
+  nameClassName = "truncate text-sm font-semibold leading-tight text-app-text",
   tickerClassName = "text-[11px] font-medium leading-tight text-gray-500",
   extra,
 }: {

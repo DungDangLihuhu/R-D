@@ -1,0 +1,3 @@
+# Cài/chạy npm nhầm ở thư mục gốc (app nằm trong trading-snow/) không được lọt vào repo.
+node_modules/
+.DS_Store

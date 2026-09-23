@@ -37,7 +37,7 @@ const CATEGORY_STYLE: Record<
 > = {
   dividend: { badge: "bg-emerald-500/15 text-emerald-700", label: "Cổ tức" },
   earnings: { badge: "bg-violet-500/15 text-violet-700", label: "Báo cáo" },
-  news: { badge: "bg-sky-500/15 text-sky-700", label: "Tin tức" },
+  news: { badge: "bg-brand-soft text-brand-ink", label: "Tin tức" },
   macro: { badge: "bg-amber-500/15 text-amber-800", label: "Vĩ mô" },
   holiday: { badge: "bg-rose-500/15 text-rose-700", label: "Nghỉ lễ" },
 };
@@ -176,7 +176,7 @@ export function EventsCalendar() {
       />
 
       {symbols.length === 0 && (
-        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+        <div className="app-callout px-4 py-3 text-sm">
           Chưa có mã trong danh mục — vẫn hiển thị{" "}
           <strong>nghỉ lễ Mỹ</strong> và <strong>vĩ mô USD</strong>. Thêm giao
           dịch để xem cổ tức, báo cáo và tin theo holdings.
@@ -288,7 +288,7 @@ export function EventsCalendar() {
                           href={e.url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sky-600 hover:text-sky-800"
+                          className="text-brand-ink hover:underline"
                         >
                           <ExternalLink className="h-4 w-4" />
                         </a>
@@ -369,7 +369,7 @@ function EventCard({
           href={event.url}
           target="_blank"
           rel="noreferrer"
-          className="mt-2 inline-flex items-center gap-1 text-xs text-sky-600"
+          className="mt-2 inline-flex items-center gap-1 text-xs text-brand-ink"
         >
           Đọc thêm <ExternalLink className="h-3 w-3" />
         </a>

@@ -115,6 +115,44 @@ describe("profit curve", () => {
   });
 });
 
+describe("splits", () => {
+  it("multiplies the shares held and keeps the total cost", () => {
+    const stats = computePortfolioStats(
+      [
+        tx({ type: "BUY", symbol: "NVDA", quantity: 10, price: 1000, date: "2024-01-02" }),
+        tx({ type: "SPLIT", symbol: "NVDA", quantity: 10, price: 0, date: "2024-06-10" }),
+        tx({ type: "SELL", symbol: "NVDA", quantity: 50, price: 120, date: "2024-07-01" }),
+      ],
+      "p"
+    );
+    expect(stats.realizedPnl).toBeCloseTo(50 * 120 - 50 * 100);
+    expect(stats.holdings[0]).toMatchObject({ symbol: "NVDA", quantity: 50, avgCost: 100 });
+  });
+
+  it("applies the split before trades stamped with the same day", () => {
+    const stats = computePortfolioStats(
+      [
+        tx({ type: "BUY", symbol: "NVDA", quantity: 5, price: 120, date: "2024-06-10" }),
+        tx({ type: "SPLIT", symbol: "NVDA", quantity: 10, price: 0, date: "2024-06-10" }),
+        tx({ type: "BUY", symbol: "NVDA", quantity: 10, price: 1000, date: "2024-01-02" }),
+      ],
+      "p"
+    );
+    expect(stats.holdings[0].quantity).toBeCloseTo(105);
+    expect(stats.holdings[0].totalCost).toBeCloseTo(10_000 + 600);
+  });
+
+  it("counts post-split shares when checking for oversells", () => {
+    const txs = [
+      tx({ type: "BUY", symbol: "NVDA", quantity: 10, price: 1000, date: "2024-01-02" }),
+      tx({ type: "SPLIT", symbol: "NVDA", quantity: 10, price: 0, date: "2024-06-10" }),
+    ];
+    const sell = [tx({ type: "SELL", symbol: "NVDA", quantity: 60, price: 120, date: "2024-07-01" })];
+    expect(findNewOversells(txs, sell, "p")).toEqual([]);
+    expect(heldQuantityAt(txs, "p", "NVDA", "2024-06-10")).toBe(100);
+  });
+});
+
 describe("oversell detection", () => {
   const existing = [tx({ type: "BUY", quantity: 10, price: 100, date: "2025-01-02" })];
 

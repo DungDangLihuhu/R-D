@@ -1,8 +1,30 @@
 import type { AppState } from "./types";
 import { DEFAULT_SYNC_ROOM } from "./cloud";
+import type { SyncBase } from "./sync-merge";
 
 const ROOM_KEY = "trading-snow-room-id";
 const WRITE_KEY_STORAGE = "trading-snow-write-key";
+const SYNC_BASE_KEY = "trading-snow-sync-base";
+
+/** Bản đồng bộ gần nhất — giữ qua lần tải lại để thay đổi chưa kịp đẩy lên không bị bản cloud ghi đè. */
+export function loadSyncBase(): SyncBase | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SYNC_BASE_KEY);
+    return raw ? (JSON.parse(raw) as SyncBase) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSyncBase(base: SyncBase): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SYNC_BASE_KEY, JSON.stringify(base));
+  } catch {
+    // Hết quota: lần sau coi như chưa có base — cloud thắng, như cách đồng bộ cũ.
+  }
+}
 
 export function getSyncRoomId(): string {
   if (typeof window === "undefined") return DEFAULT_SYNC_ROOM;
@@ -49,23 +71,46 @@ export async function loadRemoteState(
   return { state: data.state as AppState, updatedAt: data.updatedAt as string };
 }
 
+export type SaveRemoteResult =
+  | { status: "saved"; updatedAt: string }
+  /** Máy khác đã lưu sau phiên bản `baseUpdatedAt` — gộp với bản này rồi lưu lại. */
+  | { status: "conflict"; state: AppState; updatedAt: string }
+  | { status: "failed" };
+
+/**
+ * `baseUpdatedAt`: phiên bản cloud mà `state` được dựng từ đó ("" = cloud chưa có gì).
+ * Bỏ trống thì server ghi đè không kiểm tra.
+ */
 export async function saveRemoteState(
   room: string,
-  state: AppState
-): Promise<string | null> {
+  state: AppState,
+  baseUpdatedAt?: string | null
+): Promise<SaveRemoteResult> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   const writeKey = getClientWriteKey();
   if (writeKey) headers["x-sync-key"] = writeKey;
+  if (baseUpdatedAt != null) headers["x-base-updated-at"] = baseUpdatedAt;
 
-  const res = await fetch(`/api/data?room=${encodeURIComponent(room)}`, {
-    method: "PUT",
-    headers,
-    body: JSON.stringify(state),
-  });
+  try {
+    const res = await fetch(`/api/data?room=${encodeURIComponent(room)}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(state),
+    });
+    const data = await res.json().catch(() => null);
 
-  if (!res.ok) return null;
-  const data = await res.json();
-  return (data.updatedAt as string) ?? null;
+    if (res.status === 409 && data?.state) {
+      return {
+        status: "conflict",
+        state: data.state as AppState,
+        updatedAt: data.updatedAt as string,
+      };
+    }
+    if (!res.ok || !data?.updatedAt) return { status: "failed" };
+    return { status: "saved", updatedAt: data.updatedAt as string };
+  } catch {
+    return { status: "failed" };
+  }
 }

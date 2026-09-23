@@ -17,6 +17,7 @@ import {
   formatMoney,
   formatPnlArrow,
   formatShares,
+  formatSplitRatio,
 } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
 import type { Transaction, TransactionType } from "@/lib/types";
@@ -31,6 +32,7 @@ const typeLabels: Record<string, string> = {
   DIVIDEND: "Cổ tức",
   DEPOSIT: "Nạp",
   WITHDRAW: "Rút",
+  SPLIT: "Split",
 };
 
 type TypeFilter = "ALL" | TransactionType | "CASH";
@@ -57,6 +59,7 @@ function pnlClass(value: number) {
 }
 
 function formatSignedGross(tx: Transaction) {
+  if (tx.type === "SPLIT") return "—";
   const gross = tradeGross(tx);
   if (tx.type === "BUY" || tx.type === "WITHDRAW") {
     return `-${formatMoney(gross)}`;
@@ -65,6 +68,7 @@ function formatSignedGross(tx: Transaction) {
 }
 
 function grossTone(tx: Transaction) {
+  if (tx.type === "SPLIT") return "text-gray-400";
   if (tx.type === "BUY" || tx.type === "WITHDRAW") return "text-rose-600";
   if (tx.type === "SELL" || tx.type === "DIVIDEND" || tx.type === "DEPOSIT") {
     return "text-emerald-600";
@@ -82,7 +86,7 @@ function TradeSummaryCard({
   feeTotal: number;
 }) {
   return (
-    <div className="app-card app-card-static p-4 text-sm">
+    <div className="app-card p-4 text-sm">
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <p className="text-xs text-gray-500">Mua</p>
@@ -135,6 +139,15 @@ function SortHeader({
   );
 }
 
+/** Split không có giá/phí/tiền — cột số lượng hiện hệ số thay vì số cổ. */
+function quantityLabel(tx: Transaction) {
+  return tx.type === "SPLIT" ? formatSplitRatio(tx.quantity) : formatShares(tx.quantity);
+}
+
+function moneyOrDash(tx: Transaction, value: number) {
+  return tx.type === "SPLIT" ? "—" : formatMoney(value);
+}
+
 function TradeRow({
   tx,
   companyName,
@@ -185,7 +198,7 @@ function TradeRow({
           <div className="shrink-0 text-right">
             <p className="text-xs text-gray-500">{formatDate(tx.date)}</p>
             <p className="text-sm font-medium tabular-nums">
-              {formatShares(tx.quantity)}
+              {quantityLabel(tx)}
             </p>
           </div>
         </div>
@@ -198,8 +211,8 @@ function TradeRow({
           <span className="text-right">Tổng</span>
         </div>
         <div className="mt-1 grid grid-cols-3 gap-2 text-sm font-medium tabular-nums">
-          <span>{formatMoney(tx.price)}</span>
-          <span className="text-center">{formatMoney(tx.fee)}</span>
+          <span>{moneyOrDash(tx, tx.price)}</span>
+          <span className="text-center">{moneyOrDash(tx, tx.fee)}</span>
           <span className={`text-right ${grossTone(tx)}`}>
             {formatSignedGross(tx)}
           </span>
@@ -256,13 +269,13 @@ function TradeRow({
 
         <p className="text-right text-sm tabular-nums">{formatDate(tx.date)}</p>
         <p className="text-right text-sm font-medium tabular-nums">
-          {formatShares(tx.quantity)}
+          {quantityLabel(tx)}
         </p>
         <p className="text-right text-sm tabular-nums">
-          {formatMoney(tx.price)}
+          {moneyOrDash(tx, tx.price)}
         </p>
         <p className="text-right text-sm tabular-nums text-gray-500">
-          {formatMoney(tx.fee)}
+          {moneyOrDash(tx, tx.fee)}
         </p>
         <p className={`text-right text-sm font-medium tabular-nums ${grossTone(tx)}`}>
           {formatSignedGross(tx)}

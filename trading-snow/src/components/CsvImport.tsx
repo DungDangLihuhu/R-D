@@ -11,7 +11,7 @@ import {
   type CsvParseResult,
   type CsvRow,
 } from "@/lib/csv-import";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, formatSplitRatio } from "@/lib/format";
 import { findNewOversells } from "@/lib/trade-display";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
@@ -145,7 +145,7 @@ export function CsvImport() {
       <p className="text-sm text-gray-500">
         Snowball: chọn đúng <strong>Holdings</strong> (snapshot vị thế) hoặc{" "}
         <strong>Transactions</strong> (lịch sử). Generic cần cột{" "}
-        <code className="text-sky-600">date, symbol, type/side, quantity, price</code>
+        <code className="text-brand-ink">date, symbol, type/side, quantity, price</code>
       </p>
 
       <div className="flex flex-wrap gap-3">
@@ -176,13 +176,13 @@ export function CsvImport() {
       </div>
 
       {parseResult?.info && (
-        <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+        <p className="app-callout text-xs">
           {parseResult.info}
         </p>
       )}
 
       {preview && importPreview && (
-        <p className="text-sm text-sky-600">
+        <p className="text-sm text-brand-ink">
           Nhận diện format: <strong>{detectedFormat}</strong> · {preview.length}{" "}
           dòng hợp lệ
           {importPreview.skipped > 0 &&
@@ -227,9 +227,11 @@ export function CsvImport() {
                     <td className="px-3 py-1.5">{formatDate(r.date)}</td>
                     <td className="px-3 py-1.5">{r.symbol}</td>
                     <td className="px-3 py-1.5 text-center">{r.type}</td>
-                    <td className="px-3 py-1.5 text-right">{r.quantity}</td>
                     <td className="px-3 py-1.5 text-right">
-                      {formatMoney(r.price)}
+                      {r.type === "SPLIT" ? formatSplitRatio(r.quantity) : r.quantity}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {r.type === "SPLIT" ? "—" : formatMoney(r.price)}
                     </td>
                   </tr>
                 ))}

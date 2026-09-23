@@ -43,6 +43,12 @@ export function formatShares(value: number): string {
   return formatNumber(rounded, 4);
 }
 
+/** Hệ số split theo cách ghi của Yahoo/Snowball (mới:cũ): 10 → "10:1", 0,1 (gộp cổ) → "1:10". */
+export function formatSplitRatio(ratio: number): string {
+  if (!(ratio > 0)) return "—";
+  return ratio >= 1 ? `${formatShares(ratio)}:1` : `1:${formatShares(1 / ratio)}`;
+}
+
 export function formatPnlArrow(value: number): string {
   const arrow = value >= 0 ? "▲" : "▼";
   // no-break space: mũi tên không được rớt xuống dòng riêng khi cột hẹp
@@ -78,6 +84,13 @@ export function formatChartMonthYear(date: string): string {
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   const yyyy = d.getUTCFullYear();
   return `${mm}/${yyyy}`;
+}
+
+export function formatChartDayMonth(date: string): string {
+  const d = new Date(date);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}`;
 }
 
 /** Tháng P&L dạng YYYY-MM → MM/YYYY */

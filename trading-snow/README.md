@@ -70,6 +70,7 @@ Redeploy.
 - Trang **Tổng quan** → panel **Đồng bộ đám mây** → đổi mã phòng nếu cần
 - Mọi thiết bị dùng **cùng mã phòng** → cùng giao dịch/danh mục
 - Tự lưu cloud sau ~1s khi sửa; poll mỗi 20s
+- Hai máy cùng sửa: server chỉ nhận bản lưu dựa trên phiên bản mới nhất; máy lưu sau được trả bản mới để gộp (giữ lệnh thêm ở cả hai máy, bỏ lệnh một máy đã xóa) rồi lưu lại. Thay đổi lưu local lúc mất mạng được gộp vào khi mở lại app
 
 ### Bảo mật (tùy chọn)
 

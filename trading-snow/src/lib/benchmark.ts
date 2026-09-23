@@ -1,6 +1,7 @@
 import type { Transaction } from "./types";
 import type { HistoryPoint } from "./yahoo";
 import { downsampleMonthly } from "./format";
+import { createCloseLookup, type CloseSeries } from "./price-history";
 import { compareTransactionsChronologically } from "./transaction-order";
 
 export type BenchmarkRange = "ytd" | "6m" | "1y" | "5y" | "all";
@@ -155,6 +156,12 @@ function pickBenchmarkSeries(
 export interface PortfolioBenchmarkInput {
   transactions: Transaction[];
   marketPrices: Record<string, number>;
+  /**
+   * Giá đóng cửa lịch sử từng mã. Có thì vị thế được định giá theo giá thật ở mỗi ngày,
+   * nên "Δ float trong kỳ" đúng là phần lãi phát sinh trong kỳ; không có thì dùng giá
+   * khớp lệnh gần nhất (float mọi kỳ trước dồn hết vào ngày cuối).
+   */
+  priceHistory?: CloseSeries;
 }
 
 interface PositionState {
@@ -200,6 +207,13 @@ function applyTrade(
       lastPrices.set(tx.symbol, tx.price);
       break;
     }
+    case "SPLIT": {
+      const pos = positions.get(tx.symbol);
+      if (pos && tx.quantity > 0) pos.quantity *= tx.quantity;
+      const last = lastPrices.get(tx.symbol);
+      if (last != null && tx.quantity > 0) lastPrices.set(tx.symbol, last / tx.quantity);
+      break;
+    }
   }
 }
 
@@ -209,7 +223,8 @@ function snapshotAtDate(
   realizedPnl: number,
   marketPrices: Record<string, number>,
   useMarket: boolean,
-  lastValidReturn: number
+  lastValidReturn: number,
+  closeOnDay?: (symbol: string) => number | undefined
 ): ReplaySnapshot {
   let openCost = 0;
   let holdingsValue = 0;
@@ -221,7 +236,7 @@ function snapshotAtDate(
     const price =
       useMarket && marketPrices[symbol] != null
         ? marketPrices[symbol]
-        : lastPrices.get(symbol) ?? avgCost;
+        : closeOnDay?.(symbol) ?? lastPrices.get(symbol) ?? avgCost;
     holdingsValue += pos.quantity * price;
   }
 
@@ -257,10 +272,11 @@ function snapshotAtDate(
 function buildPortfolioReturnSeries(
   transactions: Transaction[],
   dates: string[],
-  marketPrices: Record<string, number>
+  marketPrices: Record<string, number>,
+  priceHistory?: CloseSeries
 ): ReplaySnapshot[] {
   const sorted = [...transactions]
-    .filter((t) => t.type === "BUY" || t.type === "SELL")
+    .filter((t) => t.type === "BUY" || t.type === "SELL" || t.type === "SPLIT")
     .sort(compareTransactionsChronologically);
 
   const positions = new Map<string, PositionState>();
@@ -270,6 +286,7 @@ function buildPortfolioReturnSeries(
   let lastValidReturn = 0;
 
   const lastDate = dates[dates.length - 1] ?? "";
+  const closeAt = priceHistory ? createCloseLookup(priceHistory) : null;
 
   return dates.map((date) => {
     while (txIdx < sorted.length && txDay(sorted[txIdx].date) <= date) {
@@ -283,7 +300,8 @@ function buildPortfolioReturnSeries(
       realized.value,
       marketPrices,
       date === lastDate,
-      lastValidReturn
+      lastValidReturn,
+      closeAt ? (symbol) => closeAt(symbol.toUpperCase(), date) : undefined
     );
 
     if (snap.returnPct != null) {
@@ -343,7 +361,8 @@ export function buildBenchmarkComparison(
   const portfolioSnaps = buildPortfolioReturnSeries(
     portfolio.transactions,
     dates,
-    portfolio.marketPrices
+    portfolio.marketPrices,
+    portfolio.priceHistory
   );
 
   const hasPortfolioData = portfolioSnaps.some((s) => s.returnPct != null);

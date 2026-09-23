@@ -120,7 +120,7 @@ function HoldingRow({
       <button
         type="button"
         onClick={onEditStart}
-        className={`mt-0.5 flex w-full flex-col ${items} ${text} text-[11px] tabular-nums text-sky-600 hover:underline`}
+        className={`mt-0.5 flex w-full flex-col ${items} ${text} text-[11px] tabular-nums text-brand-ink hover:underline`}
       >
         <span>{formatMoney(market)}/cp</span>
         <SessionBadge session={extendedSession} changePercent={extendedPct} />
@@ -153,7 +153,7 @@ function HoldingRow({
         <div className="flex items-center justify-between gap-2">
           <Link
             href={`/stock/${encodeURIComponent(holding.symbol)}`}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:bg-brand-soft -ml-1 px-1 py-0.5"
           >
             <SymbolIdentity
               symbol={holding.symbol}
@@ -228,7 +228,7 @@ function HoldingRow({
       <div className="hidden md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.75fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_2.25rem] md:items-center md:gap-3">
         <Link
           href={`/stock/${encodeURIComponent(holding.symbol)}`}
-          className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-sky-50/80 -ml-1 px-1 py-0.5"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg hover:bg-brand-soft -ml-1 px-1 py-0.5"
         >
           <SymbolIdentity
             symbol={holding.symbol}

@@ -65,6 +65,49 @@ export interface StoredPayload {
   updatedAt: string;
 }
 
+/**
+ * Kiểm tra phiên bản và ghi trong cùng một script — không có khe giữa GET và SET để
+ * hai máy lưu gần như cùng lúc lọt qua cả hai. Trả về bản đang lưu khi phiên bản lệch.
+ */
+const COMPARE_AND_SET = `
+local current = redis.call("GET", KEYS[1])
+if current then
+  local ok, decoded = pcall(cjson.decode, current)
+  if not ok or decoded["updatedAt"] ~= ARGV[1] then
+    return current
+  end
+end
+redis.call("SET", KEYS[1], ARGV[2])
+return false
+`;
+
+/**
+ * Ghi `payload` chỉ khi bản trên cloud vẫn là `expectedUpdatedAt` ("" = chưa có gì).
+ * Lệch phiên bản thì không ghi và trả về bản hiện có để client gộp rồi lưu lại.
+ */
+export async function compareAndSetPayload(
+  redis: Redis,
+  key: string,
+  expectedUpdatedAt: string,
+  payload: StoredPayload
+): Promise<StoredPayload | null> {
+  let current: unknown;
+  try {
+    current = await redis.eval(COMPARE_AND_SET, [key], [
+      expectedUpdatedAt,
+      JSON.stringify(payload),
+    ]);
+  } catch {
+    // Redis không cho chạy Lua: kiểm tra rồi ghi, chấp nhận khe rất nhỏ giữa hai lệnh.
+    const existing = await redis.get<StoredPayload>(key);
+    if (existing && existing.updatedAt !== expectedUpdatedAt) return existing;
+    await redis.set(key, payload);
+    return null;
+  }
+  if (current == null || current === false) return null;
+  return (typeof current === "string" ? JSON.parse(current) : current) as StoredPayload;
+}
+
 export function validateAppState(data: unknown): data is AppState {
   if (!data || typeof data !== "object") return false;
   const s = data as AppState;

@@ -9,7 +9,9 @@ export function hiddenSymbolSet(symbols: string[] | undefined): Set<string> {
 }
 
 export function isSymbolScopedTransaction(tx: Transaction): boolean {
-  return tx.type === "BUY" || tx.type === "SELL" || tx.type === "DIVIDEND";
+  return (
+    tx.type === "BUY" || tx.type === "SELL" || tx.type === "DIVIDEND" || tx.type === "SPLIT"
+  );
 }
 
 export function isTransactionHidden(

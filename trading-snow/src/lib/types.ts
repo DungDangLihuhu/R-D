@@ -1,4 +1,8 @@
-export type TransactionType = "BUY" | "SELL" | "DIVIDEND" | "DEPOSIT" | "WITHDRAW";
+/**
+ * SPLIT: `quantity` là hệ số chia tách (10 = mỗi cổ thành 10, 0,1 = gộp 10 cổ thành 1),
+ * `price` và `fee` bằng 0 — số cổ nhân theo hệ số, tổng giá vốn giữ nguyên.
+ */
+export type TransactionType = "BUY" | "SELL" | "DIVIDEND" | "DEPOSIT" | "WITHDRAW" | "SPLIT";
 
 export type AssetType = "STOCK" | "ETF" | "CRYPTO" | "FOREX" | "OTHER";
 
