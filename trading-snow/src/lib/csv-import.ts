@@ -336,19 +336,6 @@ function parseSnowballTransactions(
     if (cols.every((c) => !c)) continue;
 
     const eventRaw = (cols[iEvent] ?? "").trim();
-    const type = parseType(eventRaw);
-    if (type === null) {
-      if (eventRaw.toLowerCase() === "split") {
-        const rawSymbol = iSymbol >= 0 ? cols[iSymbol] : "";
-        errors.push(
-          `Dòng ${i + 1}: chưa hỗ trợ split${rawSymbol ? ` ${rawSymbol}` : ""} (${cols[iDate] ?? ""}) — số lượng sau ngày này sẽ lệch, cần thêm lệnh điều chỉnh tay`
-        );
-      } else if (eventRaw) {
-        errors.push(`Dòng ${i + 1}: bỏ qua event "${eventRaw}"`);
-      }
-      continue;
-    }
-
     const date = parseDate(cols[iDate] ?? "", dateOrder);
     const symbol =
       iSymbol >= 0
@@ -357,6 +344,34 @@ function parseSnowballTransactions(
             countryCol: iCountry,
           })
         : "";
+
+    // Snowball ghi split với Price = hệ số (AAPL 4 đổi 1 → 4), Quantity = số cổ nhận
+    // được — chỉ cần hệ số, số cổ sau split tự tính từ vị thế đang giữ.
+    if (eventRaw.toLowerCase() === "split") {
+      const ratio = parseNum(cols[iPrice] ?? "0");
+      if (!date || !symbol || !(ratio > 0) || ratio === 1) {
+        errors.push(
+          `Dòng ${i + 1}: split${symbol ? ` ${symbol}` : ""} thiếu ngày/mã hoặc hệ số (cột Price) không hợp lệ`
+        );
+        continue;
+      }
+      rows.push({
+        date,
+        symbol,
+        type: "SPLIT",
+        quantity: ratio,
+        price: 0,
+        fee: 0,
+        notes: `Snowball: ${eventRaw}`,
+      });
+      continue;
+    }
+
+    const type = parseType(eventRaw);
+    if (type === null) {
+      if (eventRaw) errors.push(`Dòng ${i + 1}: bỏ qua event "${eventRaw}"`);
+      continue;
+    }
     const quantity = parseNum(cols[iQty] ?? "0");
     const price = parseNum(cols[iPrice] ?? "0");
     const fee = iFee >= 0 ? parseNum(cols[iFee] ?? "0") : 0;

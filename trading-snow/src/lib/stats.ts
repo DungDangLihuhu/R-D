@@ -130,6 +130,13 @@ function computePortfolioStatsInternal(
         });
         break;
       }
+      case "SPLIT": {
+        const pos = positions.get(tx.symbol);
+        if (pos && tx.quantity > 0) pos.quantity *= tx.quantity;
+        const last = lastPrices.get(tx.symbol);
+        if (last != null && tx.quantity > 0) lastPrices.set(tx.symbol, last / tx.quantity);
+        break;
+      }
     }
     snapshotEquity(tx.date, false);
   }

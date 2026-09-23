@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { formatShares } from "@/lib/format";
+import { formatShares, formatSplitRatio } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
 import { toYahooSymbol } from "@/lib/symbol";
 import { heldQuantityAt } from "@/lib/trade-display";
@@ -14,6 +14,7 @@ const types: { value: TransactionType; label: string }[] = [
   { value: "DIVIDEND", label: "Cổ tức" },
   { value: "DEPOSIT", label: "Nạp tiền" },
   { value: "WITHDRAW", label: "Rút tiền" },
+  { value: "SPLIT", label: "Chia tách (split)" },
 ];
 
 const assetTypes: { value: AssetType; label: string }[] = [
@@ -35,24 +36,68 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
   const [fee, setFee] = useState("0");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
+  const [splitNew, setSplitNew] = useState("");
+  const [splitOld, setSplitOld] = useState("1");
 
   const isCash = type === "DEPOSIT" || type === "WITHDRAW";
+  const isSplit = type === "SPLIT";
 
   // Cảnh báo (không chặn): bán vượt số đang giữ làm giá vốn phần vượt thành ước đoán.
   const resolvedSymbol = symbol.trim() ? toYahooSymbol(symbol, exchange || undefined) : "";
   const heldForSell = useMemo(
     () =>
-      type === "SELL" && resolvedSymbol
+      (type === "SELL" || type === "SPLIT") && resolvedSymbol
         ? heldQuantityAt(state.transactions, activePortfolioId, resolvedSymbol, date)
         : null,
     [type, resolvedSymbol, state.transactions, activePortfolioId, date]
   );
   const sellQuantity = parseFloat(quantity);
   const oversold =
-    heldForSell != null && Number.isFinite(sellQuantity) && sellQuantity > heldForSell + 1e-9;
+    type === "SELL" &&
+    heldForSell != null &&
+    Number.isFinite(sellQuantity) &&
+    sellQuantity > heldForSell + 1e-9;
+  const splitHasNoPosition = isSplit && heldForSell === 0;
+
+  const resetFields = () => {
+    setSymbol("");
+    setExchange("");
+    setQuantity("");
+    setPrice("");
+    setFee("0");
+    setNotes("");
+    setSplitNew("");
+    setSplitOld("1");
+  };
+
+  const submitSplit = () => {
+    const ratio = parseFloat(splitNew) / parseFloat(splitOld);
+    if (!Number.isFinite(ratio) || ratio <= 0 || ratio === 1) {
+      toast.error("Nhập tỷ lệ split hợp lệ, ví dụ 10 : 1");
+      return;
+    }
+    addTransaction({
+      portfolioId: activePortfolioId,
+      type: "SPLIT",
+      symbol: resolvedSymbol,
+      assetType,
+      quantity: ratio,
+      price: 0,
+      fee: 0,
+      date: new Date(date).toISOString(),
+      notes: notes || undefined,
+    });
+    toast.success(`Đã lưu split ${resolvedSymbol} ${formatSplitRatio(ratio)}`);
+    resetFields();
+    onSaved?.();
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSplit) {
+      submitSplit();
+      return;
+    }
     const q = parseFloat(quantity);
     const p = parseFloat(price);
     const f = parseFloat(fee) || 0;
@@ -73,12 +118,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
     });
     const label = types.find((t) => t.value === type)?.label ?? type;
     toast.success(`Đã lưu giao dịch ${label}${isCash ? "" : ` ${toYahooSymbol(symbol, exchange || undefined)}`}`);
-    setSymbol("");
-    setExchange("");
-    setQuantity("");
-    setPrice("");
-    setFee("0");
-    setNotes("");
+    resetFields();
     onSaved?.();
   };
 
@@ -127,64 +167,107 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
                 VD: SAN + PA → SAN.PA (Sanofi Paris)
               </span>
             </label>
+            {!isSplit && (
+              <label className="block text-sm">
+                <span className="app-label">Loại tài sản</span>
+                <select
+                  value={assetType}
+                  onChange={(e) => setAssetType(e.target.value as AssetType)}
+                  className="mt-1 w-full app-input"
+                >
+                  {assetTypes.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </>
+        )}
+        {isSplit ? (
+          <div className="block text-sm">
+            <span className="app-label">Tỷ lệ (mới : cũ)</span>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={splitNew}
+                onChange={(e) => setSplitNew(e.target.value)}
+                aria-label="Số cổ phiếu mới"
+                placeholder="10"
+                className="app-input w-full"
+                required
+              />
+              <span className="text-app-muted">:</span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                value={splitOld}
+                onChange={(e) => setSplitOld(e.target.value)}
+                aria-label="Số cổ phiếu cũ"
+                className="app-input w-full"
+                required
+              />
+            </div>
+            <span className="mt-1 block text-xs text-gray-400">
+              NVDA 10/06/2024 là 10 : 1; gộp cổ phiếu 1 đổi 10 thì nhập 1 : 10. Số cổ đang giữ
+              nhân theo tỷ lệ, tổng giá vốn giữ nguyên.
+            </span>
+            {splitHasNoPosition && (
+              <span className="mt-1 block text-xs text-amber-700">
+                Tới ngày này chưa giữ {resolvedSymbol} — lệnh split sẽ không đổi gì.
+              </span>
+            )}
+          </div>
+        ) : (
+          <>
             <label className="block text-sm">
-              <span className="app-label">Loại tài sản</span>
-              <select
-                value={assetType}
-                onChange={(e) => setAssetType(e.target.value as AssetType)}
+              <span className="app-label">
+                {isCash ? "Số tiền" : "Số lượng"}
+              </span>
+              <input
+                type="number"
+                step="any"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
                 className="mt-1 w-full app-input"
-              >
-                {assetTypes.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
+                required
+              />
+              {oversold && (
+                <span className="mt-1 block text-xs text-amber-700">
+                  Tới ngày này chỉ đang giữ {formatShares(heldForSell ?? 0)} {resolvedSymbol} — bán{" "}
+                  {formatShares(sellQuantity)} sẽ vượt số đang giữ.
+                </span>
+              )}
+            </label>
+            <label className="block text-sm">
+              <span className="app-label">
+                {isCash ? "Tỷ giá (1)" : "Giá"}
+              </span>
+              <input
+                type="number"
+                step="any"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="mt-1 w-full app-input"
+                required
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="app-label">Phí</span>
+              <input
+                type="number"
+                step="any"
+                value={fee}
+                onChange={(e) => setFee(e.target.value)}
+                className="mt-1 w-full app-input"
+              />
             </label>
           </>
         )}
-        <label className="block text-sm">
-          <span className="app-label">
-            {isCash ? "Số tiền" : "Số lượng"}
-          </span>
-          <input
-            type="number"
-            step="any"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="mt-1 w-full app-input"
-            required
-          />
-          {oversold && (
-            <span className="mt-1 block text-xs text-amber-700">
-              Tới ngày này chỉ đang giữ {formatShares(heldForSell ?? 0)} {resolvedSymbol} — bán{" "}
-              {formatShares(sellQuantity)} sẽ vượt số đang giữ.
-            </span>
-          )}
-        </label>
-        <label className="block text-sm">
-          <span className="app-label">
-            {isCash ? "Tỷ giá (1)" : "Giá"}
-          </span>
-          <input
-            type="number"
-            step="any"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="mt-1 w-full app-input"
-            required
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="app-label">Phí</span>
-          <input
-            type="number"
-            step="any"
-            value={fee}
-            onChange={(e) => setFee(e.target.value)}
-            className="mt-1 w-full app-input"
-          />
-        </label>
         <label className="block text-sm">
           <span className="app-label">Ngày</span>
           <input

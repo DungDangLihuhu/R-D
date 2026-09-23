@@ -57,6 +57,11 @@ export function computeTradeDisplay(
         positions.set(tx.symbol, pos);
         break;
       }
+      case "SPLIT": {
+        const pos = positions.get(tx.symbol);
+        if (pos && tx.quantity > 0) pos.quantity *= tx.quantity;
+        break;
+      }
     }
   }
 
@@ -91,7 +96,9 @@ export function findOversells(
   const oversells: Oversell[] = [];
   const trades = transactions
     .filter(
-      (t) => t.portfolioId === portfolioId && (t.type === "BUY" || t.type === "SELL")
+      (t) =>
+        t.portfolioId === portfolioId &&
+        (t.type === "BUY" || t.type === "SELL" || t.type === "SPLIT")
     )
     .sort(compareTransactionsChronologically);
 
@@ -99,6 +106,10 @@ export function findOversells(
     const quantity = held.get(tx.symbol) ?? 0;
     if (tx.type === "BUY") {
       held.set(tx.symbol, quantity + tx.quantity);
+      continue;
+    }
+    if (tx.type === "SPLIT") {
+      if (tx.quantity > 0) held.set(tx.symbol, quantity * tx.quantity);
       continue;
     }
     if (tx.quantity > quantity + 1e-9) {
@@ -139,6 +150,7 @@ export function heldQuantityAt(
   for (const tx of trades) {
     if (tx.type === "BUY") quantity += tx.quantity;
     else if (tx.type === "SELL") quantity = Math.max(0, quantity - tx.quantity);
+    else if (tx.type === "SPLIT" && tx.quantity > 0) quantity *= tx.quantity;
   }
   return quantity;
 }

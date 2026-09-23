@@ -11,7 +11,7 @@ import {
   type CsvParseResult,
   type CsvRow,
 } from "@/lib/csv-import";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, formatSplitRatio } from "@/lib/format";
 import { findNewOversells } from "@/lib/trade-display";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
@@ -227,9 +227,11 @@ export function CsvImport() {
                     <td className="px-3 py-1.5">{formatDate(r.date)}</td>
                     <td className="px-3 py-1.5">{r.symbol}</td>
                     <td className="px-3 py-1.5 text-center">{r.type}</td>
-                    <td className="px-3 py-1.5 text-right">{r.quantity}</td>
                     <td className="px-3 py-1.5 text-right">
-                      {formatMoney(r.price)}
+                      {r.type === "SPLIT" ? formatSplitRatio(r.quantity) : r.quantity}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {r.type === "SPLIT" ? "—" : formatMoney(r.price)}
                     </td>
                   </tr>
                 ))}
