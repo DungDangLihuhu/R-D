@@ -1,5 +1,6 @@
 import type { AppState } from "./types";
 import { DEFAULT_SYNC_ROOM } from "./cloud";
+import { sanitizeAppState } from "./sanitize-state";
 import type { SyncBase } from "./sync-merge";
 
 const ROOM_KEY = "trading-snow-room-id";
@@ -61,14 +62,26 @@ export function checkCloudConfigured(): Promise<boolean> {
   return configuredCheck;
 }
 
+/**
+ * `since`: phiên bản đang có ở máy này. Cloud chưa đổi thì trả `unchanged` mà không tải
+ * cả state — poll 20 giây/lần chỉ tốn vài chục byte.
+ */
 export async function loadRemoteState(
-  room: string
-): Promise<{ state: AppState; updatedAt: string } | null> {
-  const res = await fetch(`/api/data?room=${encodeURIComponent(room)}`);
+  room: string,
+  since?: string | null
+): Promise<
+  { state: AppState; updatedAt: string } | { unchanged: true; updatedAt: string } | null
+> {
+  const params = new URLSearchParams({ room });
+  if (since) params.set("since", since);
+  const res = await fetch(`/api/data?${params}`);
   if (!res.ok) return null;
   const data = await res.json();
-  if (!data.state) return null;
-  return { state: data.state as AppState, updatedAt: data.updatedAt as string };
+  if (data.unchanged) return { unchanged: true, updatedAt: data.updatedAt as string };
+  // Bản cloud hỏng (máy khác chạy bản cũ, sửa tay…) không được làm trắng app ở máy này.
+  const state = sanitizeAppState(data.state)?.state;
+  if (!state) return null;
+  return { state, updatedAt: data.updatedAt as string };
 }
 
 export type SaveRemoteResult =
@@ -101,10 +114,11 @@ export async function saveRemoteState(
     });
     const data = await res.json().catch(() => null);
 
-    if (res.status === 409 && data?.state) {
+    const conflictState = res.status === 409 ? sanitizeAppState(data?.state)?.state : null;
+    if (conflictState) {
       return {
         status: "conflict",
-        state: data.state as AppState,
+        state: conflictState,
         updatedAt: data.updatedAt as string,
       };
     }

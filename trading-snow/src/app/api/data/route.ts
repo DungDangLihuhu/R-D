@@ -6,7 +6,9 @@ import {
   getRedis,
   normalizeRoomId,
   redisKey,
+  setPayload,
   validateAppState,
+  versionKey,
   type StoredPayload,
 } from "@/lib/cloud";
 
@@ -25,9 +27,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ configured: false, error: "cloud not configured" }, { status: 503 });
   }
 
+  // Poll gửi phiên bản đang có: chưa đổi thì chỉ trả phiên bản, không tải cả state.
+  const since = req.nextUrl.searchParams.get("since");
+  if (since) {
+    const version = await redis.get<string>(versionKey(room));
+    if (version === since) {
+      return NextResponse.json({ configured: true, unchanged: true, updatedAt: version });
+    }
+  }
+
   const payload = await redis.get<StoredPayload>(redisKey(room));
   if (!payload) {
     return NextResponse.json({ configured: true, state: null, updatedAt: null });
+  }
+  if (since && payload.updatedAt === since) {
+    // Dữ liệu ghi từ bản server cũ chưa có key phiên bản.
+    return NextResponse.json({ configured: true, unchanged: true, updatedAt: since });
   }
 
   return NextResponse.json({
@@ -59,20 +74,21 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!validateAppState(body)) {
+  const state = validateAppState(body);
+  if (!state) {
     return NextResponse.json({ error: "invalid state" }, { status: 400 });
   }
 
   const updatedAt = new Date().toISOString();
-  const payload: StoredPayload = { state: body, updatedAt };
+  const payload: StoredPayload = { state, updatedAt };
 
   // Client gửi phiên bản nó dựa vào; bản trên cloud đã khác (máy khác vừa lưu) thì trả
   // 409 kèm bản đó để client gộp. Client cũ không gửi header thì vẫn ghi đè như trước.
   const baseUpdatedAt = req.headers.get("x-base-updated-at");
   if (baseUpdatedAt === null) {
-    await redis.set(redisKey(room), payload);
+    await setPayload(redis, room, payload);
   } else {
-    const current = await compareAndSetPayload(redis, redisKey(room), baseUpdatedAt, payload);
+    const current = await compareAndSetPayload(redis, room, baseUpdatedAt, payload);
     if (current) {
       return NextResponse.json(
         { conflict: true, state: current.state, updatedAt: current.updatedAt },

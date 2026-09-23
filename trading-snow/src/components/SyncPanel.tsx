@@ -5,8 +5,6 @@ import { Cloud, CloudOff, RefreshCw } from "lucide-react";
 import {
   checkCloudConfigured,
   getSyncRoomId,
-  loadRemoteState,
-  saveRemoteState,
   setSyncRoomId,
 } from "@/lib/remote-storage";
 
@@ -133,13 +131,3 @@ export function SyncBadge({ configured }: { configured: boolean }) {
     </span>
   );
 }
-
-export async function pullRemoteToState(
-  room: string,
-  onState: (state: Awaited<ReturnType<typeof loadRemoteState>>) => void
-) {
-  const remote = await loadRemoteState(room);
-  onState(remote);
-}
-
-export { saveRemoteState, loadRemoteState };

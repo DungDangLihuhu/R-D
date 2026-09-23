@@ -195,6 +195,16 @@ export async function fetchPriceHistory(
   return (await fetchCloseHistory(symbol, from, to)).points;
 }
 
+/** Tiền tệ niêm yết của mã theo Yahoo (USD, EUR, GBp…); null khi Yahoo không trả. */
+export async function fetchListingCurrency(symbol: string): Promise<string | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(toYahooSymbol(symbol))}?interval=1d&range=5d`;
+  const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 86400 } });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const currency = json?.chart?.result?.[0]?.meta?.currency;
+  return typeof currency === "string" && currency ? currency : null;
+}
+
 export async function fetchCloseHistory(
   symbol: string,
   from: Date,

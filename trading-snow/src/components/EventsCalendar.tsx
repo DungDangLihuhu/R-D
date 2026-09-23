@@ -43,7 +43,7 @@ const CATEGORY_STYLE: Record<
 };
 
 export function EventsCalendar() {
-  const { state, activePortfolioId, stats, isSymbolHidden } = useApp();
+  const { usd, usdRate, activePortfolioId, stats, isSymbolHidden } = useApp();
   const [apiEvents, setApiEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function EventsCalendar() {
   );
 
   const recordedDividends: CalendarEvent[] = useMemo(() => {
-    return state.transactions
+    return usd.transactions
       .filter(
         (t) =>
           t.portfolioId === activePortfolioId &&
@@ -78,7 +78,7 @@ export function EventsCalendar() {
         subtitle: `${t.quantity} cp · ${formatMoney(t.quantity * t.price)}`,
         impact: "low" as const,
       }));
-  }, [state.transactions, activePortfolioId, isSymbolHidden]);
+  }, [usd.transactions, activePortfolioId, isSymbolHidden]);
 
   const fetchFrom = format(subMonths(startOfMonth(month), 1), "yyyy-MM-dd");
   const fetchTo = format(addMonths(endOfMonth(month), 3), "yyyy-MM-dd");
@@ -131,7 +131,16 @@ export function EventsCalendar() {
     };
   }, [symbolKey, fetchFrom, fetchTo, macroFrom, macroTo]);
 
-  const effectiveApiEvents = apiEvents;
+  // Cổ tức Yahoo trả theo tiền niêm yết (EUR với mã .PA…) — quy ra USD như mọi số khác.
+  const effectiveApiEvents = useMemo(
+    () =>
+      apiEvents.map((e) =>
+        e.category === "dividend" && e.symbol && e.amount
+          ? { ...e, amount: e.amount * usdRate(e.symbol) }
+          : e
+      ),
+    [apiEvents, usdRate]
+  );
 
   const all = useMemo(() => {
     const ids = new Set<string>();

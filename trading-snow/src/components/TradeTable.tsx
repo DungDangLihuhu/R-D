@@ -15,16 +15,19 @@ import {
 import {
   formatDate,
   formatMoney,
+  formatNumber,
   formatPnlArrow,
   formatShares,
   formatSplitRatio,
 } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
+import { formatNativeMoney, isUsdCurrency } from "@/lib/fx";
 import type { Transaction, TransactionType } from "@/lib/types";
 
-// Cột thao tác rộng cố định để hàng tiêu đề và hàng dữ liệu ăn khớp nhau.
-const GRID =
-  "md:grid-cols-[0.7fr_minmax(0,1.6fr)_0.9fr_0.6fr_0.8fr_0.6fr_0.9fr_0.95fr_3.5rem]";
+// Cột thao tác rộng cố định để hàng tiêu đề và hàng dữ liệu ăn khớp nhau. Bảng (màn
+// rộng) và thẻ (mobile) là hai danh sách riêng để bảng mang đúng vai trò table/row/cell.
+const TRADE_COLS =
+  "grid-cols-[0.7fr_minmax(0,1.6fr)_0.9fr_0.6fr_0.8fr_0.6fr_0.9fr_0.95fr_3.5rem]";
 
 const typeLabels: Record<string, string> = {
   BUY: "Mua",
@@ -149,19 +152,31 @@ function moneyOrDash(tx: Transaction, value: number) {
 }
 
 function TradeRow({
+  layout,
   tx,
+  native,
   companyName,
   companyLogo,
   pnl,
   onDelete,
 }: {
+  layout: "table" | "card";
+  /** Lệnh đã quy ra USD để hiển thị. */
   tx: Transaction;
+  /** Lệnh gốc theo tiền niêm yết — hiện khi rê chuột vào giá. */
+  native: Transaction;
   companyName: string;
   companyLogo?: string;
   pnl?: { pnl: number; pnlPercent: number };
   onDelete: () => void;
 }) {
   const cash = isCashSymbol(tx.symbol);
+  const nativeHint =
+    native.currency && !isUsdCurrency(native.currency) && tx.type !== "SPLIT"
+      ? `${formatNativeMoney(native.price, native.currency)} × tỷ giá ${
+          native.fxRate ? formatNumber(native.fxRate, 4) : "hiện tại"
+        }`
+      : undefined;
 
   const deleteBtn = (
     <button
@@ -174,9 +189,9 @@ function TradeRow({
     </button>
   );
 
-  return (
-    <div className="app-row border-b border-gray-100 px-3 py-3 last:border-b-0 md:px-4 md:py-2.5">
-      <div className="md:hidden">
+  if (layout === "card") {
+    return (
+      <li className="app-row border-b border-gray-100 px-3 py-3 last:border-b-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className={`text-sm font-semibold ${typeTone(tx.type)}`}>
@@ -211,7 +226,7 @@ function TradeRow({
           <span className="text-right">Tổng</span>
         </div>
         <div className="mt-1 grid grid-cols-3 gap-2 text-sm font-medium tabular-nums">
-          <span>{moneyOrDash(tx, tx.price)}</span>
+          <span title={nativeHint}>{moneyOrDash(tx, tx.price)}</span>
           <span className="text-center">{moneyOrDash(tx, tx.fee)}</span>
           <span className={`text-right ${grossTone(tx)}`}>
             {formatSignedGross(tx)}
@@ -246,14 +261,20 @@ function TradeRow({
           </div>
           {deleteBtn}
         </div>
-      </div>
+      </li>
+    );
+  }
 
-      <div className={`hidden md:grid ${GRID} md:items-center md:gap-2`}>
-        <p className={`text-sm font-semibold ${typeTone(tx.type)}`}>
+  return (
+    <div
+      role="row"
+      className={`app-row grid ${TRADE_COLS} items-center gap-2 border-b border-gray-100 px-4 py-2.5 last:border-b-0`}
+    >
+        <p role="cell" className={`text-sm font-semibold ${typeTone(tx.type)}`}>
           {typeLabels[tx.type]}
         </p>
 
-        <div className="flex min-w-0 items-center gap-2">
+        <div role="cell" className="flex min-w-0 items-center gap-2">
           {cash ? (
             <p className="truncate text-sm font-medium">Tiền mặt</p>
           ) : (
@@ -267,34 +288,38 @@ function TradeRow({
           )}
         </div>
 
-        <p className="text-right text-sm tabular-nums">{formatDate(tx.date)}</p>
-        <p className="text-right text-sm font-medium tabular-nums">
+        <p role="cell" className="text-right text-sm tabular-nums">
+          {formatDate(tx.date)}
+        </p>
+        <p role="cell" className="text-right text-sm font-medium tabular-nums">
           {quantityLabel(tx)}
         </p>
-        <p className="text-right text-sm tabular-nums">
+        <p role="cell" className="text-right text-sm tabular-nums" title={nativeHint}>
           {moneyOrDash(tx, tx.price)}
         </p>
-        <p className="text-right text-sm tabular-nums text-gray-500">
+        <p role="cell" className="text-right text-sm tabular-nums text-gray-500">
           {moneyOrDash(tx, tx.fee)}
         </p>
-        <p className={`text-right text-sm font-medium tabular-nums ${grossTone(tx)}`}>
+        <p role="cell" className={`text-right text-sm font-medium tabular-nums ${grossTone(tx)}`}>
           {formatSignedGross(tx)}
         </p>
 
-        {pnl ? (
-          <div className="text-right">
-            <p className={`text-sm font-medium tabular-nums ${pnlClass(pnl.pnl)}`}>
-              {formatPnlArrow(pnl.pnlPercent)}
-            </p>
-            <p className={`text-xs tabular-nums ${pnlClass(pnl.pnl)}`}>
-              {formatMoney(pnl.pnl)}
-            </p>
-          </div>
-        ) : (
-          <span className="text-right text-sm text-gray-400">—</span>
-        )}
+        <div role="cell" className="text-right">
+          {pnl ? (
+            <>
+              <p className={`text-sm font-medium tabular-nums ${pnlClass(pnl.pnl)}`}>
+                {formatPnlArrow(pnl.pnlPercent)}
+              </p>
+              <p className={`text-xs tabular-nums ${pnlClass(pnl.pnl)}`}>
+                {formatMoney(pnl.pnl)}
+              </p>
+            </>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          )}
+        </div>
 
-        <div className="flex items-center justify-end gap-1">
+        <div role="cell" className="flex items-center justify-end gap-1">
           {tx.notes ? (
             <span title={tx.notes} className="text-gray-400">
               <StickyNote className="h-4 w-4" />
@@ -304,27 +329,31 @@ function TradeRow({
           )}
           {deleteBtn}
         </div>
-      </div>
     </div>
   );
 }
 
 export function TradeTable() {
-  const { state, activePortfolioId, deleteTransaction, restoreTransaction } =
+  const { state, usd, activePortfolioId, deleteTransaction, restoreTransaction } =
     useApp();
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDesc, setSortDesc] = useState(true);
 
+  // Bảng hiện USD; lệnh gốc (tiền niêm yết) dùng cho hoàn tác xóa và chú thích giá.
   const { pnlByTxId, summary } = useMemo(
-    () => computeTradeDisplay(state.transactions, activePortfolioId),
-    [state.transactions, activePortfolioId]
+    () => computeTradeDisplay(usd.transactions, activePortfolioId),
+    [usd.transactions, activePortfolioId]
+  );
+  const originals = useMemo(
+    () => new Map(state.transactions.map((t) => [t.id, t])),
+    [state.transactions]
   );
 
   const portfolioTrades = useMemo(
-    () => state.transactions.filter((t) => t.portfolioId === activePortfolioId),
-    [state.transactions, activePortfolioId]
+    () => usd.transactions.filter((t) => t.portfolioId === activePortfolioId),
+    [usd.transactions, activePortfolioId]
   );
 
   const trades = useMemo(() => {
@@ -380,14 +409,31 @@ export function TradeTable() {
     setSortDesc(true);
   };
 
+  const ariaSort = (key: SortKey) =>
+    sortKey === key ? (sortDesc ? "descending" : "ascending") : undefined;
+
+  const renderRow = (tx: Transaction, layout: "table" | "card") => (
+    <TradeRow
+      key={tx.id}
+      layout={layout}
+      tx={tx}
+      native={originals.get(tx.id) ?? tx}
+      companyName={state.marketQuotes?.[tx.symbol]?.name ?? tx.symbol}
+      companyLogo={state.marketQuotes?.[tx.symbol]?.logo}
+      pnl={pnlByTxId.get(tx.id)}
+      onDelete={() => handleDelete(tx)}
+    />
+  );
+
   const handleDelete = (tx: Transaction) => {
+    const original = originals.get(tx.id) ?? tx;
     deleteTransaction(tx.id);
     toast.show({
       title: `Đã xóa ${typeLabels[tx.type]} ${tx.symbol}`,
       description: `${formatDate(tx.date)} · ${formatMoney(tradeGross(tx))}`,
       variant: "warning",
       duration: 8000,
-      action: { label: "Hoàn tác", onClick: () => restoreTransaction(tx) },
+      action: { label: "Hoàn tác", onClick: () => restoreTransaction(original) },
     });
   };
 
@@ -440,72 +486,68 @@ export function TradeTable() {
         />
       ) : (
         <div className="app-table-wrap">
-          <div
-            className={`app-table-head hidden px-4 py-2.5 md:grid ${GRID} md:gap-2`}
-          >
-            <span>Loại</span>
-            <span>Vị thế</span>
-            <span className="text-right">
-              <SortHeader
-                label="Ngày"
-                sortKey="date"
-                active={sortKey === "date"}
-                desc={sortDesc}
-                onSort={handleSort}
-              />
-            </span>
-            <span className="text-right">
-              <SortHeader
-                label="SL"
-                sortKey="quantity"
-                active={sortKey === "quantity"}
-                desc={sortDesc}
-                onSort={handleSort}
-              />
-            </span>
-            <span className="text-right">
-              <SortHeader
-                label="Giá"
-                sortKey="price"
-                active={sortKey === "price"}
-                desc={sortDesc}
-                onSort={handleSort}
-              />
-            </span>
-            <span className="text-right">Phí</span>
-            <span className="text-right">
-              <SortHeader
-                label="Tổng"
-                sortKey="gross"
-                active={sortKey === "gross"}
-                desc={sortDesc}
-                onSort={handleSort}
-              />
-            </span>
-            <span className="text-right">
-              <SortHeader
-                label="Lãi/lỗ"
-                sortKey="pnl"
-                active={sortKey === "pnl"}
-                desc={sortDesc}
-                onSort={handleSort}
-              />
-            </span>
-            <span className="sr-only">Thao tác</span>
+          <div role="table" aria-label="Danh sách giao dịch" className="hidden md:block">
+            <div role="row" className={`app-table-head grid ${TRADE_COLS} gap-2 px-4 py-2.5`}>
+              <span role="columnheader">Loại</span>
+              <span role="columnheader">Vị thế</span>
+              <span role="columnheader" aria-sort={ariaSort("date")} className="text-right">
+                <SortHeader
+                  label="Ngày"
+                  sortKey="date"
+                  active={sortKey === "date"}
+                  desc={sortDesc}
+                  onSort={handleSort}
+                />
+              </span>
+              <span role="columnheader" aria-sort={ariaSort("quantity")} className="text-right">
+                <SortHeader
+                  label="SL"
+                  sortKey="quantity"
+                  active={sortKey === "quantity"}
+                  desc={sortDesc}
+                  onSort={handleSort}
+                />
+              </span>
+              <span role="columnheader" aria-sort={ariaSort("price")} className="text-right">
+                <SortHeader
+                  label="Giá"
+                  sortKey="price"
+                  active={sortKey === "price"}
+                  desc={sortDesc}
+                  onSort={handleSort}
+                />
+              </span>
+              <span role="columnheader" className="text-right">
+                Phí
+              </span>
+              <span role="columnheader" aria-sort={ariaSort("gross")} className="text-right">
+                <SortHeader
+                  label="Tổng"
+                  sortKey="gross"
+                  active={sortKey === "gross"}
+                  desc={sortDesc}
+                  onSort={handleSort}
+                />
+              </span>
+              <span role="columnheader" aria-sort={ariaSort("pnl")} className="text-right">
+                <SortHeader
+                  label="Lãi/lỗ"
+                  sortKey="pnl"
+                  active={sortKey === "pnl"}
+                  desc={sortDesc}
+                  onSort={handleSort}
+                />
+              </span>
+              <span role="columnheader" className="sr-only">
+                Thao tác
+              </span>
+            </div>
+            {pageItems.map((tx) => renderRow(tx, "table"))}
           </div>
 
-          <div>
-            {pageItems.map((tx) => (
-              <TradeRow
-                key={tx.id}
-                tx={tx}
-                companyName={state.marketQuotes?.[tx.symbol]?.name ?? tx.symbol}
-                companyLogo={state.marketQuotes?.[tx.symbol]?.logo}
-                pnl={pnlByTxId.get(tx.id)}
-                onDelete={() => handleDelete(tx)}
-              />
-            ))}
-          </div>
+          <ul aria-label="Danh sách giao dịch" className="md:hidden">
+            {pageItems.map((tx) => renderRow(tx, "card"))}
+          </ul>
 
           <Pagination
             page={page}

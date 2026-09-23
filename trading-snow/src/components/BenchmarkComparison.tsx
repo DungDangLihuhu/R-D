@@ -51,10 +51,15 @@ function formatIndexedReturn(value: number): string {
 export function BenchmarkComparison({
   equityCurve,
   transactions,
+  nativeTransactions,
   marketPrices,
 }: {
   equityCurve: PortfolioStats["equityCurve"];
+  /** Lệnh đã quy ra USD. */
   transactions: Transaction[];
+  /** Cùng các lệnh đó theo tiền niêm yết — để chọn đúng kiểu giá lịch sử. */
+  nativeTransactions: Transaction[];
+  /** Giá hiện tại đã quy ra USD. */
   marketPrices: Record<string, number>;
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
@@ -63,7 +68,7 @@ export function BenchmarkComparison({
   >(null);
   const [shown, setShown] = useState<ComparisonResult | null>(null);
   const chartTheme = useChartTheme();
-  const { series: closes, status: historyStatus } = usePriceHistory(transactions);
+  const { series: closes, status: historyStatus } = usePriceHistory(nativeTransactions);
 
   const curve = useMemo(() => ensureEquityCurve(equityCurve), [equityCurve]);
 

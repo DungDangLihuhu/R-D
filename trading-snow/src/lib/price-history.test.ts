@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMarketProfitCurve,
+  findMissingSplits,
   pickCloseSeries,
   unadjustForSplits,
 } from "./price-history";
@@ -89,5 +90,35 @@ describe("buildMarketProfitCurve", () => {
   it("returns null when there is nothing to value", () => {
     const txs = [tx({ type: "DEPOSIT", symbol: "CASH", quantity: 1, price: 100 })];
     expect(buildMarketProfitCurve(txs, {}, 0, now)).toBeNull();
+  });
+});
+
+describe("findMissingSplits", () => {
+  it("flags a split held through when earlier trades use the traded price", () => {
+    const txs = [tx({ type: "BUY", quantity: 4, price: 1148, date: "2024-06-03" })];
+    expect(findMissingSplits({ NVDA }, txs)).toEqual([
+      { symbol: "NVDA", date: "2024-06-10", ratio: 10, sharesBefore: 4 },
+    ]);
+  });
+
+  it("stays quiet once the split is recorded", () => {
+    const txs = [
+      tx({ type: "BUY", quantity: 4, price: 1148, date: "2024-06-03" }),
+      tx({ type: "SPLIT", quantity: 10, price: 0, date: "2024-06-10" }),
+    ];
+    expect(findMissingSplits({ NVDA }, txs)).toEqual([]);
+  });
+
+  it("stays quiet when trades were entered at split-adjusted prices", () => {
+    const txs = [tx({ type: "BUY", quantity: 40, price: 114.8, date: "2024-06-03" })];
+    expect(findMissingSplits({ NVDA }, txs)).toEqual([]);
+  });
+
+  it("ignores splits that happened after the position was closed", () => {
+    const txs = [
+      tx({ type: "BUY", quantity: 4, price: 1148, date: "2024-06-03" }),
+      tx({ type: "SELL", quantity: 4, price: 1200, date: "2024-06-07" }),
+    ];
+    expect(findMissingSplits({ NVDA }, txs)).toEqual([]);
   });
 });

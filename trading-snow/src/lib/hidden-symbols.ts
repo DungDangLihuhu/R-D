@@ -34,3 +34,14 @@ export function filterHiddenTransactions(
       tx.portfolioId !== portfolioId || !isTransactionHidden(tx, hidden)
   );
 }
+
+/** Lệnh của một portfolio, bỏ các mã đang tạm ẩn khỏi chỉ số. */
+export function visiblePortfolioTransactions(
+  transactions: Transaction[],
+  portfolioId: string,
+  hidden: ReadonlySet<string>
+): Transaction[] {
+  return filterHiddenTransactions(transactions, portfolioId, hidden).filter(
+    (tx) => tx.portfolioId === portfolioId
+  );
+}

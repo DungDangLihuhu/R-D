@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import type { AppState } from "./types";
+import { sanitizeAppState } from "./sanitize-state";
 
 const KEY_PREFIX = "trading-snow";
 
@@ -60,6 +61,20 @@ export function redisKey(room: string): string {
   return `${KEY_PREFIX}:${room}`;
 }
 
+/**
+ * Phiên bản (updatedAt) cất riêng một key nhỏ: poll mỗi 20 giây chỉ cần đọc key này,
+ * không phải tải cả state (toàn bộ lệnh) chỉ để biết có gì đổi hay không.
+ */
+export function versionKey(room: string): string {
+  return `${redisKey(room)}:ver`;
+}
+
+/** Ghi đè không kiểm tra phiên bản (client cũ không gửi phiên bản đang dựa vào). */
+export async function setPayload(redis: Redis, room: string, payload: StoredPayload) {
+  await redis.set(redisKey(room), payload);
+  await redis.set(versionKey(room), payload.updatedAt);
+}
+
 export interface StoredPayload {
   state: AppState;
   updatedAt: string;
@@ -78,6 +93,7 @@ if current then
   end
 end
 redis.call("SET", KEYS[1], ARGV[2])
+redis.call("SET", KEYS[2], ARGV[3])
 return false
 `;
 
@@ -87,31 +103,31 @@ return false
  */
 export async function compareAndSetPayload(
   redis: Redis,
-  key: string,
+  room: string,
   expectedUpdatedAt: string,
   payload: StoredPayload
 ): Promise<StoredPayload | null> {
   let current: unknown;
   try {
-    current = await redis.eval(COMPARE_AND_SET, [key], [
+    current = await redis.eval(COMPARE_AND_SET, [redisKey(room), versionKey(room)], [
       expectedUpdatedAt,
       JSON.stringify(payload),
+      payload.updatedAt,
     ]);
   } catch {
     // Redis không cho chạy Lua: kiểm tra rồi ghi, chấp nhận khe rất nhỏ giữa hai lệnh.
-    const existing = await redis.get<StoredPayload>(key);
+    const existing = await redis.get<StoredPayload>(redisKey(room));
     if (existing && existing.updatedAt !== expectedUpdatedAt) return existing;
-    await redis.set(key, payload);
+    await setPayload(redis, room, payload);
     return null;
   }
   if (current == null || current === false) return null;
   return (typeof current === "string" ? JSON.parse(current) : current) as StoredPayload;
 }
 
-export function validateAppState(data: unknown): data is AppState {
-  if (!data || typeof data !== "object") return false;
-  const s = data as AppState;
-  return Array.isArray(s.portfolios) && Array.isArray(s.transactions);
+/** State hợp lệ để lưu: đúng cấu trúc, đã bỏ lệnh/portfolio hỏng. Null khi không nhận ra. */
+export function validateAppState(data: unknown): AppState | null {
+  return sanitizeAppState(data)?.state ?? null;
 }
 
 export function checkWriteKey(reqKey: string | null): boolean {

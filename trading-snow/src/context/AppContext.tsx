@@ -11,6 +11,15 @@ import {
   type ReactNode,
 } from "react";
 import { computePortfolioStats } from "@/lib/stats";
+import {
+  annotateTransactions,
+  currentUsdRate,
+  needsFxAnnotation,
+  symbolCurrencies,
+  toUsdPrices,
+  toUsdQuotes,
+  toUsdTransactions,
+} from "@/lib/fx";
 import { hiddenSymbolSet } from "@/lib/hidden-symbols";
 import {
   checkCloudConfigured,
@@ -22,25 +31,45 @@ import {
 } from "@/lib/remote-storage";
 import {
   emptySyncBase,
+  isBlankState,
+  localOnlyTransactionCount,
   mergeSyncedState,
   sameSyncedContent,
   syncBaseOf,
   type SyncBase,
 } from "@/lib/sync-merge";
+import { fetchFxLookup } from "@/lib/fx-client";
 import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
+import { sanitizeAppState } from "@/lib/sanitize-state";
 import { defaultState, loadState, saveState } from "@/lib/storage";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
 import type {
   AppState,
+  MarketQuote,
   MarketSession,
   Portfolio,
   PortfolioStats,
   Transaction,
 } from "@/lib/types";
 
+const PRICE_REFRESH_MS = 5 * 60 * 1000;
+
 interface AppContextValue {
+  /** Đã đọc xong dữ liệu trong máy — trước đó state là bản trống mặc định. */
+  hydrated: boolean;
+  /** Dữ liệu gốc: giá/lệnh theo tiền tệ niêm yết (EUR cho mã .PA…). */
   state: AppState;
+  /** Cùng dữ liệu đó quy ra USD — dùng cho mọi số tiền hiển thị trong danh mục. */
+  usd: {
+    transactions: Transaction[];
+    marketPrices: Record<string, number>;
+    marketQuotes: Record<string, MarketQuote>;
+  };
+  /** Số USD cho 1 đơn vị giá niêm yết của mã theo tỷ giá hiện tại (1 với mã Mỹ). */
+  usdRate: (symbol: string) => number;
+  /** Tiền tệ niêm yết của mã (USD khi chưa biết). */
+  currencyOf: (symbol: string) => string;
   activePortfolioId: string;
   setActivePortfolioId: (id: string) => void;
   stats: PortfolioStats;
@@ -160,15 +189,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const stored = loadSyncBase();
       syncBaseRef.current = stored?.room === room ? stored : null;
 
-      const remote = await loadRemoteState(room);
+      const loaded = await loadRemoteState(room);
       if (cancelled) return;
+      const remote = loaded && "state" in loaded ? loaded : null;
 
       if (remote) {
-        // Có base thì thay đổi lưu local nhưng chưa kịp đẩy lên (mất mạng, đóng tab)
-        // được gộp vào; lần đầu chưa có base thì cloud thắng, tránh hồi sinh lệnh đã xóa.
-        applyRemoteState(room, remote, syncBaseFor(room));
+        const base = syncBaseFor(room);
+        if (base || isBlankState(local)) {
+          // Có base thì thay đổi lưu local nhưng chưa kịp đẩy lên (mất mạng, đóng tab)
+          // được gộp vào; máy trống thì nhận nguyên bản cloud.
+          applyRemoteState(room, remote, base);
+        } else {
+          // Máy có dữ liệu nhưng chưa từng đồng bộ phòng này: không biết lệnh nào đã bị
+          // xóa ở máy khác, nên giữ cả hai bên thay vì để cloud xóa sạch dữ liệu máy này.
+          const extra = localOnlyTransactionCount(local, remote.state);
+          applyRemoteState(room, remote, emptySyncBase(room));
+          if (extra > 0) {
+            toast.info(`Đã gộp ${extra} giao dịch chỉ có trên máy này vào dữ liệu cloud`, {
+              description: "Nếu trong đó có lệnh đã xóa ở máy khác, hãy xóa lại.",
+              duration: 12_000,
+            });
+          }
+        }
         setActivePortfolioId(remote.state.portfolios[0]?.id ?? "default");
-      } else if (local.transactions.length > 0 || local.portfolios.length > 1) {
+      } else if (!isBlankState(local)) {
         const base = emptySyncBase(room);
         const result = await saveRemoteState(room, local, base.updatedAt);
         if (cancelled) return;
@@ -193,6 +237,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveState(state);
 
     if (!cloudConfigured || !cloudReady || state === syncedStateRef.current) return;
+    // Máy trống chưa từng đồng bộ không đẩy bản rỗng lên: máy có dữ liệu mở sau sẽ bị
+    // bản rỗng đó "thắng" và mất sạch.
+    if (!syncBaseFor(syncRoom) && isBlankState(state)) return;
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -237,9 +284,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (isPolling.current || isSaving.current || saveTimer.current || document.hidden) return;
       isPolling.current = true;
       try {
-        const remote = await loadRemoteState(syncRoom);
         const base = syncBaseFor(syncRoom);
-        if (!remote || remote.updatedAt === base?.updatedAt) return;
+        const remote = await loadRemoteState(syncRoom, base?.updatedAt);
+        if (!remote || !("state" in remote) || remote.updatedAt === base?.updatedAt) return;
         applyRemoteState(syncRoom, remote, base);
       } finally {
         isPolling.current = false;
@@ -264,22 +311,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [state.hiddenSymbols, activePortfolioId]
   );
 
+  // Mọi phép tính chạy trên bản USD: giá vốn theo tỷ giá ngày giao dịch, giá thị trường
+  // theo tỷ giá hiện tại. Trước đây giá EUR của mã .PA được cộng thẳng như USD.
+  const currencies = useMemo(
+    () =>
+      symbolCurrencies({ transactions: state.transactions, marketQuotes: state.marketQuotes }),
+    [state.transactions, state.marketQuotes]
+  );
+  const usd = useMemo(
+    () => ({
+      transactions: toUsdTransactions(state.transactions, state.fxRates),
+      marketPrices: toUsdPrices(state.marketPrices, currencies, state.fxRates),
+      marketQuotes: toUsdQuotes(state.marketQuotes ?? {}, currencies, state.fxRates),
+    }),
+    [state.transactions, state.marketPrices, state.marketQuotes, state.fxRates, currencies]
+  );
+  const usdRate = useCallback(
+    (symbol: string) => currentUsdRate(currencies[symbol], state.fxRates) ?? 1,
+    [currencies, state.fxRates]
+  );
+  const currencyOf = useCallback((symbol: string) => currencies[symbol] ?? "USD", [currencies]);
+
   const stats = useMemo(
     () =>
       computePortfolioStats(
-        state.transactions,
+        usd.transactions,
         activePortfolioId,
-        state.marketPrices,
-        state.marketQuotes ?? {},
+        usd.marketPrices,
+        usd.marketQuotes,
         hiddenSymbols
       ),
-    [
-      state.transactions,
-      state.marketPrices,
-      state.marketQuotes,
-      activePortfolioId,
-      hiddenSymbols,
-    ]
+    [usd, activePortfolioId, hiddenSymbols]
   );
 
   const holdingSymbols = useMemo(() => {
@@ -334,7 +396,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         shortName?: string;
         logo?: string;
         marketSession?: MarketSession;
+        currency?: string;
       }[] = [];
+      const mergedFx: Record<string, number> = {};
       let mergedUnresolved: string[] = [];
       let truncated = false;
 
@@ -360,7 +424,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
               shortName?: string;
               logo?: string;
               marketSession?: MarketSession;
+              currency?: string;
             }[];
+            fx?: Record<string, number>;
             unresolved?: string[];
             truncated?: boolean;
           };
@@ -370,6 +436,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       for (const data of batchResults) {
         Object.assign(mergedPrices, data.prices ?? {});
         mergedQuotes.push(...(data.quotes ?? []));
+        Object.assign(mergedFx, data.fx ?? {});
         mergedUnresolved = [...mergedUnresolved, ...(data.unresolved ?? [])];
         if (data.truncated) truncated = true;
       }
@@ -390,6 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               name: q.shortName,
               logo: q.logo,
               marketSession: q.marketSession,
+              currency: q.currency,
             };
           }
         }
@@ -397,6 +465,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...s,
           marketPrices,
           marketQuotes,
+          fxRates: { ...(s.fxRates ?? {}), ...mergedFx },
           pricesUpdatedAt: updatedAt,
         };
       });
@@ -427,20 +496,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Tự lấy giá mỗi 5 phút khi tab đang mở, và ngay khi có mã mới chưa có giá. Trước
+  // đây chỉ kiểm tra lúc mở app nên để trang mở lâu thì giá đứng yên.
+  const holdingSymbolsKey = holdingSymbols.join(",");
+  const autoRefreshing = useRef(false);
+
   useEffect(() => {
-    if (!hydrated || holdingSymbols.length === 0) return;
-    const stale =
-      !state.pricesUpdatedAt ||
-      Date.now() - new Date(state.pricesUpdatedAt).getTime() > 5 * 60 * 1000;
-    if (!stale) return;
+    if (!hydrated || !holdingSymbolsKey) return;
 
-    const symbols = [...holdingSymbols];
-    const tid = globalThis.setTimeout(() => {
-      void refreshPrices(symbols);
-    }, 0);
+    const refreshIfStale = async () => {
+      if (autoRefreshing.current || document.hidden) return;
+      const current = stateRef.current;
+      const { pricesUpdatedAt, marketPrices } = current;
+      const symbols = holdingSymbolsRef.current;
+      const listed = symbolCurrencies(current);
+      const stale =
+        !pricesUpdatedAt ||
+        Date.now() - new Date(pricesUpdatedAt).getTime() > PRICE_REFRESH_MS ||
+        symbols.some((s) => marketPrices[s] == null) ||
+        // Mã ngoại tệ mà chưa có tỷ giá: lấy ngay, đừng để giá EUR hiện như USD tới 5 phút.
+        symbols.some((s) => currentUsdRate(listed[s], current.fxRates) == null);
+      if (!stale) return;
+      autoRefreshing.current = true;
+      try {
+        await refreshPrices(symbols);
+      } finally {
+        autoRefreshing.current = false;
+      }
+    };
 
-    return () => globalThis.clearTimeout(tid);
-  }, [hydrated, holdingSymbols, refreshPrices, state.pricesUpdatedAt]);
+    const onVisible = () => {
+      if (!document.hidden) void refreshIfStale();
+    };
+
+    // Lùi một nhịp: refreshPrices bật trạng thái loading ngay khi chạy.
+    const first = globalThis.setTimeout(() => void refreshIfStale(), 0);
+    const id = globalThis.setInterval(() => void refreshIfStale(), 60_000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      globalThis.clearTimeout(first);
+      globalThis.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [hydrated, holdingSymbolsKey, refreshPrices]);
+
+  // Gắn tiền tệ niêm yết và tỷ giá ngày giao dịch cho lệnh còn thiếu (lệnh cũ, lệnh vừa
+  // nhập tay/import, lệnh từ máy khác). Mỗi nhóm lệnh chỉ hỏi server một lần mỗi phiên.
+  const fxAttempted = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const pending = state.transactions.filter(needsFxAnnotation);
+    if (pending.length === 0) return;
+    const key = pending
+      .map((t) => t.id)
+      .sort()
+      .join(",");
+    const attempted = fxAttempted.current;
+    if (attempted.has(key)) return;
+    attempted.add(key);
+
+    let cancelled = false;
+    const symbols = [...new Set(pending.map((t) => t.symbol.toUpperCase()))];
+    const firstDay = pending
+      .reduce((min, t) => (t.date < min ? t.date : min), pending[0].date)
+      .slice(0, 10);
+    const from = new Date(Date.parse(firstDay) - 7 * 86_400_000).toISOString().slice(0, 10);
+
+    fetchFxLookup(symbols, from)
+      .then((lookup) => {
+        if (!cancelled) setState((s) => annotateTransactions(s, lookup));
+      })
+      .catch(() => {
+        // Mất mạng / Yahoo lỗi: tạm quy đổi theo tỷ giá hiện tại, lần mở app sau thử lại.
+      });
+
+    return () => {
+      // Bị hủy giữa chừng (lệnh đổi trước khi server trả lời) thì cho lượt sau hỏi lại.
+      cancelled = true;
+      attempted.delete(key);
+    };
+  }, [hydrated, state.transactions]);
 
   const addPortfolio = useCallback((name: string, currency: string) => {
     const portfolio: Portfolio = {
@@ -522,10 +658,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const importData = useCallback((json: string) => {
     try {
-      const parsed = JSON.parse(json) as AppState;
-      if (!parsed.portfolios || !parsed.transactions) return false;
-      setState(parsed);
-      setActivePortfolioId(parsed.portfolios[0]?.id ?? "default");
+      const parsed = sanitizeAppState(JSON.parse(json));
+      if (!parsed) return false;
+      setState(parsed.state);
+      setActivePortfolioId(parsed.state.portfolios[0]?.id ?? "default");
       return true;
     } catch {
       return false;
@@ -587,7 +723,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const contextValue = useMemo<AppContextValue>(
     () => ({
       ...actions,
+      hydrated,
       state,
+      usd,
+      usdRate,
+      currencyOf,
       activePortfolioId,
       stats,
       hiddenSymbols,
@@ -599,7 +739,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       actions,
+      hydrated,
       state,
+      usd,
+      usdRate,
+      currencyOf,
       activePortfolioId,
       stats,
       hiddenSymbols,

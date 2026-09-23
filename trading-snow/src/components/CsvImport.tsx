@@ -13,6 +13,8 @@ import {
 } from "@/lib/csv-import";
 import { formatDate, formatMoney, formatSplitRatio } from "@/lib/format";
 import { findNewOversells } from "@/lib/trade-display";
+import { holdingsSnapshotInUsd } from "@/lib/fx";
+import { fetchFxLookup } from "@/lib/fx-client";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
 
@@ -72,7 +74,7 @@ export function CsvImport() {
     [importPreview, state.transactions, activePortfolioId]
   );
 
-  const confirmImport = () => {
+  const confirmImport = async () => {
     if (!preview || preview.length === 0 || !importPreview) return;
 
     // Holdings là snapshot, không phải lịch sử: import lại vào ngày khác sẽ không bị
@@ -94,7 +96,23 @@ export function CsvImport() {
       return;
     }
 
-    const { added, skipped } = importTransactions(importPreview.transactions);
+    let transactions = importPreview.transactions;
+    if (parseResult?.format === "snowball_holdings") {
+      const symbols = [
+        ...new Set(
+          transactions.filter((t) => t.type === "BUY").map((t) => t.symbol.toUpperCase())
+        ),
+      ];
+      try {
+        transactions = holdingsSnapshotInUsd(transactions, await fetchFxLookup(symbols));
+      } catch {
+        toast.warning(
+          "Chưa lấy được tỷ giá — khoản nạp tạm tính theo giá gốc; mã ngoại tệ sẽ được quy ra USD sau."
+        );
+      }
+    }
+
+    const { added, skipped } = importTransactions(transactions);
 
     if (parseResult?.marketPrices && Object.keys(parseResult.marketPrices).length > 0) {
       setMarketPrices(parseResult.marketPrices);

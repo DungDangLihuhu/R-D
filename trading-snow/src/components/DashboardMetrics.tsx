@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, PiggyBank, TrendingUp, Wallet } from "lucide-react";
 import { SnowballStatCard } from "@/components/SnowballStatCard";
+import { useApp } from "@/context/AppContext";
 import type { PortfolioStats } from "@/lib/types";
 import { formatMoney } from "@/lib/format";
 import {
@@ -23,6 +24,7 @@ function formatSignedPercent(value: number): string {
 }
 
 export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
+  const { usdRate } = useApp();
   const [dividendEvents, setDividendEvents] = useState<DividendEventLike[]>([]);
 
   const symbols = useMemo(
@@ -57,9 +59,13 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
     };
   }, [symbols]);
 
+  // Cổ tức Yahoo theo tiền niêm yết — quy ra USD trước khi tính thu nhập thụ động.
   const effectiveDividendEvents = useMemo(
-    () => (symbols ? dividendEvents : []),
-    [symbols, dividendEvents]
+    () =>
+      symbols
+        ? dividendEvents.map((e) => ({ ...e, amount: e.amount * usdRate(e.symbol) }))
+        : [],
+    [symbols, dividendEvents, usdRate]
   );
 
   const passiveIncome = useMemo(

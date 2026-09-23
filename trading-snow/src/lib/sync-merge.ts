@@ -23,6 +23,17 @@ export function syncBaseOf(room: string, updatedAt: string, state: AppState): Sy
   };
 }
 
+/** Máy mới/trống: chỉ có portfolio mặc định, chưa có lệnh nào — không có gì đáng đẩy lên cloud. */
+export function isBlankState(state: AppState): boolean {
+  return state.transactions.length === 0 && state.portfolios.length <= 1;
+}
+
+/** Lệnh chỉ có ở `local`, không có trên `remote`. */
+export function localOnlyTransactionCount(local: AppState, remote: AppState): number {
+  const remoteIds = new Set(remote.transactions.map((t) => t.id));
+  return local.transactions.filter((t) => !remoteIds.has(t.id)).length;
+}
+
 /** Cloud chưa có gì: mọi lệnh/portfolio ở cả hai bên đều tính là mới thêm, không xóa gì. */
 export function emptySyncBase(room: string): SyncBase {
   return { room, updatedAt: "", transactionIds: [], portfolioIds: [], hiddenSymbols: {} };
@@ -87,6 +98,7 @@ export function mergeSyncedState(base: SyncBase, local: AppState, remote: AppSta
     transactions,
     marketPrices: { ...older.marketPrices, ...newer.marketPrices },
     marketQuotes: { ...(older.marketQuotes ?? {}), ...(newer.marketQuotes ?? {}) },
+    fxRates: { ...(older.fxRates ?? {}), ...(newer.fxRates ?? {}) },
     pricesUpdatedAt: newer.pricesUpdatedAt ?? older.pricesUpdatedAt ?? null,
     hiddenSymbols,
   };
@@ -109,6 +121,7 @@ function normalized(state: AppState) {
     ...state,
     marketPrices: state.marketPrices ?? {},
     marketQuotes: state.marketQuotes ?? {},
+    fxRates: state.fxRates ?? {},
     pricesUpdatedAt: state.pricesUpdatedAt ?? null,
     hiddenSymbols: Object.fromEntries(
       Object.entries(state.hiddenSymbols ?? {}).filter(([, list]) => list.length > 0)
