@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import type { AppState } from "./types";
+import { sanitizeAppState } from "./sanitize-state";
 
 const KEY_PREFIX = "trading-snow";
 
@@ -124,10 +125,9 @@ export async function compareAndSetPayload(
   return (typeof current === "string" ? JSON.parse(current) : current) as StoredPayload;
 }
 
-export function validateAppState(data: unknown): data is AppState {
-  if (!data || typeof data !== "object") return false;
-  const s = data as AppState;
-  return Array.isArray(s.portfolios) && Array.isArray(s.transactions);
+/** State hợp lệ để lưu: đúng cấu trúc, đã bỏ lệnh/portfolio hỏng. Null khi không nhận ra. */
+export function validateAppState(data: unknown): AppState | null {
+  return sanitizeAppState(data)?.state ?? null;
 }
 
 export function checkWriteKey(reqKey: string | null): boolean {

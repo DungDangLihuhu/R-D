@@ -74,12 +74,13 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!validateAppState(body)) {
+  const state = validateAppState(body);
+  if (!state) {
     return NextResponse.json({ error: "invalid state" }, { status: 400 });
   }
 
   const updatedAt = new Date().toISOString();
-  const payload: StoredPayload = { state: body, updatedAt };
+  const payload: StoredPayload = { state, updatedAt };
 
   // Client gửi phiên bản nó dựa vào; bản trên cloud đã khác (máy khác vừa lưu) thì trả
   // 409 kèm bản đó để client gộp. Client cũ không gửi header thì vẫn ghi đè như trước.

@@ -30,6 +30,7 @@ import {
   type SyncBase,
 } from "@/lib/sync-merge";
 import { QUOTE_BATCH_SIZE } from "@/lib/quote-providers";
+import { sanitizeAppState } from "@/lib/sanitize-state";
 import { defaultState, loadState, saveState } from "@/lib/storage";
 import { filterDuplicateTransactions } from "@/lib/transaction-dedup";
 import { toast } from "@/lib/toast-store";
@@ -571,10 +572,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const importData = useCallback((json: string) => {
     try {
-      const parsed = JSON.parse(json) as AppState;
-      if (!parsed.portfolios || !parsed.transactions) return false;
-      setState(parsed);
-      setActivePortfolioId(parsed.portfolios[0]?.id ?? "default");
+      const parsed = sanitizeAppState(JSON.parse(json));
+      if (!parsed) return false;
+      setState(parsed.state);
+      setActivePortfolioId(parsed.state.portfolios[0]?.id ?? "default");
       return true;
     } catch {
       return false;

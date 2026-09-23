@@ -45,6 +45,8 @@ export interface MarketQuote {
   logo?: string;
   /** pre / post / regular / closed — extended hours when pre or post */
   marketSession?: MarketSession;
+  /** Tiền tệ niêm yết theo Yahoo (USD, EUR, GBp…) — giá ở trên tính bằng đơn vị này. */
+  currency?: string;
 }
 
 export interface ClosedTrade {
