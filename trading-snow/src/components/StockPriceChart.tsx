@@ -15,7 +15,7 @@ import {
   useXAxisScale,
   useYAxisScale,
 } from "recharts";
-import { formatMoney } from "@/lib/format";
+import { formatDecimal, formatMoney } from "@/lib/format";
 import type { ChartStyle, ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { FUNDAMENTAL_CHART_TIMEFRAMES, showPriceLevelsOnChart } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
@@ -365,7 +365,7 @@ function LevelCard({
         }`}
       >
         {upside >= 0 ? "+" : ""}
-        {upside.toFixed(2)}% so với giá hiện tại
+        {formatDecimal(upside, 2)}% so với giá hiện tại
       </p>
       <p className="mt-0.5 text-[10px] text-gray-500">{method}</p>
     </div>

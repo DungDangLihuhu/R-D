@@ -875,6 +875,118 @@ export interface YahooKeyStats {
   averageVolume10Day?: number;
   averageVolume?: number;
   bookValue?: number;
+  /** Dùng khi không có Finnhub: lịch sử EPS, khuyến nghị CTCK, ngày công bố KQKD tới. */
+  earningsHistory?: YahooEarningsRow[];
+  recommendationTrend?: YahooRecommendationRow[];
+  nextEarnings?: { date: string; epsEstimate: number | null };
+}
+
+export interface YahooEarningsRow {
+  period: string;
+  estimate: number | null;
+  actual: number | null;
+  surprisePercent: number | null;
+}
+
+export interface YahooRecommendationRow {
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+}
+
+/**
+ * Lịch sử EPS của Yahoo (cũ → mới, surprise là phân số 0,0674) theo dạng Finnhub: quý
+ * mới nhất trước, `period` là ngày kết thúc quý, surprise tính theo %.
+ */
+export function parseYahooEarningsHistory(history: unknown): YahooEarningsRow[] {
+  if (!Array.isArray(history)) return [];
+  const rows: YahooEarningsRow[] = [];
+  for (const h of history as Record<string, unknown>[]) {
+    const period = parseYahooRawDate(h?.quarter);
+    if (!period) continue;
+    const actual = pickYahooNumber(h.epsActual) ?? null;
+    const estimate = pickYahooNumber(h.epsEstimate) ?? null;
+    const fraction = pickYahooNumber(h.surprisePercent);
+    const surprisePercent =
+      fraction != null
+        ? fraction * 100
+        : actual != null && estimate != null && estimate !== 0
+          ? ((actual - estimate) / Math.abs(estimate)) * 100
+          : null;
+    if (actual == null && estimate == null) continue;
+    rows.push({ period, estimate, actual, surprisePercent });
+  }
+  return rows.sort((a, b) => b.period.localeCompare(a.period));
+}
+
+/** "0m" là tháng hiện tại, "-1m" tháng trước… — đổi sang ngày đầu tháng như Finnhub. */
+export function parseYahooRecommendationTrend(
+  trend: unknown,
+  now = new Date()
+): YahooRecommendationRow[] {
+  if (!Array.isArray(trend)) return [];
+  const count = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
+  const rows: YahooRecommendationRow[] = [];
+  for (const t of trend as Record<string, unknown>[]) {
+    const offset = /^(-?\d+)m$/.exec(String(t?.period ?? ""));
+    if (!offset) continue;
+    const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + Number(offset[1]), 1));
+    const row: YahooRecommendationRow = {
+      period: month.toISOString().slice(0, 10),
+      strongBuy: count(t.strongBuy),
+      buy: count(t.buy),
+      hold: count(t.hold),
+      sell: count(t.sell),
+      strongSell: count(t.strongSell),
+    };
+    if (row.strongBuy + row.buy + row.hold + row.sell + row.strongSell === 0) continue;
+    rows.push(row);
+  }
+  return rows.sort((a, b) => b.period.localeCompare(a.period));
+}
+
+export interface YahooNewsRow {
+  headline: string;
+  date: string;
+  source?: string;
+  url?: string;
+}
+
+/** Tin gắn với mã trên Yahoo — tìm theo mã trả cả tin thị trường chung, nên lọc theo relatedTickers. */
+export function parseYahooNews(items: unknown, yahooSymbol: string): YahooNewsRow[] {
+  if (!Array.isArray(items)) return [];
+  const target = yahooSymbol.toUpperCase();
+  const rows: YahooNewsRow[] = [];
+  for (const n of items as Record<string, unknown>[]) {
+    const related = Array.isArray(n?.relatedTickers) ? (n.relatedTickers as unknown[]) : [];
+    if (!related.some((t) => typeof t === "string" && t.toUpperCase() === target)) continue;
+    const title = typeof n.title === "string" ? n.title.trim() : "";
+    const time = typeof n.providerPublishTime === "number" ? n.providerPublishTime : NaN;
+    if (!title || !Number.isFinite(time)) continue;
+    rows.push({
+      headline: title,
+      date: new Date(time * 1000).toISOString(),
+      source: typeof n.publisher === "string" ? n.publisher : undefined,
+      url: typeof n.link === "string" ? n.link : undefined,
+    });
+  }
+  return rows.sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export async function fetchYahooNews(symbol: string, limit = 12): Promise<YahooNewsRow[]> {
+  for (const candidate of resolveYahooSymbolCandidates(symbol)) {
+    const yahoo = toYahooSymbol(candidate);
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(yahoo)}&quotesCount=0&newsCount=${limit}`;
+    const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 1800 } });
+    if (!res.ok) continue;
+    const json = (await res.json()) as { news?: unknown };
+    const rows = parseYahooNews(json.news, yahoo);
+    if (rows.length) return rows;
+  }
+  return [];
 }
 
 function pickYahooNumber(...values: unknown[]): number | undefined {
@@ -972,7 +1084,7 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
 
   for (const candidate of resolveYahooSymbolCandidates(symbol)) {
     const yahoo = toYahooSymbol(candidate);
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics,financialData,summaryDetail,upgradeDowngradeHistory&crumb=${encodeURIComponent(session.crumb)}`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=defaultKeyStatistics,financialData,summaryDetail,upgradeDowngradeHistory,earningsHistory,recommendationTrend,calendarEvents&crumb=${encodeURIComponent(session.crumb)}`;
     const res = await fetch(url, {
       headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
       next: { revalidate: 3600 },
@@ -990,6 +1102,11 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
               firm?: string;
               currentPriceTarget?: number;
             }[];
+          };
+          earningsHistory?: { history?: unknown };
+          recommendationTrend?: { trend?: unknown };
+          calendarEvents?: {
+            earnings?: { earningsDate?: unknown[]; earningsAverage?: unknown };
           };
         }[];
       };
@@ -1058,6 +1175,15 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
       });
     }
     stats.priceTargetHistory = priceTargetHistory;
+    stats.earningsHistory = parseYahooEarningsHistory(result.earningsHistory?.history);
+    stats.recommendationTrend = parseYahooRecommendationTrend(result.recommendationTrend?.trend);
+    const nextDate = parseYahooRawDate(result.calendarEvents?.earnings?.earningsDate?.[0]);
+    if (nextDate) {
+      stats.nextEarnings = {
+        date: nextDate,
+        epsEstimate: pickYahooNumber(result.calendarEvents?.earnings?.earningsAverage) ?? null,
+      };
+    }
 
     if (!yahooStatsHasFundamentals(stats)) continue;
     return stats;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
+import type { ChartTimeframe, MovingAverages, OhlcPoint } from "@/lib/chart-history";
 import { formatChartMonthYear } from "@/lib/format";
 
 function seedToOhlc(seed: { date: string; close: number }[]): OhlcPoint[] {
@@ -29,6 +29,7 @@ export function useChartHistory(
   const [points, setPoints] = useState<OhlcPoint[]>(() =>
     hasSeed ? seedToOhlc(dailySeed!) : []
   );
+  const [ma, setMa] = useState<MovingAverages | null>(null);
   const [loading, setLoading] = useState(!hasSeed);
   const [error, setError] = useState<string | null>(null);
   const [request, setRequest] = useState(`${symbol}|${timeframe}|${seedKey}`);
@@ -37,6 +38,7 @@ export function useChartHistory(
   const nextRequest = `${symbol}|${timeframe}|${seedKey}`;
   if (request !== nextRequest) {
     setRequest(nextRequest);
+    setMa(null);
     if (!hasSeed) {
       setLoading(true);
       setError(null);
@@ -62,6 +64,7 @@ export function useChartHistory(
           return;
         }
         setPoints(json.points ?? []);
+        setMa(json.ma ?? null);
         setError(null);
       })
       .catch((e) => {
@@ -81,5 +84,5 @@ export function useChartHistory(
     };
   }, [symbol, timeframe, seedKey]);
 
-  return { points, loading, error };
+  return { points, ma, loading, error };
 }

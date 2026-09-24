@@ -13,6 +13,7 @@ import { fetchJson } from "@/lib/fetch-cache";
 import { currentUsdRate, formatNativeMoney, isUsdCurrency } from "@/lib/fx";
 import {
   formatDate,
+  formatDecimal,
   formatMoney,
   formatNumber,
   formatPercent,
@@ -81,6 +82,13 @@ interface SearchSuggestion {
   name: string;
   exchange?: string;
   source?: "portfolio" | "yahoo";
+}
+
+/** Kỳ dạng "2026-06-30" (Finnhub và Yahoo) → "30/06/2026" hoặc "09/2026"; chuỗi khác giữ nguyên. */
+function formatPeriod(period: string, unit: "day" | "month"): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(period);
+  if (!m) return period;
+  return unit === "month" ? `${m[2]}/${m[1]}` : `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 function ChartSkeleton() {
@@ -688,12 +696,14 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                     {data.earningsUpcoming.map((e, i) => (
                       <tr key={i} className="border-t border-gray-100">
                         <td className="py-2 pr-4">{formatDate(e.date)}</td>
-                        <td className="py-2 pr-4">Q{e.quarter} {e.year}</td>
+                        <td className="py-2 pr-4">
+                          {e.quarter ? `Q${e.quarter} ${e.year ?? ""}` : "—"}
+                        </td>
                         <td className="py-2 pr-4">
                           {e.hour === "bmo" ? "Trước mở cửa" : e.hour === "amc" ? "Sau đóng cửa" : "—"}
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {e.epsEstimate != null ? e.epsEstimate.toFixed(2) : "—"}
+                          {e.epsEstimate != null ? formatDecimal(e.epsEstimate, 2) : "—"}
                         </td>
                       </tr>
                     ))}
@@ -718,12 +728,12 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   <tbody>
                     {data.earningsHistory.map((e, i) => (
                       <tr key={i} className="border-t border-gray-100">
-                        <td className="py-2 pr-4">{e.period}</td>
+                        <td className="py-2 pr-4">{formatPeriod(e.period, "day")}</td>
                         <td className="py-2 pr-4 text-right tabular-nums">
-                          {e.estimate?.toFixed(2) ?? "—"}
+                          {e.estimate != null ? formatDecimal(e.estimate, 2) : "—"}
                         </td>
                         <td className="py-2 pr-4 text-right tabular-nums">
-                          {e.actual?.toFixed(2) ?? "—"}
+                          {e.actual != null ? formatDecimal(e.actual, 2) : "—"}
                         </td>
                         <td
                           className={`py-2 text-right tabular-nums ${
@@ -754,7 +764,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   return (
                     <div key={i} className="text-sm">
                       <div className="mb-1 flex justify-between text-xs text-gray-500">
-                        <span>{r.period}</span>
+                        <span>{formatPeriod(r.period, "month")}</span>
                         <span>
                           Mua {bullish}/{total} · Giữ {r.hold} · Bán {r.sell + r.strongSell}
                         </span>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Bar } from "./types";
-import { computeWyckoff, longEntryStop } from "./wyckoff";
+import type { WyckoffResult } from "./types";
+import { computeWyckoff, longEntryStop, wyckoffTradePlan } from "./wyckoff";
 
 function bar(
   index: number,
@@ -264,5 +265,58 @@ describe("computeWyckoff long stops", () => {
         expect(result.entry.stop).toBeLessThan(result.entry.price);
       }
     }
+  });
+});
+
+describe("wyckoffTradePlan", () => {
+  function result(entry: WyckoffResult["entry"], atr = 2): WyckoffResult {
+    return {
+      phase: "accumulation",
+      phaseLabel: "Tích lũy",
+      tradingRange: {
+        top: 110,
+        bottom: 100,
+        creek: 110,
+        ice: 100,
+        kind: "accumulation",
+        topTouches: 2,
+        bottomTouches: 2,
+        startIndex: 0,
+        endIndex: 50,
+      },
+      events: [],
+      entry,
+      atr,
+      confidence: { score: 80, level: "high", label: "Cao" },
+      warnings: [],
+      summary: { trend: "", volumePattern: "", recommendation: "" },
+    };
+  }
+
+  it("targets Creek from inside the range", () => {
+    const plan = wyckoffTradePlan(
+      result({ price: 102, stop: 96, action: "buy", label: "Spring", reason: "" })
+    );
+    expect(plan).toMatchObject({ target: 110, targetLabel: "Creek" });
+    expect(plan?.stopAtr).toBeCloseTo(3, 8);
+    expect(plan?.stopPct).toBeCloseTo((6 / 102) * 100, 8);
+    expect(plan?.rewardRisk).toBeCloseTo(8 / 6, 8);
+  });
+
+  it("projects the range height above Creek once the entry is at Creek", () => {
+    const plan = wyckoffTradePlan(
+      result({ price: 110, stop: 104, action: "wait", label: "Creek", reason: "" })
+    );
+    expect(plan).toMatchObject({ target: 120, targetLabel: "Creek + chiều cao range" });
+    expect(plan?.rewardRisk).toBeCloseTo(10 / 6, 8);
+  });
+
+  it("has no plan for avoid entries or a stop above the entry", () => {
+    expect(
+      wyckoffTradePlan(result({ price: 102, stop: 96, action: "avoid", label: "", reason: "" }))
+    ).toBeNull();
+    expect(
+      wyckoffTradePlan(result({ price: 102, stop: 103, action: "buy", label: "", reason: "" }))
+    ).toBeNull();
   });
 });

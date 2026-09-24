@@ -1,8 +1,8 @@
 import type { MarketSession } from "./types";
 import { getFinnhubApiKey } from "./quote-config";
-import { formatVolume } from "./format";
+import { formatDecimal, formatNumber, formatVolume } from "./format";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderCode, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooNews, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderCode, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
 import type { YahooInsiderData, YahooKeyStats } from "./yahoo";
 import {
   summarizeAnalystTargets,
@@ -275,7 +275,7 @@ function yearsMetric(
   badMin: number
 ): AnalysisMetric {
   if (years == null || !Number.isFinite(years) || years <= 0) return metric(label, "—");
-  const m = metric(label, years > 80 ? ">80 năm" : `${years.toFixed(1)} năm`);
+  const m = metric(label, years > 80 ? ">80 năm" : `${formatDecimal(years, 1)} năm`);
   if (years <= goodMax) m.tone = "positive";
   else if (years >= badMin) m.tone = "negative";
   return m;
@@ -283,12 +283,12 @@ function yearsMetric(
 
 function pct(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
-  return `${v.toFixed(2)}%`;
+  return `${formatDecimal(v, 2)}%`;
 }
 
 function num(v: number | null | undefined, d = 2): string {
   if (v == null || !Number.isFinite(v)) return "—";
-  return v.toFixed(d);
+  return formatDecimal(v, d);
 }
 
 /** Khối lượng như trục volume của biểu đồ ("45,8 Tr") — 45831430 không tách nghìn rất khó đọc. */
@@ -299,10 +299,10 @@ function volume(v: number | null | undefined): string {
 function capMillions(m: number | null | undefined): string {
   if (m == null || !Number.isFinite(m)) return "—";
   const usd = m * 1_000_000;
-  if (usd >= 1e12) return `${(usd / 1e12).toFixed(2)}T`;
-  if (usd >= 1e9) return `${(usd / 1e9).toFixed(2)}B`;
-  if (usd >= 1e6) return `${(usd / 1e6).toFixed(2)}M`;
-  return usd.toFixed(0);
+  if (usd >= 1e12) return `${formatDecimal(usd / 1e12, 2)}T`;
+  if (usd >= 1e9) return `${formatDecimal(usd / 1e9, 2)}B`;
+  if (usd >= 1e6) return `${formatDecimal(usd / 1e6, 2)}M`;
+  return formatNumber(usd, 0);
 }
 
 function normalizePersonName(name: string): string {
@@ -728,7 +728,7 @@ async function fetchEarningsUpcoming(
 
 async function fetchCompanyNews(upper: string): Promise<NewsRow[]> {
   const key = getFinnhubApiKey();
-  if (!key) return [];
+  if (!key) return fetchYahooNews(upper);
 
   const now = new Date();
   const fromNews = new Date();
@@ -754,7 +754,7 @@ async function fetchCompanyNews(upper: string): Promise<NewsRow[]> {
       url: n.url,
     }));
   }
-  return [];
+  return fetchYahooNews(upper);
 }
 
 async function fetchNewsSentiment(symbol: string): Promise<NewsSentimentSummary | null> {
@@ -914,6 +914,13 @@ export async function fetchStockAnalysisExtra(
   };
 }
 
+/** Ngày công bố KQKD tới theo Yahoo (không có quý/giờ như lịch Finnhub). */
+function yahooUpcoming(stats: YahooKeyStats | null): StockAnalysis["earningsUpcoming"] {
+  const next = stats?.nextEarnings;
+  if (!next || next.date < new Date().toISOString().slice(0, 10)) return [];
+  return [{ date: next.date, epsEstimate: next.epsEstimate }];
+}
+
 export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis | null> {
   const upper = symbol.trim().toUpperCase();
   if (!upper || upper === "CASH") return null;
@@ -974,16 +981,24 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
   const sections = buildCoreSections(quote, profileFilled, m);
   const analystTarget = analystSummaryFromYahoo(quote.price, yahooStats);
 
+  // Không có Finnhub (hoặc Finnhub không cover mã) thì lấy của Yahoo — thiếu chúng điểm
+  // tổng hợp mất hẳn phần KQKD và khuyến nghị.
+  const recs: RecommendationRow[] = recommendations?.length
+    ? recommendations
+    : (yahooStats?.recommendationTrend ?? []);
+  const upcoming = earningsUpcoming.length ? earningsUpcoming : yahooUpcoming(yahooStats);
+
   const priceLevels = computePriceLevels(
     quote.price,
     m,
     priceHistory,
-    recommendations ?? [],
-    earningsUpcoming,
+    recs,
+    upcoming,
     analystTarget ? { price: analystTarget.price, method: analystTarget.label } : null
   );
 
-  const earningsHistory = (earningsHist ?? []).slice(0, 8).map((e) => ({
+  const earningsRows = earningsHist?.length ? earningsHist : (yahooStats?.earningsHistory ?? []);
+  const earningsHistory = earningsRows.slice(0, 8).map((e) => ({
     period: e.period,
     estimate: e.estimate ?? null,
     actual: e.actual ?? null,
@@ -995,7 +1010,7 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     metrics: m,
     news: [],
     insiderTransactions: [],
-    recommendations: recommendations ?? [],
+    recommendations: recs,
     priceLevels,
     optionFlow: null,
     earningsHistory,
@@ -1025,8 +1040,8 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     low52: m["52WeekLow"] ?? undefined,
     sections,
     earningsHistory,
-    earningsUpcoming: earningsUpcoming.slice(0, 4),
-    recommendations: (recommendations ?? []).slice(0, 6),
+    earningsUpcoming: upcoming.slice(0, 4),
+    recommendations: recs.slice(0, 6),
     insiderTransactions: [],
     news: [],
     priceHistory,

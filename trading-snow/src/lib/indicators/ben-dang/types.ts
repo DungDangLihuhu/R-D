@@ -99,6 +99,8 @@ export interface WyckoffResult {
   };
   events: WyckoffEventMarker[];
   entry?: WyckoffEntry;
+  /** ATR(14) engine dùng để đặt mốc và cắt lỗ (nến đã đóng gần nhất). */
+  atr?: number;
   confidence: {
     score: number;
     level: WyckoffConfidenceLevel;
@@ -129,4 +131,6 @@ export interface BenDangLayers {
   smc: boolean;
   sr: boolean;
   wyckoff: boolean;
+  /** Đường trung bình MA50/MA200 của khung đang xem. */
+  ma: boolean;
 }

@@ -5,7 +5,7 @@ import { Calendar, PiggyBank, TrendingUp, Wallet } from "lucide-react";
 import { SnowballStatCard } from "@/components/SnowballStatCard";
 import { useApp } from "@/context/AppContext";
 import type { PortfolioStats } from "@/lib/types";
-import { formatMoney } from "@/lib/format";
+import { formatDecimal, formatMoney } from "@/lib/format";
 import {
   projectPassiveIncome,
   type DividendEventLike,
@@ -20,7 +20,7 @@ function formatSignedMoney(value: number): string {
 
 function formatSignedPercent(value: number): string {
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
-  return `${sign}${Math.abs(value).toFixed(2)}%`;
+  return `${sign}${formatDecimal(Math.abs(value), 2)}%`;
 }
 
 export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
@@ -114,7 +114,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
       <SnowballStatCard
         label="IRR"
         value={
-          stats.irr != null ? `${stats.irr.toFixed(2)}%` : "—"
+          stats.irr != null ? `${formatDecimal(stats.irr, 2)}%` : "—"
         }
         sub={`${formatSignedPercent(stats.profitExDivSalesPercent)} vị thế hiện tại`}
         icon={Calendar}
@@ -122,7 +122,7 @@ export function DashboardMetrics({ stats }: { stats: PortfolioStats }) {
       />
       <SnowballStatCard
         label="Thu nhập thụ động"
-        value={`${passiveIncome.yieldPercent.toFixed(1)}%`}
+        value={`${formatDecimal(passiveIncome.yieldPercent, 1)}%`}
         sub={`${formatMoney(passiveIncome.annualIncome)} / năm`}
         icon={PiggyBank}
         iconClassName="app-icon"

@@ -5,6 +5,7 @@ import {
   limitChartBars,
   sessionHoursFromYahooMeta,
   stripTrailingQuoteSnapshot,
+  trailingSma,
   type OhlcPoint,
 } from "./chart-history";
 
@@ -160,5 +161,19 @@ describe("limitChartBars", () => {
     expect(limited[0]).toBe(points[50]);
     expect(limited[limited.length - 1]).toBe(points[199]);
     expect(limitChartBars(points, "all")).toHaveLength(200);
+  });
+});
+
+describe("trailingSma", () => {
+  const closes = Array.from({ length: 10 }, (_, i) => ({ close: i + 1 }));
+
+  it("averages the trailing window for the visible bars only", () => {
+    // Nến 6..10 hiển thị; SMA3 của nến 6 dùng nến 4, 5, 6 dù chúng nằm ngoài khung.
+    expect(trailingSma(closes, 3, 5)).toEqual([5, 6, 7, 8, 9]);
+  });
+
+  it("leaves bars without a full window empty", () => {
+    expect(trailingSma(closes, 4)).toEqual([null, null, null, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5]);
+    expect(trailingSma(closes, 20, 3)).toEqual([null, null, null]);
   });
 });

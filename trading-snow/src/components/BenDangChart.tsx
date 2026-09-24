@@ -17,7 +17,7 @@ import {
   useXAxisScale,
   useYAxisScale,
 } from "recharts";
-import { formatMoney, formatPercent, formatVolume } from "@/lib/format";
+import { formatDecimal, formatMoney, formatPercent, formatVolume } from "@/lib/format";
 import type { ChartTimeframe, OhlcPoint } from "@/lib/chart-history";
 import { TECHNICAL_CHART_TIMEFRAMES } from "@/lib/chart-history";
 import { computeChartYDomain, formatChartPrice } from "@/lib/chart-domain";
@@ -31,6 +31,7 @@ import {
   type WyckoffResult,
 } from "@/lib/indicators/ben-dang";
 import { computeRsiSeries } from "@/lib/indicators/ben-dang/utils";
+import { wyckoffTradePlan } from "@/lib/indicators/ben-dang/wyckoff";
 import { dailyTrend, type DailyTrend } from "@/lib/signals";
 
 const COLORS = {
@@ -47,9 +48,11 @@ const COLORS = {
   ice: "#06b6d4",
   entry: "#38bdf8",
   rsi: "#a78bfa",
+  ma50: "#fb923c",
+  ma200: "#f472b6",
 } as const;
 
-type TaPoint = OhlcPoint & { rsi: number | null };
+type TaPoint = OhlcPoint & { rsi: number | null; ma50: number | null; ma200: number | null };
 type TechnicalTimeframe = (typeof TECHNICAL_CHART_TIMEFRAMES)[number];
 
 const TA_SYNC_ID = "ta-ohlcv-rsi";
@@ -70,13 +73,21 @@ const DEFAULT_LAYERS: BenDangLayers = {
   smc: true,
   sr: true,
   wyckoff: true,
+  ma: true,
 };
 
 function indicatorExtras(
   indicators: BenDangIndicators,
-  layers: BenDangLayers
+  layers: BenDangLayers,
+  data: TaPoint[]
 ): number[] {
   const extras: number[] = [];
+  if (layers.ma) {
+    for (const p of data) {
+      if (p.ma50 != null) extras.push(p.ma50);
+      if (p.ma200 != null) extras.push(p.ma200);
+    }
+  }
   if (layers.sr) {
     for (const l of indicators.sr.levels) extras.push(l.price);
   }
@@ -448,7 +459,15 @@ function formatReadoutPrice(value: number): string {
   }).format(value);
 }
 
-function PriceReadout({ data, hover }: { data: TaPoint[]; hover: HoverStore }) {
+function PriceReadout({
+  data,
+  hover,
+  showMa,
+}: {
+  data: TaPoint[];
+  hover: HoverStore;
+  showMa: boolean;
+}) {
   const { point, prev } = useReadoutPoint(data, hover);
   if (!point) return null;
   const tone = point.close >= point.open ? "text-emerald-600" : "text-rose-600";
@@ -472,6 +491,17 @@ function PriceReadout({ data, hover }: { data: TaPoint[]; hover: HoverStore }) {
           {formatPercent(change)}
         </span>
       )}
+      {showMa &&
+        ([
+          ["MA50", point.ma50, COLORS.ma50],
+          ["MA200", point.ma200, COLORS.ma200],
+        ] as const).map(([name, value, color]) =>
+          value != null ? (
+            <span key={name}>
+              {name} <span style={{ color }}>{formatReadoutPrice(value)}</span>
+            </span>
+          ) : null
+        )}
     </div>
   );
 }
@@ -500,7 +530,7 @@ function RsiReadout({ data, hover }: { data: TaPoint[]; hover: HoverStore }) {
   return (
     <div className={READOUT_CLASS}>
       <span>RSI {RSI_PERIOD}</span>
-      <span className={`font-semibold ${tone}`}>{rsi != null ? rsi.toFixed(1) : "—"}</span>
+      <span className={`font-semibold ${tone}`}>{rsi != null ? formatDecimal(rsi, 1) : "—"}</span>
     </div>
   );
 }
@@ -570,7 +600,7 @@ function SrLevelsPanel({
               </p>
               <p className="text-xs tabular-nums text-rose-700">
                 {dist >= 0 ? "+" : ""}
-                {dist.toFixed(2)}% so với giá hiện tại
+                {formatDecimal(dist, 2)}% so với giá hiện tại
               </p>
             </div>
           );
@@ -590,7 +620,7 @@ function SrLevelsPanel({
               </p>
               <p className="text-xs tabular-nums text-emerald-700">
                 {dist >= 0 ? "+" : ""}
-                {dist.toFixed(2)}% so với giá hiện tại
+                {formatDecimal(dist, 2)}% so với giá hiện tại
               </p>
             </div>
           );
@@ -646,6 +676,7 @@ function WyckoffPanel({
         : "text-rose-600 dark:text-rose-300";
   const entryHeading =
     entry?.action === "avoid" ? "Mốc chờ xác nhận" : "Giá nên vào";
+  const plan = wyckoffTradePlan(w);
 
   return (
     <div className="mt-4 space-y-3 border-t border-gray-100 pt-4 dark:border-slate-700">
@@ -699,6 +730,26 @@ function WyckoffPanel({
               {entry.stop != null && entry.stop > 0 && (
                 <p className="mt-0.5 tabular-nums text-gray-500">
                   Cắt lỗ {formatMoney(entry.stop, currency)}
+                  {plan &&
+                    ` (−${formatDecimal(plan.stopPct, 1)}%${
+                      plan.stopAtr != null ? ` · ${formatDecimal(plan.stopAtr, 1)}×ATR` : ""
+                    })`}
+                </p>
+              )}
+              {plan && (
+                <p className="mt-0.5 tabular-nums text-gray-500">
+                  Mục tiêu {formatMoney(plan.target, currency)} ({plan.targetLabel}) · R:R{" "}
+                  <span
+                    className={`font-semibold ${
+                      plan.rewardRisk >= 2
+                        ? "text-emerald-600"
+                        : plan.rewardRisk < 1
+                          ? "text-rose-600"
+                          : "text-app-text"
+                    }`}
+                  >
+                    {formatDecimal(plan.rewardRisk, 1)}
+                  </span>
                 </p>
               )}
             </div>
@@ -779,6 +830,7 @@ function LayerToggle({
     { key: "smc", label: "P/D" },
     { key: "sr", label: "S/R" },
     { key: "wyckoff", label: "Wyckoff" },
+    { key: "ma", label: "MA" },
   ];
 
   return (
@@ -811,7 +863,7 @@ export function BenDangChart({
 }) {
   const [timeframe, setTimeframe] = useState<TechnicalTimeframe>("1d");
   const [layers, setLayers] = useState<BenDangLayers>(DEFAULT_LAYERS);
-  const { points, loading, error } = useChartHistory(symbol, timeframe, dailySeed);
+  const { points, ma, loading, error } = useChartHistory(symbol, timeframe, dailySeed);
   const chartTheme = useChartTheme();
 
   const indicators = useMemo(
@@ -834,8 +886,15 @@ export function BenDangChart({
       points.map((p) => p.close),
       RSI_PERIOD
     );
-    return points.map((p, i) => ({ ...p, rsi: rsi[i] }));
-  }, [points]);
+    // MA đi kèm đúng bộ nến đã tải; nến seed (chưa tải xong) thì chưa có.
+    const aligned = ma && ma.ma50.length === points.length ? ma : null;
+    return points.map((p, i) => ({
+      ...p,
+      rsi: rsi[i],
+      ma50: aligned?.ma50[i] ?? null,
+      ma200: aligned?.ma200[i] ?? null,
+    }));
+  }, [points, ma]);
 
   const [hover] = useState(createHoverStore);
 
@@ -848,10 +907,10 @@ export function BenDangChart({
     () =>
       indicators
         ? computeChartYDomain(points, {
-            extras: indicatorExtras(indicators, layers),
+            extras: indicatorExtras(indicators, layers, chartData),
           })
         : computeChartYDomain(points),
-    [points, indicators, layers]
+    [points, indicators, layers, chartData]
   );
 
   return (
@@ -897,7 +956,7 @@ export function BenDangChart({
         <>
           <div className="min-w-0 w-full space-y-1">
             <div className="relative h-[360px] w-full">
-              <PriceReadout data={chartData} hover={hover} />
+              <PriceReadout data={chartData} hover={hover} showMa={layers.ma} />
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={chartData}
@@ -927,6 +986,28 @@ export function BenDangChart({
                     visible={layers.smc}
                   />
                   <Candlesticks data={chartData} />
+                  {layers.ma && (
+                    <Line
+                      type="monotone"
+                      dataKey="ma50"
+                      stroke={COLORS.ma50}
+                      strokeWidth={1.4}
+                      dot={false}
+                      activeDot={false}
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {layers.ma && (
+                    <Line
+                      type="monotone"
+                      dataKey="ma200"
+                      stroke={COLORS.ma200}
+                      strokeWidth={1.4}
+                      dot={false}
+                      activeDot={false}
+                      isAnimationActive={false}
+                    />
+                  )}
                   <SrLines levels={indicators.sr.levels} visible={layers.sr} />
                   <WyckoffLines wyckoff={indicators.wyckoff} visible={layers.wyckoff} />
                   <WyckoffEventMarkers
@@ -1058,6 +1139,16 @@ export function BenDangChart({
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block h-0.5 w-3 bg-sky-400" /> Giá vào
+                </span>
+              </>
+            )}
+            {layers.ma && (
+              <>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-0.5 w-3" style={{ background: COLORS.ma50 }} /> MA50
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-0.5 w-3" style={{ background: COLORS.ma200 }} /> MA200
                 </span>
               </>
             )}

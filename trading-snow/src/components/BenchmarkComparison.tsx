@@ -26,6 +26,7 @@ import {
 import {
   formatChartMonthYear,
   formatDate,
+  formatDecimal,
   formatMoney,
   formatPercent,
 } from "@/lib/format";
@@ -45,7 +46,7 @@ function formatChartAxisPercent(value: number): string {
 function formatIndexedReturn(value: number): string {
   const pct = value - 100;
   const sign = pct > 0 ? "+" : pct < 0 ? "−" : "";
-  return `${sign}${Math.abs(pct).toFixed(2)}%`;
+  return `${sign}${formatDecimal(Math.abs(pct), 2)}%`;
 }
 
 export function BenchmarkComparison({
