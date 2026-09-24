@@ -68,6 +68,17 @@ const POSITIVE_NEWS =
 const NEGATIVE_NEWS =
   /\b(downgrade|cut guidance|misses? estimates|lawsuit|probe|investigation|layoff|warning|restatement|fraud|plunge|going concern)\b/i;
 
+const DAY_MS = 86_400_000;
+
+/**
+ * Khoảng 3/4 công ty S&P 500 vượt dự báo EPS mỗi quý, mức vượt điển hình ~5% (FactSet):
+ * vượt dự báo là bình thường, chỉ vượt nhiều hơn thế mới là tín hiệu.
+ */
+const TYPICAL_BEAT_RATE = 0.75;
+const TYPICAL_SURPRISE_PCT = 5;
+/** Kỳ kết thúc quý gần nhất còn "mới" (công bố trong ~60 phiên gần đây) — PEAD còn tác dụng. */
+const FRESH_EARNINGS_DAYS = 130;
+
 const OPEN_MARKET_BUY = new Set(["P"]);
 const OPEN_MARKET_SELL = new Set(["S"]);
 const IGNORE_INSIDER = new Set(["A", "D", "F", "G", "C", "M", "X", "I", "W", "H", "J", "U"]);
@@ -185,18 +196,16 @@ function qualitySignal(metrics: Record<string, number>): AssessmentSignal {
 }
 
 function valuationSignal(
-  price: number,
   metrics: Record<string, number>,
   pegOverride?: number,
-  shortPercent?: number
+  /** Đã quy ra % (toShortPercent) — quy thêm lần nữa biến 0,96% của AAPL thành 96%. */
+  short?: number
 ): AssessmentSignal {
   const parts: { score: number; note: string }[] = [];
   const pe = finitePositive(metrics.forwardPE, metrics.peTTM);
   const growth = finitePositive(metrics.epsGrowthTTMYoy, metrics.epsGrowth3Y);
   const peg = resolvePeg(pegOverride ?? metrics.pegTTM, pe, growth);
   const pfcf = metrics.pfcfShareTTM;
-  const high = metrics["52WeekHigh"];
-  const low = metrics["52WeekLow"];
 
   if (peg != null) {
     let s = 0;
@@ -225,15 +234,9 @@ function valuationSignal(
     else parts.push({ score: -0.55, note: "P/FCF rất cao" });
   }
 
-  if (high && low && high > low && price > 0) {
-    const pos = (price - low) / (high - low);
-    parts.push({
-      score: clamp((0.52 - pos) * 0.9, -0.45, 0.22),
-      note: pos > 0.9 ? "sát đỉnh 52w" : pos < 0.2 ? "gần đáy 52w" : `52w ${(pos * 100).toFixed(0)}%`,
-    });
-  }
+  // Vị trí trong biên 52 tuần không phải định giá: backtest 2017–2026 (58 mã lớn) không
+  // thấy mã sát đỉnh 52w kém hơn có ý nghĩa, nghiên cứu (George & Hwang 2004) còn thấy ngược lại.
 
-  const short = toShortPercent(shortPercent);
   if (short != null) {
     if (short >= 20) parts.push({ score: -0.45, note: `short ${short.toFixed(1)}%` });
     else if (short >= 10) parts.push({ score: -0.25, note: `short ${short.toFixed(1)}%` });
@@ -409,13 +412,41 @@ function insiderSignal(transactions: InsiderRow[]): AssessmentSignal {
   else if (net > -0.85) score = -0.2;
   else score = -0.45;
 
+  // Nhiều người nội bộ cùng tự bỏ tiền mua trên sàn (cluster buying) mạnh hơn hẳn một
+  // người mua lẻ (Alldredge & Blank 2019). Lệnh mua thật luôn có giá khớp — dòng "P" giá 0
+  // là cổ phiếu thưởng khai nhầm mã.
+  const buyers = new Set(
+    recent
+      .filter(
+        (t) =>
+          OPEN_MARKET_BUY.has((t.transactionCode || "").toUpperCase()) &&
+          (t.transactionPrice ?? 0) > 0
+      )
+      .map((t) => t.name.trim().toLowerCase())
+      .filter(Boolean)
+  ).size;
+  const cluster = buyers >= 3 ? 0.3 : buyers >= 2 ? 0.15 : 0;
+  score = clamp(score + cluster);
+
   return {
     id: "insider",
     label: "Insider",
     score,
-    detail: `Mở TT net ${net >= 0 ? "+" : ""}${(net * 100).toFixed(0)}% (bán ròng là bình thường)${ignored ? ` · ${ignored} bỏ` : ""}`,
+    detail: `Mở TT net ${net >= 0 ? "+" : ""}${(net * 100).toFixed(0)}% (bán ròng là bình thường)${cluster ? ` · ${buyers} người mua trên sàn` : ""}${ignored ? ` · ${ignored} bỏ` : ""}`,
     available: true,
   };
+}
+
+/**
+ * Lợi nhuận 6 tháng bỏ tháng gần nhất (momentum 6-1, Jegadeesh & Titman 1993): mã tăng
+ * mạnh 6 tháng qua thường còn tăng tiếp vài tháng; bỏ tháng cuối vì tháng đó hay đảo chiều.
+ */
+function momentum6to1(closes: number[]): number | undefined {
+  const n = closes.length;
+  if (n < 127) return undefined;
+  const start = closes[n - 127];
+  const end = closes[n - 22];
+  return start > 0 && end > 0 ? end / start - 1 : undefined;
 }
 
 function technicalSignal(
@@ -444,20 +475,24 @@ function technicalSignal(
   }
 
   const closes = priceHistory?.map((p) => p.close).filter((c) => c > 0) ?? [];
+  // Chỉ cộng điểm quá bán: backtest 2017–2026 (58 mã lớn) RSI14 ≤ 30 vượt SPY +0,7%/21
+  // phiên (t≈2), còn RSI ≥ 70 không kém hơn — xu hướng mạnh thường giữ RSI cao lâu.
   const rsi = rsiWilder(closes);
   if (rsi != null) {
-    if (rsi >= 75) {
-      score -= 0.35;
-      parts.push(`RSI ${rsi.toFixed(0)} quá mua`);
-    } else if (rsi >= 68) {
-      score -= 0.18;
-      parts.push(`RSI ${rsi.toFixed(0)}`);
-    } else if (rsi <= 28) {
+    if (rsi <= 28) {
       score += 0.22;
       parts.push(`RSI ${rsi.toFixed(0)} quá bán`);
     } else if (rsi <= 35) {
       score += 0.1;
       parts.push(`RSI ${rsi.toFixed(0)}`);
+    }
+  }
+
+  const momentum = momentum6to1(closes);
+  if (momentum != null) {
+    score += clamp(momentum * 0.75, -0.3, 0.3);
+    if (Math.abs(momentum) >= 0.1) {
+      parts.push(`6 tháng ${momentum >= 0 ? "+" : ""}${(momentum * 100).toFixed(0)}%`);
     }
   }
 
@@ -470,7 +505,7 @@ function technicalSignal(
   };
 }
 
-function earningsSignal(rows: EarningsRow[] | undefined): AssessmentSignal {
+function earningsSignal(rows: EarningsRow[] | undefined, now = Date.now()): AssessmentSignal {
   const recent = (rows ?? [])
     .filter((e) => e.surprisePercent != null && Number.isFinite(e.surprisePercent))
     .slice(0, 4);
@@ -484,17 +519,27 @@ function earningsSignal(rows: EarningsRow[] | undefined): AssessmentSignal {
     };
   }
 
+  // Dự báo gần 0 cho ra surprise hàng trăm % — chặn để một quý không lấn cả chuỗi.
+  const surprise = (e: EarningsRow) => clamp(e.surprisePercent ?? 0, -50, 50);
   const beats = recent.filter((e) => (e.surprisePercent ?? 0) > 0).length;
-  const avg = recent.reduce((s, e) => s + (e.surprisePercent ?? 0), 0) / recent.length;
+  const avg = recent.reduce((s, e) => s + surprise(e), 0) / recent.length;
   const beatRatio = beats / recent.length;
-  let score = (beatRatio - 0.5) * 1.1;
-  score += clamp(avg / 25, -0.25, 0.25);
+  let score = (beatRatio - TYPICAL_BEAT_RATE) * 1.2;
+  score += clamp((avg - TYPICAL_SURPRISE_PCT) / 25, -0.25, 0.25);
+
+  // Quý vừa công bố (chưa quá ~60 phiên) còn đẩy giá theo hướng bất ngờ (PEAD).
+  const latest = recent[0];
+  const ageDays = (now - Date.parse(latest.period)) / DAY_MS;
+  const fresh = Number.isFinite(ageDays) && ageDays >= 0 && ageDays <= FRESH_EARNINGS_DAYS;
+  if (fresh) score += clamp((surprise(latest) - TYPICAL_SURPRISE_PCT) / 20, -0.2, 0.2);
 
   return {
     id: "earnings",
     label: "KQKD",
     score: clamp(score),
-    detail: `${beats}/${recent.length} quý vượt dự báo · TB ${avg >= 0 ? "+" : ""}${avg.toFixed(1)}%`,
+    detail: `${beats}/${recent.length} quý vượt dự báo (tb ~3/4) · TB ${avg >= 0 ? "+" : ""}${avg.toFixed(1)}%${
+      fresh ? ` · quý gần nhất ${surprise(latest) >= 0 ? "+" : ""}${surprise(latest).toFixed(1)}%` : ""
+    }`,
     available: true,
   };
 }
@@ -791,11 +836,7 @@ export function computeBuySellPrices(
 
   const closes = (priceHistory ?? []).map((p) => p.close).filter((c) => c > 0);
   const rsi = rsiWilder(closes);
-  if (rsi != null && rsi >= 68) {
-    const deeper = price - (price - buyPrice) * 1.12;
-    buyPrice = Math.min(buyPrice, Math.max(price * 0.58, deeper));
-    buyBits.push(`RSI ${rsi.toFixed(0)} quá mua`);
-  } else if (rsi != null && rsi <= 32) {
+  if (rsi != null && rsi <= 32) {
     buyPrice = price - (price - buyPrice) * 0.88;
     buyBits.push(`RSI ${rsi.toFixed(0)} quá bán`);
   }
@@ -816,10 +857,11 @@ export function computeBuySellPrices(
   return { buyPrice, sellPrice, buyNote, sellNote };
 }
 
+/** Định giá bớt thành phần 52 tuần, kỹ thuật thêm momentum — chuyển 4 điểm trọng số. */
 const SIGNAL_WEIGHTS: Record<string, number> = {
   quality: 0.18,
-  valuation: 0.24,
-  technical: 0.14,
+  valuation: 0.2,
+  technical: 0.18,
   earnings: 0.12,
   news: 0.1,
   insider: 0.08,
@@ -851,7 +893,7 @@ export function computeStockAssessment(input: {
 
   const signals: AssessmentSignal[] = [
     qualitySignal(input.metrics),
-    valuationSignal(input.price, input.metrics, input.pegRatio, shortPct),
+    valuationSignal(input.metrics, input.pegRatio, shortPct),
     technicalSignal(input.price, input.priceLevels, input.priceHistory),
     earningsSignal(input.earningsHistory),
     newsSignal(input.news, input.newsSentiment),

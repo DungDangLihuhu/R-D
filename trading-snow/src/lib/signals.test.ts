@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { WyckoffResult } from "./indicators/ben-dang/types";
 import {
   BUY_PRICE_BAND,
+  dailyTrend,
+  isActionableHit,
   isValidLongLevels,
   isWithinBuyPriceBand,
+  primaryHit,
   wyckoffBuyHit,
 } from "./signals";
 
@@ -171,5 +174,54 @@ describe("isValidLongLevels", () => {
     expect(isValidLongLevels(48.5, 49.82, 48.5)).toBe(false);
     expect(isValidLongLevels(100, 97, 96.9)).toBe(false);
     expect(isValidLongLevels(100, null, 100)).toBe(true);
+  });
+});
+
+describe("dailyTrend", () => {
+  const rising = Array.from({ length: 250 }, (_, i) => 100 + i * 0.2);
+
+  it("compares the price with the 200-day average", () => {
+    const up = dailyTrend(rising, 150);
+    expect(up.state).toBe("up");
+    // Trung bình 200 phiên cuối: 100 + 0,2 × (50 + 249) / 2.
+    expect(up.sma).toBeCloseTo(100 + 0.2 * 149.5, 8);
+    expect(dailyTrend(rising, 120).state).toBe("down");
+  });
+
+  it("stays unknown without 200 sessions of history", () => {
+    expect(dailyTrend(rising.slice(0, 150), 150)).toEqual({ state: "unknown", sma: null });
+    expect(dailyTrend(rising, 0).state).toBe("unknown");
+  });
+});
+
+describe("isActionableHit / primaryHit", () => {
+  const buy = wyckoffBuyHit(result(), 102, "1d")!;
+  const wait = wyckoffBuyHit(
+    result({
+      entry: { price: 101, stop: 90, action: "wait", label: "LPS", reason: "Chờ" },
+    }),
+    101.5,
+    "1w"
+  )!;
+
+  it("only treats a buy entry above the 200-day average as actionable", () => {
+    expect(isActionableHit(buy, "up")).toBe(true);
+    expect(isActionableHit(buy, "unknown")).toBe(true);
+    expect(isActionableHit(buy, "down")).toBe(false);
+    expect(isActionableHit(wait, "up")).toBe(false);
+  });
+
+  it("puts the actionable hit first even when a wait hit sits closer", () => {
+    const signal = {
+      symbol: "X",
+      marketPrice: 102,
+      hits: [wait, buy],
+      trend: { state: "up" as const, sma: 95 },
+    };
+    expect(primaryHit(signal)).toEqual({ hit: buy, actionable: true });
+    expect(primaryHit({ ...signal, trend: { state: "down", sma: 110 } })).toEqual({
+      hit: wait,
+      actionable: false,
+    });
   });
 });

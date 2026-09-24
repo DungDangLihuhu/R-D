@@ -32,14 +32,21 @@ interface WyckoffConfig {
   maxRangeBars: number;
   breakoutMaxBars: number;
   entryEventMaxBars: number;
+  /**
+   * Cắt lỗ không bao giờ sát giá vào hơn chừng này ATR. Backtest 1D (58 mã lớn,
+   * 2017–2026): mốc theo cấu trúc chỉ cách trung vị 1,24×ATR và 77% lệnh bị cắt trong
+   * nhiễu thường ngày; sàn 3×ATR (như Chandelier) giảm còn 58%, lãi trung bình mỗi lệnh
+   * 1,5% → 2,4%. Khung tuần/quý dùng 2×ATR vì một ATR tuần đã ≈ 2,2 ATR ngày.
+   */
+  minStopAtr: number;
 }
 
 const TIMEFRAME_CONFIG: Record<WyckoffTimeframe, WyckoffConfig> = {
-  "1h": { lookback: 150, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 12, entryEventMaxBars: 20 },
-  "4h": { lookback: 150, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 10, entryEventMaxBars: 15 },
-  "1d": { lookback: 150, pivot: 3, minRangeBars: 12, maxRangeBars: 100, breakoutMaxBars: 15, entryEventMaxBars: 20 },
-  "1w": { lookback: 150, pivot: 2, minRangeBars: 8, maxRangeBars: 70, breakoutMaxBars: 8, entryEventMaxBars: 12 },
-  all: { lookback: 60, pivot: 2, minRangeBars: 8, maxRangeBars: 42, breakoutMaxBars: 6, entryEventMaxBars: 8 },
+  "1h": { lookback: 150, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 12, entryEventMaxBars: 20, minStopAtr: 3 },
+  "4h": { lookback: 150, pivot: 2, minRangeBars: 10, maxRangeBars: 80, breakoutMaxBars: 10, entryEventMaxBars: 15, minStopAtr: 3 },
+  "1d": { lookback: 150, pivot: 3, minRangeBars: 12, maxRangeBars: 100, breakoutMaxBars: 15, entryEventMaxBars: 20, minStopAtr: 3 },
+  "1w": { lookback: 150, pivot: 2, minRangeBars: 8, maxRangeBars: 70, breakoutMaxBars: 8, entryEventMaxBars: 12, minStopAtr: 2 },
+  all: { lookback: 60, pivot: 2, minRangeBars: 8, maxRangeBars: 42, breakoutMaxBars: 6, entryEventMaxBars: 8, minStopAtr: 2 },
 };
 const KEY_EVENTS: WyckoffEvent[] = [
   "PS",
@@ -133,7 +140,8 @@ export function computeWyckoff(
     phase.phase,
     lastAtr,
     confidence.score,
-    config.entryEventMaxBars
+    config.entryEventMaxBars,
+    config.minStopAtr
   );
 
   return {
@@ -1267,18 +1275,23 @@ function nearLevel(price: number, target: number, atrVal: number, height: number
 /**
  * Long stop must sit under both the entry and the structure low (Ice / Spring / ST).
  * Anchoring only to Ice lets a ST/LPS print below Ice with a stop *above* the entry.
+ * `minStopAtr` keeps it at least that many ATR below the entry: a stop inside normal
+ * daily noise gets hit before the setup can play out.
  */
 export function longEntryStop(
   entryPrice: number,
   structureLow: number,
   atrVal: number,
-  atrMult: number
+  atrMult: number,
+  minStopAtr = 0
 ): number {
   const floor = Math.min(entryPrice, structureLow);
   if (!(floor > 0) || !Number.isFinite(floor)) return 0;
-  const atrPad = Number.isFinite(atrVal) && atrVal > 0 ? atrVal * Math.max(atrMult, 0) : 0;
+  const validAtr = Number.isFinite(atrVal) && atrVal > 0;
+  const atrPad = validAtr ? atrVal * Math.max(atrMult, 0) : 0;
   const pad = Math.max(atrPad, floor * 0.002, floor * 1e-6);
-  const stop = floor - pad;
+  let stop = floor - pad;
+  if (validAtr && minStopAtr > 0) stop = Math.min(stop, entryPrice - atrVal * minStopAtr);
   if (stop <= 0) return Math.min(floor * 0.85, entryPrice * 0.98);
   if (stop >= entryPrice) return entryPrice * 0.98;
   return stop;
@@ -1295,7 +1308,8 @@ function computeEntry(
   phase: WyckoffPhase,
   lastAtr: number,
   confidence: number,
-  eventMaxAge: number
+  eventMaxAge: number,
+  minStopAtr: number
 ): WyckoffEntry | undefined {
   if (
     !range ||
@@ -1332,7 +1346,7 @@ function computeEntry(
   if (phase === "distribution" || phase === "markdown") {
     return {
       price: ice,
-      stop: longEntryStop(ice, ice, lastAtr, 0.8),
+      stop: longEntryStop(ice, ice, lastAtr, 0.8, minStopAtr),
       action: "avoid",
       label: "Ice (chờ Spring)",
       reason:
@@ -1348,7 +1362,7 @@ function computeEntry(
     const entry = Math.max(ice, Math.min(ice + height * 0.12, spring.price + lastAtr * 0.2));
     return {
       price: entry,
-      stop: longEntryStop(entry, Math.min(spring.price, ice), lastAtr, 0.35),
+      stop: longEntryStop(entry, Math.min(spring.price, ice), lastAtr, 0.35, minStopAtr),
       action: stanceAt(entry, true),
       label: "Sau Spring, trên Ice",
       reason: "Spring thành công — vào khi giá trở lại trên Ice, cắt dưới đáy Spring.",
@@ -1358,7 +1372,7 @@ function computeEntry(
   if (lps) {
     return {
       price: lps.price,
-      stop: longEntryStop(lps.price, Math.min(ice, lps.price), lastAtr, 0.35),
+      stop: longEntryStop(lps.price, Math.min(ice, lps.price), lastAtr, 0.35, minStopAtr),
       action: stanceAt(lps.price),
       label: "LPS",
       reason: "Last Point of Support — điểm vào chuẩn sau SOS, không đuổi phá Creek.",
@@ -1369,7 +1383,7 @@ function computeEntry(
     const chasing = price > creek + Math.max(lastAtr * 0.35, height * 0.05);
     return {
       price: creek,
-      stop: longEntryStop(creek, ice, lastAtr, 0.25),
+      stop: longEntryStop(creek, ice, lastAtr, 0.25, minStopAtr),
       action: chasing ? "wait" : stanceAt(creek),
       label: sos ? "Creek (chờ LPS)" : "Pullback Creek",
       reason: sos
@@ -1382,7 +1396,7 @@ function computeEntry(
   const entry = stNearIce ?? ice + height * 0.18;
   return {
     price: entry,
-    stop: longEntryStop(entry, Math.min(ice, stNearIce ?? ice), lastAtr, 0.45),
+    stop: longEntryStop(entry, Math.min(ice, stNearIce ?? ice), lastAtr, 0.45, minStopAtr),
     action: stanceAt(entry, true),
     label: stNearIce ? "ST / gần Ice" : "Gần Ice (discount)",
     reason: "Tích lũy/sideway — mua 1/4 dưới của range, không mua giữa range hay Creek.",

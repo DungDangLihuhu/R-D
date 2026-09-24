@@ -241,6 +241,19 @@ describe("longEntryStop", () => {
     expect(stop).toBeLessThan(100);
     expect(stop).toBeCloseTo(100 - 0.5, 8);
   });
+
+  it("keeps at least minStopAtr ATR of room under the entry", () => {
+    // Ice ngay dưới giá vào: mốc cấu trúc 99,75 chỉ cách 0,25 ATR — bị đẩy xuống 3 ATR.
+    expect(longEntryStop(100, 100, 1, 0.25, 3)).toBeCloseTo(97, 8);
+    // Cấu trúc đã sâu hơn 3 ATR thì giữ nguyên mốc cấu trúc.
+    expect(longEntryStop(110, 100, 2, 0.25, 3)).toBeCloseTo(99.5, 8);
+  });
+
+  it("falls back to a percentage stop when the ATR floor would go below zero", () => {
+    const stop = longEntryStop(1, 1, 0.5, 0.25, 3);
+    expect(stop).toBeGreaterThan(0);
+    expect(stop).toBeLessThan(1);
+  });
 });
 
 describe("computeWyckoff long stops", () => {

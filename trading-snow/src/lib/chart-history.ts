@@ -375,10 +375,14 @@ async function fetchOhlcOne(
       sessionHoursFromYahooMeta(result.meta, timeZone)
     );
   }
-  return limitChartBars(points, timeframe);
+  return points;
 }
 
-export async function fetchChartHistory(
+/**
+ * Toàn bộ nến của khoảng Yahoo (1D = 1 năm), chưa cắt về số nến hiển thị — cho chỉ báo
+ * cần nhiều nến hơn biểu đồ, như SMA200.
+ */
+export async function fetchFullChartHistory(
   symbol: string,
   timeframe: ChartTimeframe
 ): Promise<OhlcPoint[]> {
@@ -390,6 +394,13 @@ export async function fetchChartHistory(
     if (points.length > 1) return points;
   }
   return [];
+}
+
+export async function fetchChartHistory(
+  symbol: string,
+  timeframe: ChartTimeframe
+): Promise<OhlcPoint[]> {
+  return limitChartBars(await fetchFullChartHistory(symbol, timeframe), timeframe);
 }
 
 export function showPriceLevelsOnChart(timeframe: ChartTimeframe): boolean {
