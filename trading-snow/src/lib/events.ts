@@ -1,4 +1,5 @@
 import { getFinnhubApiKey } from "./quote-config";
+import { formatDecimal } from "./format";
 import type { CalendarEvent } from "./types";
 import { getUsMarketHolidays } from "./us-market-holidays";
 import { fetchDividends, type DividendEvent } from "./yahoo";
@@ -108,8 +109,8 @@ async function fetchEarningsForSymbol(
         symbol: symbol.toUpperCase(),
         subtitle: [
           hourLabel,
-          e.epsEstimate != null ? `EPS dự báo ${e.epsEstimate.toFixed(2)}` : null,
-          e.epsActual != null ? `EPS thực ${e.epsActual.toFixed(2)}` : null,
+          e.epsEstimate != null ? `EPS dự báo ${formatDecimal(e.epsEstimate, 2)}` : null,
+          e.epsActual != null ? `EPS thực ${formatDecimal(e.epsActual, 2)}` : null,
         ]
           .filter(Boolean)
           .join(" · "),
@@ -414,7 +415,7 @@ export async function fetchDividendEvents(
           category: "dividend",
           symbol: d.symbol,
           amount: d.amount,
-          subtitle: `$${d.amount.toFixed(4)}/cp${isProjected ? " · ước tính từ lịch sử" : ""}`,
+          subtitle: `$${formatDecimal(d.amount, 4)}/cp${isProjected ? " · ước tính từ lịch sử" : ""}`,
           impact: isProjected ? "medium" : "low",
         });
       }

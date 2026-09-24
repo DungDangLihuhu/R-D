@@ -19,13 +19,26 @@ export function formatAxisMoney(value: number): string {
 
 export function formatPercent(value: number): string {
   const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}%`;
+  return `${sign}${formatDecimal(value, 2)}%`;
 }
 
 export function formatNumber(value: number, digits = 2): string {
   return new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: digits,
   }).format(value);
+}
+
+/**
+ * Đúng `digits` chữ số lẻ, dấu phẩy thập phân như tiền ("1,50", "38,92") — trước đây %
+ * và chỉ số dùng toFixed nên cùng một trang vừa "337,02 US$" vừa "-0.80%".
+ */
+export function formatDecimal(value: number, digits = 2): string {
+  // Số âm rất nhỏ làm tròn về 0 không được in thành "-0,00".
+  const rounded = Number(value.toFixed(digits));
+  return new Intl.NumberFormat("vi-VN", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(rounded === 0 ? 0 : rounded);
 }
 
 export function formatVolume(value: number): string {
@@ -52,7 +65,7 @@ export function formatSplitRatio(ratio: number): string {
 export function formatPnlArrow(value: number): string {
   const arrow = value >= 0 ? "▲" : "▼";
   // no-break space: mũi tên không được rớt xuống dòng riêng khi cột hẹp
-  return `${arrow} ${Math.abs(value).toFixed(2)}%`;
+  return `${arrow} ${formatDecimal(Math.abs(value), 2)}%`;
 }
 
 export function formatDate(date: string): string {
@@ -131,18 +144,18 @@ export function downsampleMonthly<T extends { date: string }>(points: T[]): T[] 
 export function formatMarketCap(millions: number, currency = "USD"): string {
   const usd = millions * 1_000_000;
   const abs = Math.abs(usd);
-  if (abs >= 1e12) return `${(usd / 1e12).toFixed(2)}T ${currency}`;
-  if (abs >= 1e9) return `${(usd / 1e9).toFixed(2)}B ${currency}`;
-  if (abs >= 1e6) return `${(usd / 1e6).toFixed(2)}M ${currency}`;
+  if (abs >= 1e12) return `${formatDecimal(usd / 1e12, 2)}T ${currency}`;
+  if (abs >= 1e9) return `${formatDecimal(usd / 1e9, 2)}B ${currency}`;
+  if (abs >= 1e6) return `${formatDecimal(usd / 1e6, 2)}M ${currency}`;
   return formatMoney(usd, currency);
 }
 
 export function formatRatio(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return value.toFixed(digits);
+  return formatDecimal(value, digits);
 }
 
 export function formatPct(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(digits)}%`;
+  return `${formatDecimal(value, digits)}%`;
 }

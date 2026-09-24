@@ -1,3 +1,4 @@
+import { formatDecimal } from "./format";
 import type { OhlcPoint } from "./chart-history";
 
 export interface ChartDomainOptions {
@@ -81,7 +82,7 @@ export function formatChartPrice(value: number): string {
   if (!Number.isFinite(value)) return "";
   const abs = Math.abs(value);
   if (abs >= 10_000) return value.toLocaleString("vi-VN", { maximumFractionDigits: 0 });
-  if (abs >= 100) return value.toFixed(1);
-  if (abs >= 1) return value.toFixed(2);
-  return value.toFixed(4);
+  if (abs >= 100) return formatDecimal(value, 1);
+  if (abs >= 1) return formatDecimal(value, 2);
+  return formatDecimal(value, 4);
 }

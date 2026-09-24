@@ -7,7 +7,7 @@ import { PriceRefresh } from "@/components/PriceRefresh";
 import { ProfitCurvePanel } from "@/components/ProfitCurvePanel";
 import { SyncPanel } from "@/components/SyncPanel";
 import { useApp } from "@/context/AppContext";
-import { formatMoney } from "@/lib/format";
+import { formatDecimal, formatMoney } from "@/lib/format";
 
 export default function DashboardPage() {
   const { stats } = useApp();
@@ -33,13 +33,13 @@ export default function DashboardPage() {
         <ProfitCurvePanel className="lg:col-span-2" />
         <div className="app-card space-y-3">
           <h2 className="app-card-section-title">Tóm tắt</h2>
-          <Row label="Win rate" value={`${stats.winRate.toFixed(1)}%`} />
+          <Row label="Win rate" value={`${formatDecimal(stats.winRate, 1)}%`} />
           <Row
             label="Hệ số lợi nhuận"
             value={
               stats.profitFactor === Infinity
                 ? "∞"
-                : stats.profitFactor.toFixed(2)
+                : formatDecimal(stats.profitFactor, 2)
             }
           />
           <Row label="Cổ tức" value={formatMoney(stats.totalDividends)} />

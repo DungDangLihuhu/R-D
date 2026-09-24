@@ -36,11 +36,15 @@ interface TimeframeSpec {
 /** Visible candles on every chart timeframe except All. */
 export const CHART_BAR_LIMIT = 150;
 
+/**
+ * Khoảng tải về dài hơn 150 nến hiển thị: MA200 của nến đầu khung cần thêm 199 nến
+ * trước nó (1D 2 năm ≈ 500 nến, 4H 1 năm ≈ 500, 1W 10 năm ≈ 520).
+ */
 const TIMEFRAME_SPECS: Record<ChartTimeframe, TimeframeSpec> = {
   "1h": { interval: "60m", range: "3mo" },
-  "4h": { interval: "60m", range: "6mo", aggregate4h: true },
-  "1d": { interval: "1d", range: "1y" },
-  "1w": { interval: "1wk", range: "5y" },
+  "4h": { interval: "60m", range: "1y", aggregate4h: true },
+  "1d": { interval: "1d", range: "2y" },
+  "1w": { interval: "1wk", range: "10y" },
   "1m": { interval: "1mo", range: "max" },
   all: { interval: "3mo", range: "max" },
 };
@@ -51,6 +55,36 @@ export function limitChartBars(
 ): OhlcPoint[] {
   if (timeframe === "all" || points.length <= CHART_BAR_LIMIT) return points;
   return points.slice(-CHART_BAR_LIMIT);
+}
+
+export const MA_PERIODS = [50, 200] as const;
+export type MovingAverages = Record<`ma${(typeof MA_PERIODS)[number]}`, (number | null)[]>;
+
+/**
+ * SMA giá đóng cửa của `visible` nến cuối, tính trên cả chuỗi để nến đầu khung cũng có
+ * giá trị; null khi chưa đủ `period` nến.
+ */
+export function trailingSma(
+  points: { close: number }[],
+  period: number,
+  visible = points.length
+): (number | null)[] {
+  const start = Math.max(0, points.length - visible);
+  const out: (number | null)[] = [];
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    sum += points[i].close;
+    if (i >= period) sum -= points[i - period].close;
+    if (i >= start) out.push(i >= period - 1 ? sum / period : null);
+  }
+  return out;
+}
+
+export function movingAverages(points: { close: number }[], visible: number): MovingAverages {
+  return {
+    ma50: trailingSma(points, 50, visible),
+    ma200: trailingSma(points, 200, visible),
+  };
 }
 
 export function isChartTimeframe(value: string): value is ChartTimeframe {

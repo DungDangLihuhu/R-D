@@ -1,3 +1,4 @@
+import { formatDecimal } from "./format";
 import {
   industryValuationSell,
   mean,
@@ -214,7 +215,7 @@ function valuationSignal(
     else if (peg < 2) s = -0.2;
     else if (peg < 3) s = -0.5;
     else s = -0.85;
-    parts.push({ score: s, note: `PEG ${peg.toFixed(1)}` });
+    parts.push({ score: s, note: `PEG ${formatDecimal(peg, 1)}` });
   } else if (pe != null) {
     let s = 0;
     if (pe < 0) s = -0.4;
@@ -238,9 +239,9 @@ function valuationSignal(
   // thấy mã sát đỉnh 52w kém hơn có ý nghĩa, nghiên cứu (George & Hwang 2004) còn thấy ngược lại.
 
   if (short != null) {
-    if (short >= 20) parts.push({ score: -0.45, note: `short ${short.toFixed(1)}%` });
-    else if (short >= 10) parts.push({ score: -0.25, note: `short ${short.toFixed(1)}%` });
-    else if (short >= 5) parts.push({ score: -0.08, note: `short ${short.toFixed(1)}%` });
+    if (short >= 20) parts.push({ score: -0.45, note: `short ${formatDecimal(short, 1)}%` });
+    else if (short >= 10) parts.push({ score: -0.25, note: `short ${formatDecimal(short, 1)}%` });
+    else if (short >= 5) parts.push({ score: -0.08, note: `short ${formatDecimal(short, 1)}%` });
   }
 
   if (!parts.length) {
@@ -344,7 +345,7 @@ function optionFlowSignal(flow: OptionFlowSummary | null | undefined): Assessmen
     id: "options",
     label: "Option flow",
     score,
-    detail: `P/C ${ratio.toFixed(2)} (tb thị trường ~0.7) · C ${flow.callVolume.toLocaleString("vi-VN")} / P ${flow.putVolume.toLocaleString("vi-VN")}${source ? ` · ${source}` : ""}`,
+    detail: `P/C ${formatDecimal(ratio, 2)} (tb thị trường ~0,7) · C ${flow.callVolume.toLocaleString("vi-VN")} / P ${flow.putVolume.toLocaleString("vi-VN")}${source ? ` · ${source}` : ""}`,
     available: true,
   };
 }
@@ -537,8 +538,8 @@ function earningsSignal(rows: EarningsRow[] | undefined, now = Date.now()): Asse
     id: "earnings",
     label: "KQKD",
     score: clamp(score),
-    detail: `${beats}/${recent.length} quý vượt dự báo (tb ~3/4) · TB ${avg >= 0 ? "+" : ""}${avg.toFixed(1)}%${
-      fresh ? ` · quý gần nhất ${surprise(latest) >= 0 ? "+" : ""}${surprise(latest).toFixed(1)}%` : ""
+    detail: `${beats}/${recent.length} quý vượt dự báo (tb ~3/4) · TB ${avg >= 0 ? "+" : ""}${formatDecimal(avg, 1)}%${
+      fresh ? ` · quý gần nhất ${surprise(latest) >= 0 ? "+" : ""}${formatDecimal(surprise(latest), 1)}%` : ""
     }`,
     available: true,
   };
@@ -743,7 +744,7 @@ export function computeBuySellPrices(
     techBuyNote = `${support.label} − buffer`;
   } else {
     techBuy = price * (1 - Math.max(0.025, daily * 1.6));
-    techBuyNote = `Buffer KT ~${((1 - techBuy / price) * 100).toFixed(1)}% dưới giá`;
+    techBuyNote = `Buffer KT ~${formatDecimal((1 - techBuy / price) * 100, 1)}% dưới giá`;
   }
 
   let techSell: number;
@@ -753,7 +754,7 @@ export function computeBuySellPrices(
     techSellNote = resistance.label;
   } else {
     techSell = price * (1 + Math.max(0.03, daily * 1.8));
-    techSellNote = `Buffer KT ~${((techSell / price - 1) * 100).toFixed(1)}% trên giá`;
+    techSellNote = `Buffer KT ~${formatDecimal((techSell / price - 1) * 100, 1)}% trên giá`;
   }
 
   const fund = fundamentalAnchors(price, metrics, pegRatio);

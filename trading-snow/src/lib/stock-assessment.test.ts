@@ -206,14 +206,14 @@ describe("earnings signal calibration", () => {
 
   it("does not let a near-zero estimate blow up the average", () => {
     const detail = signal(assess({ earningsHistory: quarters([900, 5, 5, 5]) }), "earnings").detail;
-    expect(detail).toContain("TB +16.3%");
+    expect(detail).toContain("TB +16,3%");
   });
 
   it("weighs a freshly reported miss", () => {
     const stale = signal(assess({ earningsHistory: quarters([-10, 8, 8, 8]) }), "earnings").score;
     const fresh = signal(assess({ earningsHistory: quarters([-10, 8, 8, 8], 40) }), "earnings");
     expect(fresh.score).toBeLessThan(stale);
-    expect(fresh.detail).toContain("quý gần nhất -10.0%");
+    expect(fresh.detail).toContain("quý gần nhất -10,0%");
   });
 });
 
@@ -247,7 +247,7 @@ describe("valuation and insider calibration", () => {
     const result = assess({ metrics: { peTTM: 20 }, shortPercentOfFloat: 0.0096 });
     expect(signal(result, "valuation").detail).not.toContain("short");
     const heavy = assess({ metrics: { peTTM: 20 }, shortPercentOfFloat: 0.25 });
-    expect(signal(heavy, "valuation").detail).toContain("short 25.0%");
+    expect(signal(heavy, "valuation").detail).toContain("short 25,0%");
   });
 
   it("adds a bonus when several insiders buy on the open market", () => {

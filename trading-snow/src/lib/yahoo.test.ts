@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { resolveExtendedQuote, yahooInsiderCode } from "./yahoo";
+import {
+  parseYahooEarningsHistory,
+  parseYahooNews,
+  parseYahooRecommendationTrend,
+  resolveExtendedQuote,
+  yahooInsiderCode,
+} from "./yahoo";
 
 describe("yahooInsiderCode", () => {
   it("only codes real open-market trades as P or S", () => {
@@ -62,5 +68,48 @@ describe("resolveExtendedQuote", () => {
     });
     expect(quote?.regular).toBeUndefined();
     expect(quote?.changePercent).toBeCloseTo(0.884, 2);
+  });
+});
+
+describe("Yahoo fallbacks for Finnhub data", () => {
+  const epoch = (date: string) => ({ raw: Date.parse(`${date}T00:00:00Z`) / 1000, fmt: date });
+
+  it("turns Yahoo's EPS history into newest-first rows with surprise in percent", () => {
+    const rows = parseYahooEarningsHistory([
+      { quarter: epoch("2026-03-31"), epsActual: { raw: 2.01 }, epsEstimate: { raw: 1.94 }, surprisePercent: { raw: 0.0346 } },
+      { quarter: epoch("2026-06-30"), epsActual: { raw: 2.02 }, epsEstimate: { raw: 1.89 }, surprisePercent: { raw: 0.0674 } },
+      { quarter: epoch("2025-12-31"), epsActual: { raw: 2.84 }, epsEstimate: { raw: 2.5 } },
+    ]);
+    expect(rows.map((r) => r.period)).toEqual(["2026-06-30", "2026-03-31", "2025-12-31"]);
+    expect(rows[0].surprisePercent).toBeCloseTo(6.74, 6);
+    // Không có surprise thì tự tính từ EPS thực tế và dự báo.
+    expect(rows[2].surprisePercent).toBeCloseTo(13.6, 6);
+  });
+
+  it("dates the recommendation trend by month", () => {
+    const rows = parseYahooRecommendationTrend(
+      [
+        { period: "0m", strongBuy: 6, buy: 19, hold: 13, sell: 3, strongSell: 3 },
+        { period: "-1m", strongBuy: 6, buy: 19, hold: 14, sell: 3, strongSell: 2 },
+        { period: "-2m", strongBuy: 0, buy: 0, hold: 0, sell: 0, strongSell: 0 },
+      ],
+      new Date("2026-01-15T00:00:00Z")
+    );
+    expect(rows.map((r) => r.period)).toEqual(["2026-01-01", "2025-12-01"]);
+    expect(rows[0]).toMatchObject({ strongBuy: 6, buy: 19, hold: 13, sell: 3, strongSell: 3 });
+  });
+
+  it("keeps only news Yahoo tags with the symbol", () => {
+    const rows = parseYahooNews(
+      [
+        { title: "Apple ships", publisher: "Barrons", providerPublishTime: 1_790_000_000, link: "https://x/1", relatedTickers: ["AAPL", "META"] },
+        { title: "Markets wrap", providerPublishTime: 1_790_000_100, relatedTickers: ["^GSPC"] },
+        { title: "", providerPublishTime: 1_790_000_200, relatedTickers: ["AAPL"] },
+      ],
+      "aapl"
+    );
+    expect(rows).toEqual([
+      { headline: "Apple ships", date: new Date(1_790_000_000 * 1000).toISOString(), source: "Barrons", url: "https://x/1" },
+    ]);
   });
 });

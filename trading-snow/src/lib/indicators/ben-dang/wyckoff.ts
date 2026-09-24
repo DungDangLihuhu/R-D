@@ -162,6 +162,7 @@ export function computeWyckoff(
       : undefined,
     events,
     entry,
+    atr: lastAtr > 0 ? lastAtr : undefined,
     confidence,
     warnings,
     summary: {
@@ -1400,5 +1401,42 @@ function computeEntry(
     action: stanceAt(entry, true),
     label: stNearIce ? "ST / gần Ice" : "Gần Ice (discount)",
     reason: "Tích lũy/sideway — mua 1/4 dưới của range, không mua giữa range hay Creek.",
+  };
+}
+
+export interface WyckoffTradePlan {
+  /** Khoảng cách từ giá vào tới cắt lỗ, % giá vào. */
+  stopPct: number;
+  /** Khoảng cách đó tính bằng ATR của khung đang xem. */
+  stopAtr: number | null;
+  target: number;
+  targetLabel: string;
+  /** Lãi tới mục tiêu chia lỗ tới cắt lỗ, tính từ giá vào. */
+  rewardRisk: number;
+}
+
+/**
+ * Rủi ro/lợi nhuận của mốc mua Wyckoff. Mục tiêu đầu: Creek khi giá vào còn dưới Creek;
+ * từ Creek trở lên thì chiếu chiều cao range lên trên Creek (measured move) — đơn giản
+ * hơn đếm point & figure nhưng cùng ý: range càng rộng, đích càng xa.
+ */
+export function wyckoffTradePlan(result: WyckoffResult): WyckoffTradePlan | null {
+  const entry = result.entry;
+  const range = result.tradingRange;
+  if (!entry || entry.action === "avoid" || !range) return null;
+  const stop = entry.stop;
+  if (stop == null || !(stop > 0) || !(entry.price > stop)) return null;
+  const height = range.creek - range.ice;
+  if (!(height > 0)) return null;
+
+  const risk = entry.price - stop;
+  const belowCreek = entry.price < range.creek * 0.99;
+  const target = belowCreek ? range.creek : range.creek + height;
+  return {
+    stopPct: (risk / entry.price) * 100,
+    stopAtr: result.atr && result.atr > 0 ? risk / result.atr : null,
+    target,
+    targetLabel: belowCreek ? "Creek" : "Creek + chiều cao range",
+    rewardRisk: (target - entry.price) / risk,
   };
 }

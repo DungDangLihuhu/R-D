@@ -1,6 +1,7 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
 import { fetchJson } from "@/lib/fetch-cache";
+import { formatDecimal } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
 import type { CalendarEvent, MarketQuote } from "@/lib/types";
 
@@ -55,7 +56,7 @@ export function notifyPriceMoves(
     const key = `price:${symbol}:${day}:${dir}`;
     showOnce(key, () => {
       const sign = q.changePercent > 0 ? "+" : "";
-      toast.event(`${symbol} ${sign}${q.changePercent.toFixed(1)}% hôm nay`, {
+      toast.event(`${symbol} ${sign}${formatDecimal(q.changePercent, 1)}% hôm nay`, {
         description: q.name ?? "Biến động giá lớn trong danh mục",
       });
     });
@@ -85,7 +86,7 @@ function toastForEvent(event: CalendarEvent, holdingSymbols: Set<string>) {
     const key = `event:dividend:${event.id}:${day}`;
     showOnce(key, () => {
       const amount =
-        event.amount != null ? ` · $${event.amount.toFixed(2)}/cp` : "";
+        event.amount != null ? ` · $${formatDecimal(event.amount, 2)}/cp` : "";
       toast.event(`${sym} cổ tức ${when}${amount}`, {
         description: event.subtitle ?? event.title,
       });
