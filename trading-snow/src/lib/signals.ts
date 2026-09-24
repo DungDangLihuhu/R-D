@@ -7,6 +7,9 @@ import type {
 /** Market price may sit this far from the Wyckoff buy level and still count. */
 export const BUY_PRICE_BAND = 0.05;
 
+/** Số phiên của đường trung bình xu hướng dài hạn. */
+export const TREND_SMA_PERIOD = 200;
+
 export const SIGNAL_TIMEFRAMES = ["1h", "4h", "1d", "1w"] as const satisfies readonly WyckoffTimeframe[];
 export type SignalTimeframe = (typeof SIGNAL_TIMEFRAMES)[number];
 
@@ -60,6 +63,51 @@ export interface WyckoffBuyHit {
   ice?: number;
   creek?: number;
   distPct: number;
+}
+
+export interface HoldingSignal {
+  symbol: string;
+  marketPrice: number;
+  hits: WyckoffBuyHit[];
+  trend: DailyTrend;
+}
+
+export type TrendState = "up" | "down" | "unknown";
+
+export interface DailyTrend {
+  state: TrendState;
+  /** SMA200 của giá đóng cửa ngày; null khi chưa đủ 200 phiên. */
+  sma: number | null;
+}
+
+/**
+ * Giá so với SMA200 ngày. Backtest 1D (58 mã lớn, 2017–2026, giữ tối đa 60 phiên): tín
+ * hiệu Wyckoff khi giá trên SMA200 hơn SPY +1,3%/lệnh, dưới SMA200 kém SPY −0,7%/lệnh.
+ */
+export function dailyTrend(
+  closes: number[],
+  price: number,
+  period = TREND_SMA_PERIOD
+): DailyTrend {
+  const valid = closes.filter((c) => Number.isFinite(c) && c > 0);
+  if (valid.length < period || !(price > 0) || !Number.isFinite(price)) {
+    return { state: "unknown", sma: null };
+  }
+  let sum = 0;
+  for (let i = valid.length - period; i < valid.length; i++) sum += valid[i];
+  const sma = sum / period;
+  return { state: price >= sma ? "up" : "down", sma };
+}
+
+/** Mốc đủ điều kiện mua: Wyckoff báo "có thể vào" và giá không nằm dưới SMA200 ngày. */
+export function isActionableHit(hit: WyckoffBuyHit, trend: TrendState): boolean {
+  return hit.entryAction === "buy" && trend !== "down";
+}
+
+/** Mốc tốt nhất để hiện trên thẻ: ưu tiên mốc đủ điều kiện mua, rồi mốc sát giá nhất. */
+export function primaryHit(signal: HoldingSignal): { hit: WyckoffBuyHit; actionable: boolean } {
+  const actionable = signal.hits.find((h) => isActionableHit(h, signal.trend.state));
+  return actionable ? { hit: actionable, actionable: true } : { hit: signal.hits[0], actionable: false };
 }
 
 export function wyckoffBuyHit(

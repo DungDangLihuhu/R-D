@@ -1,7 +1,7 @@
 import type { MarketSession } from "./types";
 import { getFinnhubApiKey } from "./quote-config";
 import { resolveYahooSymbolCandidates } from "./symbol";
-import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
+import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderCode, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
 import type { YahooInsiderData, YahooKeyStats } from "./yahoo";
 import {
   summarizeAnalystTargets,
@@ -407,7 +407,7 @@ function buildInsiderRows(
       date: t.date,
       change,
       shares: 0,
-      transactionCode: change < 0 ? "S" : "P",
+      transactionCode: yahooInsiderCode(t.transactionText),
       transactionPrice: unitPrice,
       amount,
       relationship:

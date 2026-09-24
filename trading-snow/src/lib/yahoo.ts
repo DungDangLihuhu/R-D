@@ -187,6 +187,22 @@ export function yahooInsiderShareChange(shares: number, transactionText?: string
   return shares;
 }
 
+/**
+ * Mã giao dịch kiểu SEC Form 4 từ mô tả của Yahoo. Chỉ "Purchase"/"Sale" là mua/bán trên
+ * sàn; thưởng cổ phiếu, quà tặng, thực hiện quyền và dòng không mô tả (thường là RSU của
+ * HĐQT) không phải tự bỏ tiền mua — trước đây đều bị coi là "P".
+ */
+export function yahooInsiderCode(transactionText: string | undefined): string {
+  const text = (transactionText ?? "").toLowerCase();
+  if (text.includes("purchase") || text.includes("buy")) return "P";
+  if (text.includes("sale") || text.includes("sell")) return "S";
+  if (text.includes("award") || text.includes("grant")) return "A";
+  if (text.includes("gift")) return "G";
+  if (text.includes("exercise") || text.includes("conversion")) return "M";
+  if (text.includes("tax") || text.includes("withh")) return "F";
+  return "J";
+}
+
 export async function fetchPriceHistory(
   symbol: string,
   from: Date,

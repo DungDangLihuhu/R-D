@@ -1,19 +1,16 @@
-import { fetchChartHistory } from "@/lib/chart-history";
+import { fetchFullChartHistory, limitChartBars } from "@/lib/chart-history";
 import { computeWyckoff } from "@/lib/indicators/ben-dang/wyckoff";
 import { toBars } from "@/lib/indicators/ben-dang/utils";
 import { cacheKey, cached } from "@/lib/server-cache";
 import {
   SIGNAL_TIMEFRAMES,
+  dailyTrend,
+  isActionableHit,
   wyckoffBuyHit,
+  type HoldingSignal,
   type SignalTimeframe,
   type WyckoffBuyHit,
 } from "@/lib/signals";
-
-export interface HoldingSignal {
-  symbol: string;
-  marketPrice: number;
-  hits: WyckoffBuyHit[];
-}
 
 async function mapPool<T, R>(
   items: T[],
@@ -33,9 +30,10 @@ async function mapPool<T, R>(
   return out;
 }
 
+/** Cả khoảng Yahoo (1D = 1 năm) để đủ 200 phiên cho SMA200; Wyckoff vẫn chạy trên phần hiển thị. */
 async function history(symbol: string, timeframe: SignalTimeframe) {
   return cached(cacheKey(["wyckoff-hist", symbol, timeframe]), 180_000, () =>
-    fetchChartHistory(symbol, timeframe)
+    fetchFullChartHistory(symbol, timeframe)
   );
 }
 
@@ -44,17 +42,16 @@ async function scanSymbol(
   quotedPrice: number
 ): Promise<HoldingSignal | null> {
   try {
+    const daily = await history(symbol, "1d").catch(() => []);
     let marketPrice = quotedPrice;
-    if (!(marketPrice > 0)) {
-      const daily = await history(symbol, "1d");
-      marketPrice = daily[daily.length - 1]?.close ?? 0;
-    }
+    if (!(marketPrice > 0)) marketPrice = daily[daily.length - 1]?.close ?? 0;
     if (!(marketPrice > 0)) return null;
 
     const hits: WyckoffBuyHit[] = [];
     for (const timeframe of SIGNAL_TIMEFRAMES) {
       try {
-        const points = await history(symbol, timeframe);
+        // Cùng số nến với biểu đồ trang Phân tích để mốc hai trang khớp nhau.
+        const points = limitChartBars(await history(symbol, timeframe), timeframe);
         if (points.length < 20) continue;
         const result = computeWyckoff(toBars(points), timeframe);
         const hit = wyckoffBuyHit(result, marketPrice, timeframe);
@@ -66,10 +63,18 @@ async function scanSymbol(
 
     hits.sort((a, b) => Math.abs(a.distPct) - Math.abs(b.distPct));
     if (!hits.length) return null;
-    return { symbol, marketPrice, hits };
+    const trend = dailyTrend(
+      daily.map((p) => p.close),
+      marketPrice
+    );
+    return { symbol, marketPrice, hits, trend };
   } catch {
     return null;
   }
+}
+
+function rank(signal: HoldingSignal): number {
+  return signal.hits.some((h) => isActionableHit(h, signal.trend.state)) ? 0 : 1;
 }
 
 export async function scanWyckoffSignals(
@@ -86,5 +91,8 @@ export async function scanWyckoffSignals(
 
   return scanned
     .filter((row): row is HoldingSignal => row != null)
-    .sort((a, b) => Math.abs(a.hits[0].distPct) - Math.abs(b.hits[0].distPct));
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) || Math.abs(a.hits[0].distPct) - Math.abs(b.hits[0].distPct)
+    );
 }

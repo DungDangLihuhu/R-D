@@ -6,8 +6,8 @@ import {
   summarizeAnalystTargets,
   summarizeIndustryMultiples,
 } from "./analyst-targets";
-import { computeBuySellPrices } from "./stock-assessment";
-import type { PriceLevels } from "./stock-analysis";
+import { computeBuySellPrices, computeStockAssessment } from "./stock-assessment";
+import type { EarningsRow, InsiderRow, PriceLevels } from "./stock-analysis";
 
 function levels(partial: Partial<PriceLevels> = {}): PriceLevels {
   return {
@@ -163,5 +163,123 @@ describe("computeBuySellPrices growth units", () => {
     // Trước đây 1,00% bị nhân 100 lần thành 100% và bị chấm "rẻ", còn 1,01% thì không.
     expect(note(1)).not.toContain("rẻ vs định giá");
     expect(note(1)).toBe(note(1.01));
+  });
+});
+
+function assess(partial: Partial<Parameters<typeof computeStockAssessment>[0]> = {}) {
+  return computeStockAssessment({
+    price: 100,
+    metrics: {},
+    news: [],
+    insiderTransactions: [],
+    recommendations: [],
+    priceLevels: levels(),
+    ...partial,
+  });
+}
+
+function signal(result: ReturnType<typeof assess>, id: string) {
+  return result.signals.find((s) => s.id === id)!;
+}
+
+const DAY = 86_400_000;
+const isoDaysAgo = (days: number) => new Date(Date.now() - days * DAY).toISOString().slice(0, 10);
+
+function quarters(surprises: number[], latestAgeDays = 400): EarningsRow[] {
+  return surprises.map((surprisePercent, i) => ({
+    period: isoDaysAgo(latestAgeDays + i * 91),
+    estimate: 1,
+    actual: 1 + surprisePercent / 100,
+    surprisePercent,
+  }));
+}
+
+describe("earnings signal calibration", () => {
+  it("treats three beats in four quarters at a typical +5% as neutral", () => {
+    const score = signal(assess({ earningsHistory: quarters([6, 5, -1, 9]) }), "earnings").score;
+    expect(Math.abs(score)).toBeLessThan(0.05);
+  });
+
+  it("rewards beating every quarter by a wide margin", () => {
+    expect(signal(assess({ earningsHistory: quarters([15, 12, 14, 11]) }), "earnings").score).toBeGreaterThan(0.4);
+  });
+
+  it("does not let a near-zero estimate blow up the average", () => {
+    const detail = signal(assess({ earningsHistory: quarters([900, 5, 5, 5]) }), "earnings").detail;
+    expect(detail).toContain("TB +16.3%");
+  });
+
+  it("weighs a freshly reported miss", () => {
+    const stale = signal(assess({ earningsHistory: quarters([-10, 8, 8, 8]) }), "earnings").score;
+    const fresh = signal(assess({ earningsHistory: quarters([-10, 8, 8, 8], 40) }), "earnings");
+    expect(fresh.score).toBeLessThan(stale);
+    expect(fresh.detail).toContain("quý gần nhất -10.0%");
+  });
+});
+
+describe("technical signal calibration", () => {
+  const trendUp = Array.from({ length: 252 }, (_, i) => ({ close: 50 * 1.004 ** i }));
+
+  it("no longer marks a strong uptrend down for high RSI", () => {
+    const result = assess({ priceHistory: trendUp });
+    expect(signal(result, "technical").detail).not.toContain("quá mua");
+    expect(result.buyNote).not.toContain("quá mua");
+  });
+
+  it("scores six-month momentum", () => {
+    const flat = Array.from({ length: 252 }, () => ({ close: 100 }));
+    const up = signal(assess({ priceHistory: trendUp }), "technical");
+    expect(up.score).toBeGreaterThan(signal(assess({ priceHistory: flat }), "technical").score);
+    expect(up.detail).toMatch(/6 tháng \+\d+%/);
+  });
+});
+
+describe("valuation and insider calibration", () => {
+  it("leaves the 52-week range out of valuation", () => {
+    const detail = signal(
+      assess({ metrics: { peTTM: 20, "52WeekHigh": 101, "52WeekLow": 60 } }),
+      "valuation"
+    ).detail;
+    expect(detail).not.toContain("52w");
+  });
+
+  it("reads a sub-1% short interest as a small number, not 96%", () => {
+    const result = assess({ metrics: { peTTM: 20 }, shortPercentOfFloat: 0.0096 });
+    expect(signal(result, "valuation").detail).not.toContain("short");
+    const heavy = assess({ metrics: { peTTM: 20 }, shortPercentOfFloat: 0.25 });
+    expect(signal(heavy, "valuation").detail).toContain("short 25.0%");
+  });
+
+  it("adds a bonus when several insiders buy on the open market", () => {
+    const buy = (name: string): InsiderRow => ({
+      name,
+      date: isoDaysAgo(10),
+      change: 1000,
+      shares: 5000,
+      transactionCode: "P",
+      transactionPrice: 50,
+      amount: 50_000,
+    });
+    const one = signal(assess({ insiderTransactions: [buy("A"), buy("A")] }), "insider");
+    const three = signal(assess({ insiderTransactions: [buy("A"), buy("B"), buy("C")] }), "insider");
+    expect(three.score).toBeGreaterThan(one.score);
+    expect(three.detail).toContain("3 người mua trên sàn");
+  });
+
+  it("does not count zero-price board grants filed as P as a buying cluster", () => {
+    const grant = (name: string): InsiderRow => ({
+      name,
+      date: isoDaysAgo(10),
+      change: 5047,
+      shares: 20_000,
+      transactionCode: "P",
+      transactionPrice: null,
+      amount: 0,
+    });
+    const detail = signal(
+      assess({ insiderTransactions: ["A", "B", "C", "D"].map(grant) }),
+      "insider"
+    ).detail;
+    expect(detail).not.toContain("người mua trên sàn");
   });
 });

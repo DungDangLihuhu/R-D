@@ -12,7 +12,10 @@ import { formatMoney, formatPercent } from "@/lib/format";
 import {
   BUY_PRICE_BAND,
   SIGNAL_TIMEFRAME_LABELS,
+  primaryHit,
+  type HoldingSignal,
   type SignalTimeframe,
+  type TrendState,
   type WyckoffBuyHit,
 } from "@/lib/signals";
 import type { MarketQuote } from "@/lib/types";
@@ -25,18 +28,16 @@ interface SignalQuote {
   changePercent?: number;
 }
 
-interface HoldingSignal {
-  symbol: string;
-  marketPrice: number;
-  hits: WyckoffBuyHit[];
-}
-
 interface SignalsResponse {
   signals?: HoldingSignal[];
   scanned?: number;
   quotes?: SignalQuote[];
   error?: string;
 }
+
+/** Backtest mô phỏng lệnh chờ tại giá vào, cắt lỗ của app — cập nhật khi đổi luật lọc. */
+const BACKTEST_NOTE =
+  "Backtest 2017–2026 (58 cổ phiếu Mỹ vốn hóa lớn, khung 1D, giữ tối đa 60 phiên): Tín hiệu mua lãi trung bình +4,3%/lệnh, hơn SPY 1,5 điểm %; mốc mua khi giá dưới SMA200 thì kém SPY. Mẫu nhỏ (179 lệnh), mới chạm ngưỡng có ý nghĩa thống kê.";
 
 const PHASE_CLASS: Record<string, string> = {
   accumulation:
@@ -57,8 +58,10 @@ function distTone(distPct: number) {
   return "text-amber-600 dark:text-amber-300";
 }
 
-function actionLabel(action: WyckoffBuyHit["entryAction"]) {
-  return action === "buy" ? "Có thể vào" : "Giá sát mốc";
+function statusLabel(actionable: boolean, hit: WyckoffBuyHit, trend: TrendState) {
+  if (actionable) return "Có thể vào";
+  if (hit.entryAction === "buy" && trend === "down") return "Ngược xu hướng — giá dưới SMA200 ngày";
+  return "Giá sát mốc — chờ xác nhận";
 }
 
 function stopClass(entryPrice: number, stop: number | null) {
@@ -69,15 +72,16 @@ function stopClass(entryPrice: number, stop: number | null) {
 
 function HitLevels({
   hits,
+  bestTf,
   currency,
   rate,
 }: {
   hits: WyckoffBuyHit[];
+  bestTf: SignalTimeframe;
   currency: string;
   /** Quy giá niêm yết ra tiền của danh mục (USD). */
   rate: number;
 }) {
-  const bestTf = hits[0]?.timeframe;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[18rem] text-left text-xs">
@@ -111,6 +115,84 @@ function HitLevels({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function SignalCard({
+  signal,
+  name,
+  logo,
+  currency,
+  rate,
+}: {
+  signal: HoldingSignal;
+  name?: string;
+  logo?: string;
+  currency: string;
+  rate: number;
+}) {
+  const { hit: best, actionable } = primaryHit(signal);
+  const { state: trend, sma } = signal.trend;
+  const trendPct = sma ? (signal.marketPrice / sma - 1) * 100 : null;
+  return (
+    <Link
+      href={`/stock/${encodeURIComponent(signal.symbol)}`}
+      className="app-card block transition-opacity hover:opacity-95"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <SymbolIdentity symbol={signal.symbol} name={name} logo={logo} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p
+              className={`inline-block rounded-lg border px-2.5 py-1 text-sm font-semibold ${
+                PHASE_CLASS[best.phase] ?? PHASE_CLASS.unknown
+              }`}
+            >
+              {best.phaseLabel}
+            </p>
+            {trend === "down" && (
+              <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+                Dưới SMA200
+              </span>
+            )}
+          </div>
+          <HitLevels hits={signal.hits} bestTf={best.timeframe} currency={currency} rate={rate} />
+          <p
+            className={`text-xs font-medium ${
+              actionable ? "text-emerald-700 dark:text-emerald-300" : "text-app-text"
+            }`}
+          >
+            {statusLabel(actionable, best, trend)}
+          </p>
+          <p className="text-xs leading-relaxed text-app-muted">{best.reason}</p>
+        </div>
+        {/* Giá vào và cắt lỗ đã nằm trong bảng bên trái — ở đây chỉ
+            tóm tắt vị trí giá hiện tại so với mốc và xu hướng. */}
+        <div className="shrink-0 text-left sm:text-right">
+          <p className="text-xs text-app-muted">Giá thị trường</p>
+          <p className="text-lg font-semibold tabular-nums">
+            {formatMoney(signal.marketPrice * rate, currency)}
+          </p>
+          <p className={`mt-1 text-xs font-semibold tabular-nums ${distTone(best.distPct)}`}>
+            {formatPercent(best.distPct)} so với {best.entryLabel}
+          </p>
+          {sma != null && trendPct != null ? (
+            <p
+              className={`mt-1 text-xs tabular-nums ${
+                trend === "down" ? "text-rose-600 dark:text-rose-300" : "text-app-muted"
+              }`}
+            >
+              SMA200 ngày {formatMoney(sma * rate, currency)} ({formatPercent(trendPct)})
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-app-muted">Chưa đủ 200 phiên để xét xu hướng</p>
+          )}
+          <p className="mt-2 text-xs text-app-muted">
+            Tin cậy {best.confidenceLabel} · {best.confidence}/100
+          </p>
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -181,7 +263,14 @@ function SignalsResults({
   const payload = data?.key === symbolsKey ? data.payload : null;
   const error = fail?.key === symbolsKey ? fail.message : null;
   const loading = !payload && !error;
-  const signals = payload?.signals ?? [];
+  const signals = useMemo(
+    () =>
+      // Phản hồi cũ còn trong cache (trước khi có bộ lọc xu hướng) chưa có `trend`.
+      (payload?.signals ?? []).map((signal) =>
+        signal.trend ? signal : { ...signal, trend: { state: "unknown" as const, sma: null } }
+      ),
+    [payload]
+  );
   const scanned = payload?.scanned ?? symbolsKey.split(",").filter(Boolean).length;
   const bandPct = Math.round(BUY_PRICE_BAND * 100);
   const quoteBySymbol = useMemo(() => {
@@ -189,6 +278,29 @@ function SignalsResults({
     for (const q of payload?.quotes ?? []) map.set(q.symbol, q);
     return map;
   }, [payload]);
+  const groups = useMemo(() => {
+    const buy: HoldingSignal[] = [];
+    const watch: HoldingSignal[] = [];
+    for (const signal of signals) {
+      (primaryHit(signal).actionable ? buy : watch).push(signal);
+    }
+    return { buy, watch };
+  }, [signals]);
+
+  const card = (signal: HoldingSignal) => {
+    const quote = quoteBySymbol.get(signal.symbol);
+    const ctxQuote = marketQuotes?.[signal.symbol];
+    return (
+      <SignalCard
+        key={signal.symbol}
+        signal={signal}
+        name={quote?.name ?? ctxQuote?.name}
+        logo={quote?.logo ?? ctxQuote?.logo}
+        currency={currency}
+        rate={usdRate(signal.symbol)}
+      />
+    );
+  };
 
   return (
     <>
@@ -215,21 +327,40 @@ function SignalsResults({
           Cách lọc tín hiệu ▾
         </summary>
         <ul className="mt-2 list-disc space-y-1 pl-5">
-          <li>Quét bốn khung 1H / 4H / 1D / 1W, lấy mốc Wyckoff của trang Phân tích.</li>
-          <li>Bỏ qua lệnh long có cắt lỗ ≥ giá vào, hoặc giá đã thủng cắt lỗ.</li>
-          <li>Bỏ qua giai đoạn phân phối và các mốc được đánh dấu tránh long.</li>
-          <li>Đây là kịch bản có điều kiện, không phải khuyến nghị mua.</li>
+          <li>
+            Quét bốn khung 1H / 4H / 1D / 1W, lấy mốc Wyckoff của trang Phân tích; giá thị
+            trường phải trong ±{bandPct}% quanh giá vào.
+          </li>
+          <li>
+            Tín hiệu mua cần mốc ở trạng thái có thể vào (tin cậy ≥ 70, giá sát mốc) và giá
+            trên SMA200 ngày. Mốc còn chờ xác nhận hoặc ngược xu hướng nằm ở mục Đang theo
+            dõi.
+          </li>
+          <li>
+            Cắt lỗ đặt dưới Ice/Spring và cách giá vào ít nhất 3×ATR (khung tuần 2×ATR) để
+            không bị dao động thường ngày quét mất.
+          </li>
+          <li>
+            Bỏ qua lệnh long có cắt lỗ ≥ giá vào hoặc giá đã thủng cắt lỗ, giai đoạn phân
+            phối và các mốc được đánh dấu tránh long.
+          </li>
+          <li>{BACKTEST_NOTE} Đây là kịch bản có điều kiện, không phải khuyến nghị mua.</li>
         </ul>
       </details>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard label="Mã đang quét" value={String(scanned)} />
         <StatCard
-          label="Đang trong vùng mua"
-          value={loading ? "…" : String(signals.length)}
-          trend={signals.length > 0 ? "up" : "neutral"}
+          label="Tín hiệu mua"
+          value={loading ? "…" : String(groups.buy.length)}
+          trend={groups.buy.length > 0 ? "up" : "neutral"}
+          sub="có thể vào · trên SMA200"
         />
-        <StatCard label="Dải giá" value={`±${bandPct}%`} sub="so với giá vào Wyckoff" />
+        <StatCard
+          label="Đang theo dõi"
+          value={loading ? "…" : String(groups.watch.length)}
+          sub={`giá trong ±${bandPct}% quanh mốc`}
+        />
       </div>
 
       {error && <div className="app-alert-warning">{error}</div>}
@@ -246,60 +377,35 @@ function SignalsResults({
           description={`Đã quét ${scanned} mã. Không mã nào có giá vào Wyckoff (không phải avoid) và giá thị trường trong ±${bandPct}%.`}
         />
       ) : (
-        <div className="space-y-3">
-          {signals.map((signal) => {
-            const best = signal.hits[0];
-            const quote = quoteBySymbol.get(signal.symbol);
-            const ctxQuote = marketQuotes?.[signal.symbol];
-            return (
-              <Link
-                key={signal.symbol}
-                href={`/stock/${encodeURIComponent(signal.symbol)}`}
-                className="app-card block transition-opacity hover:opacity-95"
-              >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-2">
-                    <SymbolIdentity
-                      symbol={signal.symbol}
-                      name={quote?.name ?? ctxQuote?.name}
-                      logo={quote?.logo ?? ctxQuote?.logo}
-                    />
-                    <p
-                      className={`inline-block rounded-lg border px-2.5 py-1 text-sm font-semibold ${
-                        PHASE_CLASS[best.phase] ?? PHASE_CLASS.unknown
-                      }`}
-                    >
-                      {best.phaseLabel}
-                    </p>
-                    <HitLevels
-                      hits={signal.hits}
-                      currency={currency}
-                      rate={usdRate(signal.symbol)}
-                    />
-                    <p className="text-xs font-medium text-app-text">
-                      {actionLabel(best.entryAction)}
-                    </p>
-                    <p className="text-xs leading-relaxed text-app-muted">{best.reason}</p>
-                  </div>
-                  {/* Giá vào và cắt lỗ đã nằm trong bảng bên trái — ở đây chỉ
-                      tóm tắt vị trí giá hiện tại so với mốc. */}
-                  <div className="shrink-0 text-left sm:text-right">
-                    <p className="text-xs text-app-muted">Giá thị trường</p>
-                    <p className="text-lg font-semibold tabular-nums">
-                      {formatMoney(signal.marketPrice * usdRate(signal.symbol), currency)}
-                    </p>
-                    <p className={`mt-1 text-xs font-semibold tabular-nums ${distTone(best.distPct)}`}>
-                      {formatPercent(best.distPct)} so với {best.entryLabel}
-                    </p>
-                    <p className="mt-2 text-xs text-app-muted">
-                      Tin cậy {best.confidenceLabel} · {best.confidence}/100
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        <>
+          <section className="space-y-3" aria-labelledby="signals-buy">
+            <h2 id="signals-buy" className="app-card-section-title mb-0">
+              Tín hiệu mua
+            </h2>
+            {groups.buy.length > 0 ? (
+              groups.buy.map(card)
+            ) : (
+              <p className="app-callout text-xs">
+                Chưa mã nào đủ điều kiện mua. Các mã có giá gần mốc Wyckoff nằm ở mục Đang
+                theo dõi bên dưới.
+              </p>
+            )}
+          </section>
+          {groups.watch.length > 0 && (
+            <section className="space-y-3" aria-labelledby="signals-watch">
+              <div>
+                <h2 id="signals-watch" className="app-card-section-title mb-1">
+                  Đang theo dõi
+                </h2>
+                <p className="text-xs text-app-muted">
+                  Giá gần mốc nhưng Wyckoff chưa xác nhận, hoặc giá đang dưới SMA200 ngày —
+                  chưa phải điểm mua.
+                </p>
+              </div>
+              {groups.watch.map(card)}
+            </section>
+          )}
+        </>
       )}
     </>
   );

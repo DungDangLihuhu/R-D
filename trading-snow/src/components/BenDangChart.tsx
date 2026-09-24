@@ -30,6 +30,7 @@ import {
   type WyckoffResult,
 } from "@/lib/indicators/ben-dang";
 import { computeRsiSeries } from "@/lib/indicators/ben-dang/utils";
+import { dailyTrend, type DailyTrend } from "@/lib/signals";
 
 const COLORS = {
   candleUp: "#10b981",
@@ -546,10 +547,13 @@ function WyckoffPanel({
   indicators,
   currency,
   currentPrice,
+  trend,
 }: {
   indicators: BenDangIndicators;
   currency: string;
   currentPrice: number;
+  /** Giá so với SMA200 ngày — tín hiệu mua ngược xu hướng dài hạn kém hơn trong backtest. */
+  trend: DailyTrend;
 }) {
   const w = indicators.wyckoff;
   const phaseColors: Record<string, string> = {
@@ -562,10 +566,17 @@ function WyckoffPanel({
   const entry = w.entry;
   const distPct =
     entry && currentPrice > 0 ? ((entry.price - currentPrice) / currentPrice) * 100 : null;
+  const counterTrend = trend.state === "down" && entry != null && entry.action !== "avoid";
   const actionLabel =
-    entry?.action === "buy" ? "Gần mốc — có thể vào" : entry?.action === "avoid" ? "Không vào long" : "Chờ giá về mốc";
-  const actionClass =
     entry?.action === "buy"
+      ? counterTrend
+        ? "Gần mốc — nhưng dưới SMA200"
+        : "Gần mốc — có thể vào"
+      : entry?.action === "avoid"
+        ? "Không vào long"
+        : "Chờ giá về mốc";
+  const actionClass =
+    entry?.action === "buy" && !counterTrend
       ? "border-emerald-300 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-950/40"
       : entry?.action === "avoid"
         ? "border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/40"
@@ -636,6 +647,13 @@ function WyckoffPanel({
             </div>
           </div>
           <p className="mt-1.5 text-xs leading-relaxed text-gray-600 dark:text-slate-300">{entry.reason}</p>
+          {counterTrend && trend.sma != null && (
+            <p className="mt-1.5 text-xs leading-relaxed text-rose-700 dark:text-rose-300">
+              Giá đang dưới SMA200 ngày ({formatMoney(trend.sma, currency)}). Trong backtest, tín
+              hiệu mua Wyckoff ngược xu hướng dài hạn kém thị trường — cân nhắc chờ giá lấy lại
+              SMA200.
+            </p>
+          )}
         </div>
       )}
 
@@ -748,6 +766,11 @@ export function BenDangChart({
   );
 
   const currentPrice = points.length ? points[points.length - 1].close : 0;
+
+  const trend = useMemo(() => {
+    const closes = dailySeed?.map((p) => p.close) ?? [];
+    return dailyTrend(closes, currentPrice > 0 ? currentPrice : closes[closes.length - 1] ?? 0);
+  }, [dailySeed, currentPrice]);
 
   const chartData = useMemo<TaPoint[]>(() => {
     const rsi = computeRsiSeries(
@@ -1022,6 +1045,7 @@ export function BenDangChart({
               indicators={indicators}
               currency={currency}
               currentPrice={currentPrice}
+              trend={trend}
             />
           )}
         </>

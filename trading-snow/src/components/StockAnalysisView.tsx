@@ -95,11 +95,26 @@ function AnalysisSkeleton() {
   );
 }
 
-function insiderActionLabel(code: string, change: number): string {
+const INSIDER_ACTION_LABELS: Record<string, string> = {
+  A: "Thưởng CP",
+  G: "Tặng",
+  M: "Thực hiện quyền",
+  X: "Thực hiện quyền",
+  C: "Chuyển đổi",
+  F: "Khấu trừ thuế",
+  D: "Trả lại công ty",
+  J: "Khác",
+};
+
+/** Chỉ mua/bán trên sàn (P/S) là tự quyết — thưởng, quà, thực hiện quyền… để xám. */
+function insiderAction(code: string, change: number): { label: string; tone: string } {
   const c = code.toUpperCase();
-  if (c === "P" || c === "A") return "Mua";
-  if (c === "S" || c === "D") return "Bán";
-  return change < 0 ? "Bán" : "Mua";
+  if (c === "P") return { label: "Mua", tone: "text-emerald-600" };
+  if (c === "S") return { label: "Bán", tone: "text-rose-600" };
+  return {
+    label: INSIDER_ACTION_LABELS[c] ?? (change < 0 ? "Giảm" : "Tăng"),
+    tone: "text-app-muted",
+  };
 }
 
 export function StockAnalysisView({ symbol }: { symbol: string }) {
@@ -759,14 +774,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                           {t.relationship ?? "—"}
                         </td>
                         <td className="py-2 pr-4">
-                          <span
-                            className={
-                              t.change < 0
-                                ? "text-rose-600"
-                                : "text-emerald-600"
-                            }
-                          >
-                            {insiderActionLabel(t.transactionCode, t.change)}
+                          <span className={insiderAction(t.transactionCode, t.change).tone}>
+                            {insiderAction(t.transactionCode, t.change).label}
                           </span>
                         </td>
                         <td className="py-2 pr-4 text-right tabular-nums">
