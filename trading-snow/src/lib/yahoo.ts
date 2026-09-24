@@ -24,6 +24,13 @@ export interface QuoteResult {
   logo?: string;
   source?: "yahoo" | "finnhub" | "yahoo-search" | "twelve-data";
   marketSession?: MarketSession;
+  /**
+   * Phiên chính gần nhất khi `price` là giá pre-market/after-hours: giá đóng cửa và % của
+   * cả ngày — `changePercent` lúc đó chỉ là biến động ngoài giờ.
+   */
+  regularPrice?: number;
+  regularChange?: number;
+  regularChangePercent?: number;
 }
 
 export interface DividendEvent {
@@ -154,7 +161,8 @@ export async function fetchYahooInsiderData(symbol: string): Promise<YahooInside
       if (!name || !date || shares === 0) continue;
       const relation =
         typeof t.filerRelation === "string" ? t.filerRelation.trim() : undefined;
-      if (relation) rosterByName[yahooPersonKey(name)] = relation;
+      // Không ghi đè chức vụ từ danh sách cổ đông nội bộ bằng mô tả chung của từng giao dịch.
+      if (relation && !rosterByName[yahooPersonKey(name)]) rosterByName[yahooPersonKey(name)] = relation;
       transactions.push({
         name,
         date,
@@ -268,6 +276,8 @@ interface YahooChartMeta {
   marketState?: string;
   regularMarketPrice?: number;
   regularMarketTime?: number;
+  regularMarketChange?: number;
+  regularMarketChangePercent?: number;
   preMarketPrice?: number;
   preMarketChange?: number;
   preMarketChangePercent?: number;
@@ -292,6 +302,8 @@ interface YahooV7Quote {
   regularMarketPrice?: number;
   regularMarketTime?: number;
   regularMarketPreviousClose?: number;
+  regularMarketChange?: number;
+  regularMarketChangePercent?: number;
   preMarketPrice?: number;
   preMarketChange?: number;
   preMarketChangePercent?: number;
@@ -312,6 +324,8 @@ function v7QuoteToMeta(q: YahooV7Quote): YahooChartMeta {
     marketState: q.marketState,
     regularMarketPrice: q.regularMarketPrice,
     regularMarketTime: q.regularMarketTime,
+    regularMarketChange: q.regularMarketChange,
+    regularMarketChangePercent: q.regularMarketChangePercent,
     preMarketPrice: q.preMarketPrice,
     preMarketChange: q.preMarketChange,
     preMarketChangePercent: q.preMarketChangePercent,
@@ -347,6 +361,11 @@ function quoteResultFromMeta(
     currency: meta.currency ?? "USD",
     marketSession: resolved.marketSession,
     source,
+    ...(resolved.regular && {
+      regularPrice: resolved.regular.price,
+      regularChange: resolved.regular.change,
+      regularChangePercent: resolved.regular.changePercent,
+    }),
   };
 }
 
@@ -400,6 +419,8 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
   change: number;
   changePercent: number;
   marketSession: MarketSession;
+  /** Chỉ có khi `price` là giá ngoài giờ. */
+  regular?: { price: number; change: number; changePercent: number };
 } | null {
   const regular = meta.regularMarketPrice;
   if (!regular || regular <= 0) return null;
@@ -419,12 +440,24 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
     return { price, change, changePercent };
   };
 
+  const regularSession = () => {
+    if (meta.regularMarketChange != null && meta.regularMarketChangePercent != null) {
+      return {
+        price: regular,
+        change: meta.regularMarketChange,
+        changePercent: meta.regularMarketChangePercent,
+      };
+    }
+    // Chart API không trả % phiên chính; prevClose trùng giá đóng cửa là đã sang ngày mới.
+    return prevClose !== regular ? fromPrevClose(regular) : undefined;
+  };
+
   if ((state === "PRE" || state === "PREPRE") && pre && pre > 0) {
     const change = meta.preMarketChange ?? pre - prevClose;
     const changePercent =
       meta.preMarketChangePercent ??
       (prevClose > 0 ? (change / prevClose) * 100 : 0);
-    return { price: pre, change, changePercent, marketSession: "pre" };
+    return { price: pre, change, changePercent, marketSession: "pre", regular: regularSession() };
   }
 
   if ((state === "POST" || state === "POSTPOST") && post && post > 0) {
@@ -433,7 +466,7 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
     const changePercent =
       meta.postMarketChangePercent ??
       (base > 0 ? (change / base) * 100 : 0);
-    return { price: post, change, changePercent, marketSession: "post" };
+    return { price: post, change, changePercent, marketSession: "post", regular: regularSession() };
   }
 
   if (state === "REGULAR") {
@@ -446,7 +479,7 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
     const changePercent =
       meta.preMarketChangePercent ??
       (prevClose > 0 ? (change / prevClose) * 100 : 0);
-    return { price: pre, change, changePercent, marketSession: "pre" };
+    return { price: pre, change, changePercent, marketSession: "pre", regular: regularSession() };
   }
 
   // CLOSED — use latest extended quote if still from current session day
@@ -456,14 +489,14 @@ export function resolveExtendedQuote(meta: YahooChartMeta): {
     const changePercent =
       meta.postMarketChangePercent ??
       (base > 0 ? (change / base) * 100 : 0);
-    return { price: post, change, changePercent, marketSession: "post" };
+    return { price: post, change, changePercent, marketSession: "post", regular: regularSession() };
   }
   if (pre && pre > 0 && preTime && (!regularTime || preTime > regularTime)) {
     const change = meta.preMarketChange ?? pre - prevClose;
     const changePercent =
       meta.preMarketChangePercent ??
       (prevClose > 0 ? (change / prevClose) * 100 : 0);
-    return { price: pre, change, changePercent, marketSession: "pre" };
+    return { price: pre, change, changePercent, marketSession: "pre", regular: regularSession() };
   }
 
   return { ...fromPrevClose(regular), marketSession: "closed" };
@@ -904,7 +937,8 @@ export function yahooStatsToFinnhubMetrics(stats: YahooKeyStats): Record<string,
   if (stats.revenueGrowth != null) put("revenueGrowthTTMYoy", stats.revenueGrowth * 100);
   put("dividendPerShareTTM", stats.dividendRate);
   if (stats.dividendYield != null) put("dividendYieldIndicatedAnnual", stats.dividendYield * 100);
-  put("payoutRatioTTM", stats.payoutRatio);
+  // Như biên lợi nhuận ở trên: Finnhub ghi %, Yahoo ghi phân số.
+  if (stats.payoutRatio != null) put("payoutRatioTTM", stats.payoutRatio * 100);
   put("52WeekHigh", stats.fiftyTwoWeekHigh);
   put("52WeekLow", stats.fiftyTwoWeekLow);
   if (stats.fiftyTwoWeekChange != null) put("52WeekPriceReturnDaily", stats.fiftyTwoWeekChange * 100);

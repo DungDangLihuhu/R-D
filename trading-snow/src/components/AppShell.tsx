@@ -38,6 +38,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     useApp();
   const navRef = useRef<HTMLElement>(null);
   const navWrapRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+
+  // Chiều cao header thay đổi theo bề rộng (hàng portfolio xuống dòng trên điện thoại):
+  // thanh dính bên dưới nó và điểm neo các mục đọc biến này thay vì một số cố định.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const update = () =>
+      root.style.setProperty("--app-header-h", `${Math.round(el.getBoundingClientRect().height)}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Nav cuộn ngang mà không có scrollbar: bật mép mờ khi còn mục bị khuất,
   // và luôn kéo mục đang mở vào tầm nhìn.
@@ -68,8 +83,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <div className="flex min-h-screen bg-app-bg flex-col overflow-x-hidden text-app-text">
-      <header className="app-header">
+    <div className="flex min-h-screen bg-app-bg flex-col overflow-x-clip text-app-text">
+      <header ref={headerRef} className="app-header">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link
             href="/"
