@@ -1,4 +1,5 @@
 import { formatDecimal } from "./format";
+import { digestNews, type CompanyRef } from "./news-sentiment";
 import {
   industryValuationSell,
   mean,
@@ -63,11 +64,6 @@ const RATING_LABELS: Record<AssessmentRating, string> = {
   buy: "Mua",
   strong_buy: "Mua Mạnh",
 };
-
-const POSITIVE_NEWS =
-  /\b(upgrade|raised guidance|beats? estimates|record (revenue|profit)|buyback|lawsuit settled|beat consensus)\b/i;
-const NEGATIVE_NEWS =
-  /\b(downgrade|cut guidance|misses? estimates|lawsuit|probe|investigation|layoff|warning|restatement|fraud|plunge|going concern)\b/i;
 
 const DAY_MS = 86_400_000;
 
@@ -260,7 +256,8 @@ function valuationSignal(
 
 function newsSignal(
   news: NewsRow[],
-  sentiment?: NewsSentimentSummary | null
+  sentiment?: NewsSentimentSummary | null,
+  company?: CompanyRef
 ): AssessmentSignal {
   if (sentiment) {
     const bull = sentiment.bullishPercent > 1 ? sentiment.bullishPercent / 100 : sentiment.bullishPercent;
@@ -278,12 +275,8 @@ function newsSignal(
     };
   }
 
-  const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
-  const recent = news.filter((n) => {
-    const t = new Date(n.date).getTime();
-    return Number.isFinite(t) && t >= weekAgo;
-  });
-  if (!recent.length) {
+  const digest = digestNews(news, company ?? { symbol: "" });
+  if (digest.total === 0) {
     return {
       id: "news",
       label: "Tin tức (7 ngày)",
@@ -292,32 +285,21 @@ function newsSignal(
       available: false,
     };
   }
-
-  let net = 0;
-  let classified = 0;
-  for (const n of recent) {
-    const pos = POSITIVE_NEWS.test(n.headline);
-    const neg = NEGATIVE_NEWS.test(n.headline);
-    if (pos === neg) continue;
-    net += pos ? 1 : -1;
-    classified += 1;
-  }
-
-  if (!classified) {
+  if (digest.score == null) {
     return {
       id: "news",
       label: "Tin tức (7 ngày)",
       score: 0,
-      detail: `${recent.length} tin · chưa rõ hướng`,
-      available: true,
+      detail: `${digest.total} tin · không tin nào nói trực tiếp về mã`,
+      available: false,
     };
   }
 
   return {
     id: "news",
     label: "Tin tức (7 ngày)",
-    score: clamp((net / classified) * 0.7),
-    detail: `${recent.length} tin · ${classified} có hướng`,
+    score: clamp(digest.score * 1.5),
+    detail: `${digest.relevant} tin về mã · ${digest.positive} tốt · ${digest.negative} xấu`,
     available: true,
   };
 }
@@ -872,6 +854,8 @@ const SIGNAL_WEIGHTS: Record<string, number> = {
 
 export function computeStockAssessment(input: {
   price: number;
+  /** Để chấm tin: chỉ tính tiêu đề nói về chính công ty này. */
+  company?: CompanyRef;
   metrics: Record<string, number>;
   news: NewsRow[];
   insiderTransactions: InsiderRow[];
@@ -897,7 +881,7 @@ export function computeStockAssessment(input: {
     valuationSignal(input.metrics, input.pegRatio, shortPct),
     technicalSignal(input.price, input.priceLevels, input.priceHistory),
     earningsSignal(input.earningsHistory),
-    newsSignal(input.news, input.newsSentiment),
+    newsSignal(input.news, input.newsSentiment, input.company ?? { symbol: "" }),
     insiderSignal(input.insiderTransactions),
     optionFlowSignal(input.optionFlow),
     recommendationSignal(input.recommendations),

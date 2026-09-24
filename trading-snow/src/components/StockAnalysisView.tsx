@@ -19,6 +19,7 @@ import {
   formatPercent,
   formatShares,
 } from "@/lib/format";
+import { assessHeadline, type HeadlineAssessment } from "@/lib/news-sentiment";
 import type { StockAnalysis, StockAnalysisExtra } from "@/lib/stock-analysis";
 import type { MarketSession } from "@/lib/types";
 import {
@@ -89,6 +90,29 @@ function formatPeriod(period: string, unit: "day" | "month"): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(period);
   if (!m) return period;
   return unit === "month" ? `${m[2]}/${m[1]}` : `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function NewsToneBadge({ tone }: { tone: HeadlineAssessment }) {
+  const base = "rounded px-1.5 py-0.5 text-[10px] font-medium";
+  const why = tone.matches.length ? `Khớp: ${tone.matches.join(", ")}` : undefined;
+  if (!tone.relevant) {
+    return <span className={`${base} bg-app-tint text-gray-500`}>Tin chung</span>;
+  }
+  if (tone.tone === "positive") {
+    return (
+      <span title={why} className={`${base} bg-emerald-50 text-emerald-700`}>
+        Tích cực
+      </span>
+    );
+  }
+  if (tone.tone === "negative") {
+    return (
+      <span title={why} className={`${base} bg-rose-50 text-rose-700`}>
+        Tiêu cực
+      </span>
+    );
+  }
+  return null;
 }
 
 function ChartSkeleton() {
@@ -854,27 +878,41 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
 
           {data.news.length > 0 && (
             <Section title="Tin tức">
+              <p className="-mt-2 mb-3 text-xs text-gray-500">
+                Nhãn tốt/xấu chấm tự động từ cụm từ tài chính trong tiêu đề, chỉ với tin nói về{" "}
+                {data.symbol}. Chỉ để tham khảo.
+              </p>
               <ul className="space-y-3">
-                {data.news.map((n, i) => (
-                  <li key={i} className="border-b border-gray-100 pb-3 last:border-0">
-                    {n.url ? (
-                      <a
-                        href={n.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-medium text-brand-ink hover:underline"
-                      >
-                        {n.headline}
-                      </a>
-                    ) : (
-                      <p className="font-medium">{n.headline}</p>
-                    )}
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      {formatDate(n.date)}
-                      {n.source ? ` · ${n.source}` : ""}
-                    </p>
-                  </li>
-                ))}
+                {data.news.map((n, i) => {
+                  const tone = assessHeadline(n.headline, { symbol: data.symbol, name: data.name });
+                  return (
+                    <li key={i} className="border-b border-gray-100 pb-3 last:border-0">
+                      {n.url ? (
+                        <a
+                          href={n.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`font-medium hover:underline ${
+                            tone.relevant ? "text-brand-ink" : "text-gray-500"
+                          }`}
+                        >
+                          {n.headline}
+                        </a>
+                      ) : (
+                        <p className={`font-medium ${tone.relevant ? "" : "text-gray-500"}`}>
+                          {n.headline}
+                        </p>
+                      )}
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                        <span>
+                          {formatDate(n.date)}
+                          {n.source ? ` · ${n.source}` : ""}
+                        </span>
+                        <NewsToneBadge tone={tone} />
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             </Section>
           )}

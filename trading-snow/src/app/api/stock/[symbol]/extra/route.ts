@@ -30,6 +30,7 @@ export async function GET(
     const extra = await cached(cacheKey(["stock-extra", upper]), EXTRA_TTL, () =>
       fetchStockAnalysisExtra(upper, {
         symbol: core.symbol,
+        name: core.name,
         price: core.price,
         sections: core.sections,
         priceHistory: core.priceHistory,
