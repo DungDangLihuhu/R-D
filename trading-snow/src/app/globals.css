@@ -163,9 +163,13 @@
   color-scheme: dark;
 }
 
+/* clip chứ không hidden: hidden biến body thành một vùng cuộn riêng (không bao giờ cuộn)
+   nên mọi `position: sticky` bên trong — header, mục lục trang Phân tích — thôi dính.
+   Dòng hidden chỉ còn cho trình duyệt chưa hỗ trợ clip. */
 html,
 body {
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -195,9 +199,10 @@ button:not(:disabled) {
 }
 
 @layer components {
-  /* Header vẫn giữ blur vì nội dung cuộn bên dưới nó; mọi lớp khác nền đặc. */
+  /* Header vẫn giữ blur vì nội dung cuộn bên dưới nó; mọi lớp khác nền đặc.
+     Chỉ dính từ sm: trên điện thoại header ba hàng cao ~150px, dính thì mất 1/5 màn hình. */
   .app-header {
-    @apply sticky top-0 z-50 backdrop-blur-md;
+    @apply relative z-50 backdrop-blur-md sm:sticky sm:top-0;
     background: var(--app-header-bg);
     border-bottom: 1px solid var(--app-border-soft);
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { yahooInsiderCode } from "./yahoo";
+import { resolveExtendedQuote, yahooInsiderCode } from "./yahoo";
 
 describe("yahooInsiderCode", () => {
   it("only codes real open-market trades as P or S", () => {
@@ -16,5 +16,51 @@ describe("yahooInsiderCode", () => {
     ).toBe("M");
     expect(yahooInsiderCode("")).toBe("J");
     expect(yahooInsiderCode(undefined)).toBe("J");
+  });
+});
+
+describe("resolveExtendedQuote", () => {
+  const afterHours = {
+    marketState: "POST",
+    regularMarketPrice: 337.02,
+    postMarketPrice: 336.94,
+    postMarketChange: -0.08,
+    postMarketChangePercent: -0.024,
+    chartPreviousClose: 339.74,
+  };
+
+  it("keeps the day's close and move apart from the after-hours move", () => {
+    const quote = resolveExtendedQuote({
+      ...afterHours,
+      regularMarketChange: -2.72,
+      regularMarketChangePercent: -0.8,
+    });
+    expect(quote).toMatchObject({ price: 336.94, changePercent: -0.024, marketSession: "post" });
+    expect(quote?.regular).toEqual({ price: 337.02, change: -2.72, changePercent: -0.8 });
+  });
+
+  it("derives the day's move from the previous close when Yahoo leaves it out", () => {
+    expect(resolveExtendedQuote(afterHours)?.regular?.changePercent).toBeCloseTo(-0.8, 2);
+  });
+
+  it("skips the day's move once the previous close has rolled to the last close", () => {
+    const quote = resolveExtendedQuote({
+      marketState: "PRE",
+      regularMarketPrice: 337.02,
+      preMarketPrice: 338,
+      chartPreviousClose: 337.02,
+    });
+    expect(quote?.marketSession).toBe("pre");
+    expect(quote?.regular).toBeUndefined();
+  });
+
+  it("has no separate close during the regular session", () => {
+    const quote = resolveExtendedQuote({
+      marketState: "REGULAR",
+      regularMarketPrice: 340,
+      chartPreviousClose: 337.02,
+    });
+    expect(quote?.regular).toBeUndefined();
+    expect(quote?.changePercent).toBeCloseTo(0.884, 2);
   });
 });

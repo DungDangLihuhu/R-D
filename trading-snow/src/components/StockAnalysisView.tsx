@@ -14,6 +14,7 @@ import { currentUsdRate, formatNativeMoney, isUsdCurrency } from "@/lib/fx";
 import {
   formatDate,
   formatMoney,
+  formatNumber,
   formatPercent,
   formatShares,
 } from "@/lib/format";
@@ -41,6 +42,9 @@ type LiveQuote = {
   change: number;
   changePercent: number;
   marketSession?: MarketSession;
+  /** Giá đóng cửa và % cả ngày khi `price` là giá pre-market/after-hours. */
+  regularPrice?: number;
+  regularChangePercent?: number;
 };
 
 function toLiveQuote(q: {
@@ -48,6 +52,8 @@ function toLiveQuote(q: {
   change?: number;
   changePercent?: number;
   marketSession?: MarketSession;
+  regularPrice?: number;
+  regularChangePercent?: number;
 } | null | undefined): LiveQuote | null {
   if (!q || !(q.price != null && q.price > 0)) return null;
   return {
@@ -55,6 +61,8 @@ function toLiveQuote(q: {
     change: q.change ?? 0,
     changePercent: q.changePercent ?? 0,
     marketSession: q.marketSession,
+    regularPrice: q.regularPrice,
+    regularChangePercent: q.regularChangePercent,
   };
 }
 
@@ -309,6 +317,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             change: number;
             changePercent: number;
             marketSession?: MarketSession;
+            regularPrice?: number;
+            regularChangePercent?: number;
           }[];
           fx?: Record<string, number>;
         };
@@ -352,6 +362,8 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
         change: data.change,
         changePercent: data.changePercent,
         marketSession: data.marketSession,
+        regularPrice: data.regularPrice,
+        regularChangePercent: data.regularChangePercent,
       })
     : null;
   const quote = liveQuote ?? ctxQuote ?? analysisQuote;
@@ -359,6 +371,12 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
     quote?.marketSession === "pre" || quote?.marketSession === "post"
       ? quote.marketSession
       : undefined;
+  // Ngoài giờ: số lớn là giá đóng cửa và % cả ngày, dòng phụ là giá và % ngoài giờ —
+  // trước đây cả hai cùng hiện % ngoài giờ.
+  const regularClose =
+    extendedSession && quote?.regularPrice != null && quote.regularChangePercent != null
+      ? { price: quote.regularPrice, changePercent: quote.regularChangePercent }
+      : null;
 
   return (
     <div className="space-y-6">
@@ -419,7 +437,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
               {showSuggestions && (searchQuery.trim() || visibleSuggestions.length > 0) && (
                 <ul
                   id="stock-search-suggestions"
-                  className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto app-popover rounded-lg py-1"
+                  className="absolute left-0 right-0 top-full z-40 mt-1 max-h-64 overflow-auto app-popover rounded-lg py-1"
                   role="listbox"
                 >
                   {searchLoading && visibleSuggestions.length === 0 && (
@@ -484,7 +502,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
         <>
           <nav
             aria-label="Mục trong trang"
-            className="sticky top-[7.5rem] z-30 -mx-1 flex gap-1 overflow-x-auto px-1 py-1 scrollbar-none"
+            className="sticky top-0 z-30 -mx-1 flex gap-1 overflow-x-auto bg-app-bg/90 px-1 py-1 backdrop-blur-sm scrollbar-none sm:top-[var(--app-header-h,7.5rem)]"
           >
             {SECTION_LINKS.map((s) => (
               <a
@@ -497,7 +515,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             ))}
           </nav>
 
-          <div id="tong-quan" className="app-card scroll-mt-40 p-4 sm:p-6">
+          <div id="tong-quan" className="app-card scroll-mt-12 sm:scroll-mt-[calc(var(--app-header-h,7.5rem)+3rem)] p-4 sm:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex min-w-0 flex-1 flex-wrap items-start gap-4">
                 {data.logo ? (
@@ -529,31 +547,44 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                   <div className="mt-2">
                     <div className="flex flex-wrap items-baseline gap-3">
                       <span className="text-2xl font-semibold tabular-nums">
-                        {formatNativeMoney(quote?.price ?? data.price, data.currency)}
+                        {formatNativeMoney(
+                          regularClose?.price ?? quote?.price ?? data.price,
+                          data.currency
+                        )}
                       </span>
                       {!isUsdCurrency(data.currency) && usdPerUnit != null && (
                         <span className="text-sm text-gray-500 tabular-nums">
-                          ≈ {formatMoney((quote?.price ?? data.price) * usdPerUnit)}
+                          ≈{" "}
+                          {formatMoney(
+                            (regularClose?.price ?? quote?.price ?? data.price) * usdPerUnit
+                          )}
                         </span>
                       )}
                       <span
                         className={`text-sm font-medium tabular-nums ${
-                          (quote?.changePercent ?? data.changePercent) >= 0
+                          (regularClose?.changePercent ?? quote?.changePercent ?? data.changePercent) >= 0
                             ? "text-emerald-600"
                             : "text-rose-600"
                         }`}
                       >
-                        {formatPercent(quote?.changePercent ?? data.changePercent)}
+                        {formatPercent(
+                          regularClose?.changePercent ?? quote?.changePercent ?? data.changePercent
+                        )}
                       </span>
                       {data.high52 != null && data.low52 != null && (
-                        <span className="text-xs text-gray-500">
-                          52w: {data.low52.toFixed(2)} – {data.high52.toFixed(2)}
+                        <span className="text-xs text-gray-500 tabular-nums">
+                          52w: {formatNumber(data.low52, 2)} – {formatNumber(data.high52, 2)}
                         </span>
                       )}
                     </div>
                     <SessionBadge
                       session={extendedSession}
-                      changePercent={extendedSession ? quote?.changePercent : null}
+                      changePercent={regularClose ? quote?.changePercent : null}
+                      price={
+                        regularClose && quote
+                          ? formatNativeMoney(quote.price, data.currency)
+                          : undefined
+                      }
                     />
                   </div>
                   {holding && (
@@ -587,7 +618,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             )}
           </div>
 
-          <div id="bieu-do" className="scroll-mt-40 space-y-3">
+          <div id="bieu-do" className="scroll-mt-12 sm:scroll-mt-[calc(var(--app-header-h,7.5rem)+3rem)] space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="app-segmented">
                 <button
@@ -628,7 +659,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
           </div>
 
           {data.sections.length > 0 ? (
-            <div id="chi-so" className="grid scroll-mt-40 gap-4 lg:grid-cols-2">
+            <div id="chi-so" className="grid scroll-mt-12 sm:scroll-mt-[calc(var(--app-header-h,7.5rem)+3rem)] gap-4 lg:grid-cols-2">
               {data.sections.map((section) => (
                 <MetricSection key={section.id} title={section.title} metrics={section.metrics} />
               ))}
@@ -801,7 +832,7 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
                             : "—"}
                         </td>
                         <td className="py-2 text-right tabular-nums">
-                          {formatShares(t.shares)}
+                          {t.shares != null ? formatShares(t.shares) : "—"}
                         </td>
                       </tr>
                     ))}
@@ -890,7 +921,7 @@ function AssessmentVerdict({
             {formatMoney(assessment.buyPrice, currency)}
           </dd>
           <p
-            className="mt-0.5 truncate text-[11px] leading-snug text-gray-500"
+            className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500"
             title={assessment.buyNote}
           >
             {assessment.buyNote}
@@ -902,7 +933,7 @@ function AssessmentVerdict({
             {formatMoney(assessment.sellPrice, currency)}
           </dd>
           <p
-            className="mt-0.5 truncate text-[11px] leading-snug text-gray-500"
+            className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500"
             title={assessment.sellNote}
           >
             {assessment.sellNote}
@@ -938,7 +969,7 @@ function AssessmentSignals({ assessment }: { assessment: StockAssessment }) {
                 {signalScoreLabel(s.score, s.available)}
               </span>
             </div>
-            <p className="mt-0.5 truncate text-[11px] leading-snug text-gray-500" title={s.detail}>
+            <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500" title={s.detail}>
               {s.detail}
             </p>
           </li>
@@ -962,7 +993,7 @@ function Section({
   id?: string;
 }) {
   return (
-    <div id={id} className="app-card scroll-mt-40 p-4">
+    <div id={id} className="app-card scroll-mt-12 sm:scroll-mt-[calc(var(--app-header-h,7.5rem)+3rem)] p-4">
       <h3 className="mb-3 font-semibold">{title}</h3>
       {children}
     </div>

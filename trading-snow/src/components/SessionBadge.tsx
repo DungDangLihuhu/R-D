@@ -10,9 +10,12 @@ function pnlClass(value: number) {
 export function SessionBadge({
   session,
   changePercent,
+  price,
 }: {
   session?: MarketSession;
   changePercent?: number | null;
+  /** Giá ngoài giờ đã định dạng — khi số chính ở trên là giá đóng cửa phiên chính. */
+  price?: string;
 }) {
   if (session !== "pre" && session !== "post") return null;
   const label = session === "pre" ? "Pre-market" : "After hours";
@@ -27,7 +30,8 @@ export function SessionBadge({
     <span
       className={`mt-0.5 block text-[10px] font-semibold tabular-nums whitespace-nowrap ${pnlClass(changePercent)}`}
     >
-      ({label} {formatPercent(changePercent)})
+      ({label} {price ? `${price} ` : ""}
+      {formatPercent(changePercent)})
     </span>
   );
 }

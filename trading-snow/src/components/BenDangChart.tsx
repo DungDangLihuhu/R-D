@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -12,6 +12,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  useActiveTooltipLabel,
   usePlotArea,
   useXAxisScale,
   useYAxisScale,
@@ -392,41 +393,114 @@ function WyckoffEventMarkers({
   );
 }
 
-function ChartTooltip({
-  active,
-  payload,
-  currency,
-  tooltipStyle,
-}: {
-  active?: boolean;
-  payload?: { payload?: TaPoint }[];
-  currency: string;
-  tooltipStyle?: CSSProperties;
-}) {
-  if (!active || !payload?.[0]?.payload) return null;
-  const p = payload[0].payload;
+/**
+ * Ngày của nến đang trỏ, dùng chung cho ba khung. Để ngoài state của biểu đồ: rê chuột
+ * chỉ vẽ lại mấy dòng số liệu, không vẽ lại 150 cây nến.
+ */
+function createHoverStore() {
+  let date: string | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => date,
+    set(next: string | null) {
+      if (next === date) return;
+      date = next;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+type HoverStore = ReturnType<typeof createHoverStore>;
+
+/**
+ * Đặt trong khung giá: nhờ syncId nó nhận cả khi trỏ ở khung volume/RSI, và chạy cả với
+ * cảm ứng (hook đọc trạng thái tooltip của Recharts, không phụ thuộc sự kiện chuột).
+ */
+function ActiveDateReporter({ onChange }: { onChange: (date: string | null) => void }) {
+  const label = useActiveTooltipLabel();
+  const date = label == null ? null : String(label);
+  useEffect(() => onChange(date), [date, onChange]);
+  return null;
+}
+
+/** Nến đang trỏ, hoặc nến cuối khi không trỏ — cùng nến trước nó để tính % thay đổi. */
+function useReadoutPoint(data: TaPoint[], hover: HoverStore) {
+  const date = useSyncExternalStore(hover.subscribe, hover.get, () => null);
+  const hovered = date == null ? -1 : data.findIndex((p) => p.date === date);
+  const index = hovered >= 0 ? hovered : data.length - 1;
+  return { point: data[index], prev: index > 0 ? data[index - 1] : undefined };
+}
+
+const READOUT_CLASS =
+  "pointer-events-none absolute left-[72px] top-1 z-10 flex max-w-[calc(100%-84px)] flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded bg-app-surface/85 px-1 text-[11px] font-medium tabular-nums text-gray-500";
+
+function formatReadoutPrice(value: number): string {
+  const digits = Math.abs(value) >= 1 ? 2 : 4;
+  return new Intl.NumberFormat("vi-VN", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function PriceReadout({ data, hover }: { data: TaPoint[]; hover: HoverStore }) {
+  const { point, prev } = useReadoutPoint(data, hover);
+  if (!point) return null;
+  const tone = point.close >= point.open ? "text-emerald-600" : "text-rose-600";
+  const change = prev && prev.close > 0 ? (point.close / prev.close - 1) * 100 : null;
+  const values: [string, number][] = [
+    ["Mở", point.open],
+    ["Cao", point.high],
+    ["Thấp", point.low],
+    ["Đóng", point.close],
+  ];
   return (
-    <div
-      className="rounded-lg border px-3 py-2 text-xs shadow-md"
-      style={tooltipStyle}
-    >
-      <p className="mb-1 opacity-70">{p.label}</p>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
-        <span className="opacity-70">Mở</span>
-        <span>{formatMoney(p.open, currency)}</span>
-        <span className="opacity-70">Cao</span>
-        <span>{formatMoney(p.high, currency)}</span>
-        <span className="opacity-70">Thấp</span>
-        <span>{formatMoney(p.low, currency)}</span>
-        <span className="opacity-70">Đóng</span>
-        <span className="font-semibold">{formatMoney(p.close, currency)}</span>
-        <span className="opacity-70">Vol</span>
-        <span>{formatVolume(p.volume)}</span>
-        <span className="opacity-70">RSI {RSI_PERIOD}</span>
-        <span className="font-semibold">
-          {p.rsi != null ? p.rsi.toFixed(1) : "—"}
+    <div className={READOUT_CLASS}>
+      <span className="text-app-text">{point.label}</span>
+      {values.map(([name, value]) => (
+        <span key={name}>
+          {name} <span className={tone}>{formatReadoutPrice(value)}</span>
         </span>
-      </div>
+      ))}
+      {change != null && (
+        <span className={change >= 0 ? "text-emerald-600" : "text-rose-600"}>
+          {formatPercent(change)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function VolumeReadout({ data, hover }: { data: TaPoint[]; hover: HoverStore }) {
+  const { point } = useReadoutPoint(data, hover);
+  return (
+    <div className={READOUT_CLASS}>
+      <span>Vol</span>
+      <span className="font-semibold">{point ? formatVolume(point.volume) : "—"}</span>
+    </div>
+  );
+}
+
+function RsiReadout({ data, hover }: { data: TaPoint[]; hover: HoverStore }) {
+  const { point } = useReadoutPoint(data, hover);
+  const rsi = point?.rsi ?? null;
+  const tone =
+    rsi == null
+      ? "text-gray-500"
+      : rsi >= 70
+        ? "text-rose-500"
+        : rsi <= 30
+          ? "text-emerald-500"
+          : "text-violet-400";
+  return (
+    <div className={READOUT_CLASS}>
+      <span>RSI {RSI_PERIOD}</span>
+      <span className={`font-semibold ${tone}`}>{rsi != null ? rsi.toFixed(1) : "—"}</span>
     </div>
   );
 }
@@ -450,23 +524,6 @@ function VolumeBarShape(props: {
       fill={up ? COLORS.candleUp : COLORS.candleDown}
       opacity={0.72}
     />
-  );
-}
-
-function PaneLabel({
-  title,
-  value,
-  valueClass,
-}: {
-  title: string;
-  value?: string;
-  valueClass?: string;
-}) {
-  return (
-    <div className="pointer-events-none absolute left-[72px] top-1 z-10 flex items-baseline gap-2 text-[11px] font-medium text-gray-500">
-      <span>{title}</span>
-      {value ? <span className={`tabular-nums font-semibold ${valueClass ?? ""}`}>{value}</span> : null}
-    </div>
   );
 }
 
@@ -780,37 +837,12 @@ export function BenDangChart({
     return points.map((p, i) => ({ ...p, rsi: rsi[i] }));
   }, [points]);
 
-  const lastRsi = useMemo(() => {
-    for (let i = chartData.length - 1; i >= 0; i--) {
-      if (chartData[i].rsi != null) return chartData[i].rsi;
-    }
-    return null;
-  }, [chartData]);
+  const [hover] = useState(createHoverStore);
 
   const maxVolume = useMemo(
     () => chartData.reduce((m, p) => (p.volume > m ? p.volume : m), 0),
     [chartData]
   );
-
-  const tooltipStyle = useMemo<CSSProperties>(
-    () => ({
-      background: chartTheme.tooltip.background,
-      border: chartTheme.tooltip.border,
-      color: chartTheme.tooltip.color,
-      borderRadius: chartTheme.tooltip.borderRadius,
-      boxShadow: chartTheme.tooltip.boxShadow,
-    }),
-    [chartTheme]
-  );
-
-  const rsiTone =
-    lastRsi == null
-      ? "text-gray-500"
-      : lastRsi >= 70
-        ? "text-rose-500"
-        : lastRsi <= 30
-          ? "text-emerald-500"
-          : "text-violet-400";
 
   const yDomain = useMemo(
     () =>
@@ -865,6 +897,7 @@ export function BenDangChart({
         <>
           <div className="min-w-0 w-full space-y-1">
             <div className="relative h-[360px] w-full">
+              <PriceReadout data={chartData} hover={hover} />
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={chartData}
@@ -883,9 +916,11 @@ export function BenDangChart({
                     tickCount={6}
                   />
                   <Tooltip
-                    content={<ChartTooltip currency={currency} tooltipStyle={tooltipStyle} />}
+                    content={() => null}
                     cursor={{ stroke: chartTheme.tick, strokeDasharray: "3 3" }}
+                    isAnimationActive={false}
                   />
+                  <ActiveDateReporter onChange={hover.set} />
                   <Bar dataKey="close" fill="transparent" isAnimationActive={false} />
                   <PremiumDiscountZones
                     zone={indicators.smc.premiumDiscount}
@@ -904,10 +939,7 @@ export function BenDangChart({
             </div>
 
             <div className="relative h-[88px] w-full">
-              <PaneLabel
-                title="Vol"
-                value={maxVolume > 0 ? formatVolume(chartData[chartData.length - 1]?.volume ?? 0) : "Không có dữ liệu"}
-              />
+              <VolumeReadout data={chartData} hover={hover} />
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} syncId={TA_SYNC_ID} margin={CHART_MARGIN}>
                   <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" vertical={false} />
@@ -921,8 +953,9 @@ export function BenDangChart({
                     allowDecimals
                   />
                   <Tooltip
-                    content={<ChartTooltip currency={currency} tooltipStyle={tooltipStyle} />}
+                    content={() => null}
                     cursor={{ stroke: chartTheme.tick, strokeDasharray: "3 3" }}
+                    isAnimationActive={false}
                   />
                   <Bar
                     dataKey="volume"
@@ -935,11 +968,7 @@ export function BenDangChart({
             </div>
 
             <div className="relative h-[116px] w-full">
-              <PaneLabel
-                title={`RSI ${RSI_PERIOD}`}
-                value={lastRsi != null ? lastRsi.toFixed(1) : "—"}
-                valueClass={rsiTone}
-              />
+              <RsiReadout data={chartData} hover={hover} />
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} syncId={TA_SYNC_ID} margin={{ ...CHART_MARGIN, bottom: 18 }}>
                   <CartesianGrid stroke={chartTheme.grid} strokeDasharray="3 3" />
@@ -965,8 +994,9 @@ export function BenDangChart({
                   <ReferenceLine y={30} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.7} />
                   <ReferenceLine y={50} stroke={chartTheme.tick} strokeDasharray="3 3" strokeOpacity={0.45} />
                   <Tooltip
-                    content={<ChartTooltip currency={currency} tooltipStyle={tooltipStyle} />}
+                    content={() => null}
                     cursor={{ stroke: chartTheme.tick, strokeDasharray: "3 3" }}
+                    isAnimationActive={false}
                   />
                   <Line
                     type="monotone"

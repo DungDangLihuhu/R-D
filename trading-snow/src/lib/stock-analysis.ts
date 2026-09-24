@@ -1,5 +1,6 @@
 import type { MarketSession } from "./types";
 import { getFinnhubApiKey } from "./quote-config";
+import { formatVolume } from "./format";
 import { resolveYahooSymbolCandidates } from "./symbol";
 import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderCode, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
 import type { YahooInsiderData, YahooKeyStats } from "./yahoo";
@@ -37,7 +38,8 @@ export interface InsiderRow {
   name: string;
   date: string;
   change: number;
-  shares: number;
+  /** Số cổ phiếu còn nắm sau giao dịch; null khi nguồn không có (Yahoo). */
+  shares: number | null;
   transactionCode: string;
   transactionPrice?: number | null;
   amount?: number | null;
@@ -93,6 +95,9 @@ export interface StockAnalysis {
   changePercent: number;
   /** pre / post when Yahoo is in extended hours */
   marketSession?: MarketSession;
+  /** Giá đóng cửa và % cả ngày của phiên chính khi `price` là giá ngoài giờ. */
+  regularPrice?: number;
+  regularChangePercent?: number;
   high52?: number;
   low52?: number;
   sections: AnalysisSection[];
@@ -286,6 +291,11 @@ function num(v: number | null | undefined, d = 2): string {
   return v.toFixed(d);
 }
 
+/** Khối lượng như trục volume của biểu đồ ("45,8 Tr") — 45831430 không tách nghìn rất khó đọc. */
+function volume(v: number | null | undefined): string {
+  return v != null && Number.isFinite(v) && v > 0 ? formatVolume(v) : "—";
+}
+
 function capMillions(m: number | null | undefined): string {
   if (m == null || !Number.isFinite(m)) return "—";
   const usd = m * 1_000_000;
@@ -400,19 +410,22 @@ function buildInsiderRows(
       t.value && t.shares
         ? Math.abs(t.value / t.shares)
         : null;
-    const amount =
-      t.value ?? (unitPrice != null ? change * unitPrice : null);
+    // Yahoo trả giá trị luôn dương — lấy dấu theo chiều cổ phiếu như cột "Thay đổi CP";
+    // giá trị 0 (thưởng, quà tặng) là không có tiền, không phải "+0 US$".
+    const amount = t.value ? Math.sign(change) * Math.abs(t.value) : null;
     return {
       name: t.name,
       date: t.date,
       change,
-      shares: 0,
+      shares: null,
       transactionCode: yahooInsiderCode(t.transactionText),
       transactionPrice: unitPrice,
       amount,
+      // Chức vụ trong danh sách cổ đông nội bộ cụ thể hơn và giống nhau ở mọi dòng của
+      // một người; mỗi giao dịch Yahoo lại ghi một kiểu ("Officer", "General Counsel").
       relationship:
-        t.relation?.trim() ||
         yahooInsider.rosterByName[normalizePersonName(t.name)] ||
+        t.relation?.trim() ||
         null,
     };
   });
@@ -613,7 +626,7 @@ function buildSections(
         metric("EPS TTM", num(m.epsTTM)),
         signedMetric("EPS tăng Y/Y", m.epsGrowthTTMYoy, pct),
         signedMetric("Doanh thu tăng Y/Y", m.revenueGrowthTTMYoy, pct),
-        metric("Cổ tức/năm", num(m.dividendPerShareTTM, 4)),
+        metric("Cổ tức/năm", num(m.dividendPerShareTTM)),
         positiveIfAbove("Tỷ suất cổ tức", m.dividendYieldIndicatedAnnual, pct, 0),
         metric("Tiền mặt/CP", num(m.cashPerSharePerShareQuarterly)),
         metric("Beta", num(m.beta)),
@@ -652,7 +665,7 @@ function buildSections(
         signedMetric("Doanh thu Q/Q Y/Y", m.revenueGrowthQuarterlyYoy, pct),
         signedMetric("EPS tăng 3Y", m.epsGrowth3Y, pct),
         signedMetric("EPS tăng 5Y", m.epsGrowth5Y, pct),
-        metric("Tỷ lệ trả cổ tức", pct((m.payoutRatioTTM ?? 0) * 100)),
+        metric("Tỷ lệ trả cổ tức", pct(m.payoutRatioTTM)),
       ],
     },
     {
@@ -663,8 +676,8 @@ function buildSections(
         metric("Thấp 52 tuần", num(m["52WeekLow"])),
         signedMetric("Lợi nhuận 52 tuần", m["52WeekPriceReturnDaily"], pct),
         signedMetric("Lợi nhuận 3 tháng", m["13WeekPriceReturnDaily"], pct),
-        metric("KL TB 10 ngày", num(m["10DayAverageTradingVolume"], 0)),
-        metric("KL TB 3 tháng", num(m["3MonthAverageTradingVolume"], 0)),
+        metric("KL TB 10 ngày", volume(m["10DayAverageTradingVolume"])),
+        metric("KL TB 3 tháng", volume(m["3MonthAverageTradingVolume"])),
         volatilityMetric("Độ biến động 3 tháng", m["3MonthADReturnStd"]),
         metric(
           "Short % float",
@@ -1006,6 +1019,8 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     change: quote.change,
     changePercent: quote.changePercent,
     marketSession: quote.marketSession,
+    regularPrice: quote.regularPrice,
+    regularChangePercent: quote.regularChangePercent,
     high52: m["52WeekHigh"] ?? undefined,
     low52: m["52WeekLow"] ?? undefined,
     sections,
