@@ -842,6 +842,7 @@ export async function fetchStockAnalysisExtra(
   core: Pick<
     StockAnalysis,
     | "symbol"
+    | "name"
     | "price"
     | "sections"
     | "priceHistory"
@@ -890,6 +891,7 @@ export async function fetchStockAnalysisExtra(
 
   const assessment = computeStockAssessment({
     price: core.price,
+    company: { symbol: core.symbol, name: core.name },
     metrics: core.metrics,
     news,
     insiderTransactions,
