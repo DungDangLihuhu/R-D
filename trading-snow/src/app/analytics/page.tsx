@@ -12,14 +12,14 @@ import { formatMoney } from "@/lib/format";
 
 const BenchmarkComparison = dynamic(
   () =>
-    import("@/components/BenchmarkComparison").then((m) => m.BenchmarkComparison),
+    import("@/components/charts-bundle").then((m) => m.BenchmarkComparison),
   {
     loading: () => <div className="app-skeleton h-80" />,
   }
 );
 
 const MonthlyPnlChart = dynamic(
-  () => import("@/components/Charts").then((m) => m.MonthlyPnlChart),
+  () => import("@/components/charts-bundle").then((m) => m.MonthlyPnlChart),
   {
     loading: () => <div className="app-skeleton h-64" />,
   }

@@ -69,12 +69,12 @@ function toLiveQuote(q: {
 }
 
 const BenDangChart = dynamic(
-  () => import("@/components/BenDangChart").then((m) => m.BenDangChart),
+  () => import("@/components/charts-bundle").then((m) => m.BenDangChart),
   { loading: () => <ChartSkeleton /> }
 );
 
 const StockPriceChart = dynamic(
-  () => import("@/components/StockPriceChart").then((m) => m.StockPriceChart),
+  () => import("@/components/charts-bundle").then((m) => m.StockPriceChart),
   { loading: () => <ChartSkeleton /> }
 );
 
