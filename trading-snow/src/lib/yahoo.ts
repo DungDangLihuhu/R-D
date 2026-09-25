@@ -49,6 +49,8 @@ export interface SymbolSearchResult {
 export interface HistoryPoint {
   date: string;
   close: number;
+  /** Giá điều chỉnh cả cổ tức (chỉ khi yêu cầu `adjusted`) — cho lợi nhuận gồm cổ tức. */
+  adjClose?: number;
 }
 
 /** Một lần chia tách: `ratio` = cổ mới / cổ cũ (NVDA 10/06/2024 → 10). */
@@ -232,7 +234,8 @@ export async function fetchListingCurrency(symbol: string): Promise<string | nul
 export async function fetchCloseHistory(
   symbol: string,
   from: Date,
-  to: Date
+  to: Date,
+  options?: { adjusted?: boolean }
 ): Promise<CloseHistory> {
   const yahoo = toYahooSymbol(symbol);
   const period1 = Math.floor(from.getTime() / 1000);
@@ -248,14 +251,19 @@ export async function fetchCloseHistory(
   const result = json?.chart?.result?.[0];
   const timestamps: number[] = result?.timestamp ?? [];
   const closes: number[] = result?.indicators?.quote?.[0]?.close ?? [];
+  const adjusted: (number | null)[] | undefined = options?.adjusted
+    ? result?.indicators?.adjclose?.[0]?.adjclose
+    : undefined;
 
   const points: HistoryPoint[] = [];
   for (let i = 0; i < timestamps.length; i++) {
     const close = closes[i];
     if (close == null || close <= 0) continue;
+    const adjClose = adjusted?.[i];
     points.push({
       date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
       close,
+      ...(adjClose != null && adjClose > 0 ? { adjClose } : {}),
     });
   }
 
