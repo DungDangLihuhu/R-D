@@ -352,8 +352,16 @@ export function buildTwrGrowth(
   const grid = [
     ...new Set(Object.values(priceHistory).flatMap((points) => points.map((p) => p.date))),
   ].sort();
+  // Chỉ phần cổ phiếu: mua là tiền vào, bán và cổ tức là tiền ra. Nạp/rút và lãi tiền mặt
+  // (cổ tức của CASH) không phải lợi nhuận của cổ phiếu nên bỏ qua.
   const sorted = [...transactions]
-    .filter((t) => t.type === "BUY" || t.type === "SELL" || t.type === "SPLIT" || t.type === "DIVIDEND")
+    .filter(
+      (t) =>
+        t.type === "BUY" ||
+        t.type === "SELL" ||
+        t.type === "SPLIT" ||
+        (t.type === "DIVIDEND" && t.symbol !== "CASH")
+    )
     .sort(compareTransactionsChronologically);
   if (grid.length === 0 || sorted.length === 0) return { dates: [], growth: [] };
 
