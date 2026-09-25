@@ -100,7 +100,12 @@ export function toUsdQuotes(
     out[symbol] =
       rate == null || rate === 1
         ? quote
-        : { ...quote, price: quote.price * rate, change: quote.change * rate };
+        : {
+            ...quote,
+            price: quote.price * rate,
+            change: quote.change * rate,
+            ...(quote.regularChange != null && { regularChange: quote.regularChange * rate }),
+          };
   }
   return out;
 }

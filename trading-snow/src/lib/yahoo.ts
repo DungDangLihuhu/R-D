@@ -49,6 +49,8 @@ export interface SymbolSearchResult {
 export interface HistoryPoint {
   date: string;
   close: number;
+  /** Giá điều chỉnh cả cổ tức (chỉ khi yêu cầu `adjusted`) — cho lợi nhuận gồm cổ tức. */
+  adjClose?: number;
 }
 
 /** Một lần chia tách: `ratio` = cổ mới / cổ cũ (NVDA 10/06/2024 → 10). */
@@ -232,7 +234,8 @@ export async function fetchListingCurrency(symbol: string): Promise<string | nul
 export async function fetchCloseHistory(
   symbol: string,
   from: Date,
-  to: Date
+  to: Date,
+  options?: { adjusted?: boolean }
 ): Promise<CloseHistory> {
   const yahoo = toYahooSymbol(symbol);
   const period1 = Math.floor(from.getTime() / 1000);
@@ -248,14 +251,19 @@ export async function fetchCloseHistory(
   const result = json?.chart?.result?.[0];
   const timestamps: number[] = result?.timestamp ?? [];
   const closes: number[] = result?.indicators?.quote?.[0]?.close ?? [];
+  const adjusted: (number | null)[] | undefined = options?.adjusted
+    ? result?.indicators?.adjclose?.[0]?.adjclose
+    : undefined;
 
   const points: HistoryPoint[] = [];
   for (let i = 0; i < timestamps.length; i++) {
     const close = closes[i];
     if (close == null || close <= 0) continue;
+    const adjClose = adjusted?.[i];
     points.push({
       date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
       close,
+      ...(adjClose != null && adjClose > 0 ? { adjClose } : {}),
     });
   }
 
@@ -976,17 +984,68 @@ export function parseYahooNews(items: unknown, yahooSymbol: string): YahooNewsRo
   return rows.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export async function fetchYahooNews(symbol: string, limit = 12): Promise<YahooNewsRow[]> {
+/** Ngày công bố KQKD tới (và EPS dự báo) theo lịch của Yahoo — dùng khi không có Finnhub. */
+export async function fetchYahooNextEarnings(
+  symbol: string
+): Promise<{ date: string; epsEstimate: number | null; estimated: boolean } | null> {
+  const session = await getYahooSession();
+  if (!session) return null;
   for (const candidate of resolveYahooSymbolCandidates(symbol)) {
     const yahoo = toYahooSymbol(candidate);
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(yahoo)}&quotesCount=0&newsCount=${limit}`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeYahooSymbol(yahoo)}?modules=calendarEvents&crumb=${encodeURIComponent(session.crumb)}`;
+    const res = await fetch(url, {
+      headers: { ...YAHOO_HEADERS, Cookie: session.cookie },
+      next: { revalidate: 6 * 3600 },
+    });
+    if (!res.ok) continue;
+    const json = (await res.json()) as {
+      quoteSummary?: {
+        result?: {
+          calendarEvents?: {
+            earnings?: {
+              earningsDate?: unknown[];
+              earningsAverage?: unknown;
+              isEarningsDateEstimate?: boolean;
+            };
+          };
+        }[];
+      };
+    };
+    const earnings = json.quoteSummary?.result?.[0]?.calendarEvents?.earnings;
+    const date = parseYahooRawDate(earnings?.earningsDate?.[0]);
+    if (!date) continue;
+    return {
+      date,
+      epsEstimate: pickYahooNumber(earnings?.earningsAverage) ?? null,
+      estimated: Boolean(earnings?.isEarningsDateEstimate),
+    };
+  }
+  return null;
+}
+
+export async function fetchYahooNews(symbol: string, limit = 12): Promise<YahooNewsRow[]> {
+  return (await fetchYahooNewsWithName(symbol, limit)).rows;
+}
+
+/** Như fetchYahooNews, kèm tên công ty Yahoo trả trong cùng lượt tìm (để lọc tin đúng mã). */
+export async function fetchYahooNewsWithName(
+  symbol: string,
+  limit = 12
+): Promise<{ rows: YahooNewsRow[]; name?: string }> {
+  for (const candidate of resolveYahooSymbolCandidates(symbol)) {
+    const yahoo = toYahooSymbol(candidate);
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(yahoo)}&quotesCount=1&newsCount=${limit}`;
     const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 1800 } });
     if (!res.ok) continue;
-    const json = (await res.json()) as { news?: unknown };
+    const json = (await res.json()) as {
+      news?: unknown;
+      quotes?: { symbol?: string; longname?: string; shortname?: string }[];
+    };
     const rows = parseYahooNews(json.news, yahoo);
-    if (rows.length) return rows;
+    const quote = json.quotes?.find((q) => q.symbol?.toUpperCase() === yahoo.toUpperCase());
+    if (rows.length) return { rows, name: quote?.longname ?? quote?.shortname };
   }
-  return [];
+  return { rows: [] };
 }
 
 function pickYahooNumber(...values: unknown[]): number | undefined {

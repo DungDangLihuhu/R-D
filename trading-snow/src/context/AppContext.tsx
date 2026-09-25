@@ -87,6 +87,8 @@ interface AppContextValue {
     skipped: number;
   };
   deleteTransaction: (id: string) => void;
+  /** Sửa một lệnh tại chỗ (giữ id). */
+  updateTransaction: (id: string, next: Omit<Transaction, "id">) => void;
   restoreTransaction: (tx: Transaction) => void;
   setMarketPrice: (symbol: string, price: number) => void;
   setMarketPrices: (prices: Record<string, number>) => void;
@@ -105,6 +107,7 @@ type AppActions = Pick<
   | "addTransaction"
   | "importTransactions"
   | "deleteTransaction"
+  | "updateTransaction"
   | "restoreTransaction"
   | "setMarketPrice"
   | "setMarketPrices"
@@ -397,6 +400,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logo?: string;
         marketSession?: MarketSession;
         currency?: string;
+        regularChange?: number;
+        regularChangePercent?: number;
       }[] = [];
       const mergedFx: Record<string, number> = {};
       let mergedUnresolved: string[] = [];
@@ -425,6 +430,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               logo?: string;
               marketSession?: MarketSession;
               currency?: string;
+              regularChange?: number;
+              regularChangePercent?: number;
             }[];
             fx?: Record<string, number>;
             unresolved?: string[];
@@ -458,6 +465,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               logo: q.logo,
               marketSession: q.marketSession,
               currency: q.currency,
+              regularChange: q.regularChange,
+              regularChangePercent: q.regularChangePercent,
             };
           }
         }
@@ -539,6 +548,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [hydrated, holdingSymbolsKey, refreshPrices]);
+
+  // Tên các mã đã bán hết: giá chỉ lấy cho mã đang giữ nên lệnh cũ chỉ hiện ký hiệu
+  // ("INTC · INTC"). Hỏi một lần mỗi phiên, chỉ lưu vào marketQuotes — không đụng giá
+  // dùng để tính danh mục.
+  const namesAttempted = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const held = new Set(holdingSymbols);
+    const quotes = state.marketQuotes ?? {};
+    const missing = [...new Set(state.transactions.map((t) => t.symbol.toUpperCase()))].filter(
+      (symbol) =>
+        symbol !== "CASH" &&
+        !held.has(symbol) &&
+        !quotes[symbol]?.name &&
+        !namesAttempted.current.has(symbol)
+    );
+    if (missing.length === 0) return;
+    for (const symbol of missing) namesAttempted.current.add(symbol);
+
+    const batches: string[][] = [];
+    for (let i = 0; i < missing.length; i += QUOTE_BATCH_SIZE) {
+      batches.push(missing.slice(i, i + QUOTE_BATCH_SIZE));
+    }
+    void Promise.all(
+      batches.map((batch) =>
+        fetch(`/api/quotes?symbols=${encodeURIComponent(batch.join(","))}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null)
+      )
+    ).then((results) => {
+      const found = results.flatMap(
+        (r: { quotes?: { symbol: string; price: number; shortName?: string; logo?: string; currency?: string }[] } | null) =>
+          r?.quotes ?? []
+      );
+      if (found.length === 0) return;
+      setState((s) => {
+        const marketQuotes = { ...(s.marketQuotes ?? {}) };
+        for (const q of found) {
+          if (!(q.price > 0) || marketQuotes[q.symbol]?.name) continue;
+          marketQuotes[q.symbol] = {
+            ...(marketQuotes[q.symbol] ?? { price: q.price, change: 0, changePercent: 0 }),
+            name: q.shortName,
+            logo: q.logo,
+            currency: marketQuotes[q.symbol]?.currency ?? q.currency,
+          };
+        }
+        return { ...s, marketQuotes };
+      });
+    });
+  }, [hydrated, state.transactions, state.marketQuotes, holdingSymbols]);
 
   // Gắn tiền tệ niêm yết và tỷ giá ngày giao dịch cho lệnh còn thiếu (lệnh cũ, lệnh vừa
   // nhập tay/import, lệnh từ máy khác). Mỗi nhóm lệnh chỉ hỏi server một lần mỗi phiên.
@@ -627,6 +687,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const updateTransaction = useCallback((id: string, next: Omit<Transaction, "id">) => {
+    let fxStale = false;
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.map((t) => {
+        if (t.id !== id) return t;
+        // Đổi mã hoặc ngày thì tiền tệ/tỷ giá ngày khớp đã lưu không còn đúng: bỏ đi để
+        // bước gắn tỷ giá tính lại.
+        const sameFx =
+          t.symbol.toUpperCase() === next.symbol.toUpperCase() &&
+          t.date.slice(0, 10) === next.date.slice(0, 10);
+        if (!sameFx) fxStale = true;
+        const edited: Transaction = { ...next, id };
+        delete edited.currency;
+        delete edited.fxRate;
+        return sameFx ? { ...edited, currency: t.currency, fxRate: t.fxRate } : edited;
+      }),
+    }));
+    if (fxStale) fxAttempted.current.clear();
+  }, []);
+
   /** Hoàn tác xóa: giữ nguyên id cũ để không nhân bản khi bấm hai lần. */
   const restoreTransaction = useCallback((tx: Transaction) => {
     setState((s) =>
@@ -694,6 +775,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addTransaction,
       importTransactions,
       deleteTransaction,
+      updateTransaction,
       restoreTransaction,
       setMarketPrice,
       setMarketPrices,
@@ -709,6 +791,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addTransaction,
       importTransactions,
       deleteTransaction,
+      updateTransaction,
       restoreTransaction,
       setMarketPrice,
       setMarketPrices,

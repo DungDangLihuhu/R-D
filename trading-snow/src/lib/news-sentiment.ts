@@ -73,6 +73,9 @@ const RULES: Rule[] = [
   // Biến động giá — chỉ tính khi đúng công ty này tăng/giảm (xem `attributable`).
   { pattern: /\b(?:moves?|moved|trades?|traded|trading|heads?|headed|edges?|edged|inch(?:es|ed)|ticks?|ticked)\s+(?:lower|down)\b|\bdown\s+\d[\d.,]*%/, weight: -0.5, priceMove: true },
   { pattern: /\b(?:moves?|moved|trades?|traded|trading|heads?|headed|edges?|edged|inch(?:es|ed)|ticks?|ticked)\s+(?:higher|up)\b|\bup\s+\d[\d.,]*%/, weight: 0.5, priceMove: true },
+  // "Why Oracle (ORCL) Stock Is Down Today" — mẫu tiêu đề rất phổ biến.
+  { pattern: /\b(?:is|are)\s+(?:down|lower|falling|dropping|sliding|sinking|tumbling|plunging)\b/, weight: -0.5, priceMove: true },
+  { pattern: /\b(?:is|are)\s+(?:up|higher|rising|climbing|jumping|soaring|surging|rallying)\b/, weight: 0.5, priceMove: true },
   // Biến động giá mạnh.
   { pattern: /\b(?:soar(?:s|ed|ing)?|surg(?:e|es|ed|ing)|skyrocket(?:s|ed|ing)?|rocket(?:s|ed)?)\b/, weight: 0.9, priceMove: true },
   { pattern: /\b(?:plung(?:e|es|ed|ing)|plummet(?:s|ed|ing)?|tumbl(?:e|es|ed|ing)|sank|tank(?:s|ed|ing)?|crash(?:es|ed|ing)?|nosedives?|craters?|collaps(?:e|es|ed))\b/, weight: -0.9, priceMove: true },

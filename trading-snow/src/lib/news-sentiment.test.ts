@@ -45,6 +45,7 @@ const CASES: [string, string, boolean, NewsTone][] = [
   ["AMGN", "Amgen price target raised by Jefferies to $410 after positive Sjögren's data", true, "positive"],
   ["INTU", "Intuit (INTU) Down 17.1% Since Last Earnings Report: Can It Rebound?", true, "negative"],
   ["UPS", "Bank of America Just Told Investors to Sell UPS, and the Reason Has Nothing to Do With Package Volume", true, "negative"],
+  ["ORCL", "Why Oracle (ORCL) Stock Is Down Today", true, "negative"],
   // Tin nói về công ty nhưng không nghiêng về phía nào.
   ["DIS", "Disney World's peak Magic Kingdom ticket jumps $10 to $219 for 2027", true, "neutral"],
   ["AAPL", "Qualcomm Renews Deal With Apple. Why the Stock Is Dropping Anyway.", true, "neutral"],

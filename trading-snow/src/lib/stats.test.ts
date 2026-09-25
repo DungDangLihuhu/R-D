@@ -171,3 +171,27 @@ describe("oversell detection", () => {
     expect(heldQuantityAt(txs, "p", "AAPL", "2025-02-01")).toBe(6);
   });
 });
+
+describe("symbolPnl", () => {
+  it("adds realized, unrealized and dividends per symbol over all time", () => {
+    const stats = computePortfolioStats(
+      [
+        tx({ type: "BUY", symbol: "AAPL", quantity: 10, price: 100, date: daysAgo(300) }),
+        tx({ type: "SELL", symbol: "AAPL", quantity: 5, price: 120, date: daysAgo(200) }),
+        tx({ type: "DIVIDEND", symbol: "AAPL", quantity: 5, price: 4, date: daysAgo(100) }),
+        tx({ type: "BUY", symbol: "XYZ", quantity: 10, price: 50, date: daysAgo(90) }),
+        tx({ type: "BUY", symbol: "OLD", quantity: 4, price: 25, date: daysAgo(400) }),
+        tx({ type: "SELL", symbol: "OLD", quantity: 4, price: 20, date: daysAgo(350) }),
+      ],
+      "p",
+      { AAPL: 130, XYZ: 40 }
+    );
+    const bySymbol = new Map(stats.symbolPnl.map((s) => [s.symbol, s]));
+    // AAPL: chốt 5 × 20 = 100, đang giữ 5 × (130 − 100) = 150, cổ tức 20.
+    expect(bySymbol.get("AAPL")).toMatchObject({ realized: 100, unrealized: 150, dividends: 20, total: 270, invested: 1000, open: true });
+    expect(bySymbol.get("AAPL")?.percent).toBeCloseTo(27, 8);
+    expect(bySymbol.get("XYZ")).toMatchObject({ total: -100, open: true });
+    expect(bySymbol.get("OLD")).toMatchObject({ total: -20, open: false });
+    expect(stats.symbolPnl.map((s) => s.symbol)).toEqual(["AAPL", "OLD", "XYZ"]);
+  });
+});

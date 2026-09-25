@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useProfitCurve } from "@/hooks/useProfitCurve";
 
 const EquityChart = dynamic(
-  () => import("@/components/Charts").then((m) => m.EquityChart),
+  () => import("@/components/charts-bundle").then((m) => m.EquityChart),
   {
     loading: () => <div className="app-skeleton h-[280px]" />,
   }

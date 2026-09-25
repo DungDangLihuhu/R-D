@@ -2,7 +2,13 @@ import { getFinnhubApiKey } from "./quote-config";
 import { formatDecimal } from "./format";
 import type { CalendarEvent } from "./types";
 import { getUsMarketHolidays } from "./us-market-holidays";
-import { fetchDividends, type DividendEvent } from "./yahoo";
+import { assessHeadline } from "./news-sentiment";
+import {
+  fetchDividends,
+  fetchYahooNewsWithName,
+  fetchYahooNextEarnings,
+  type DividendEvent,
+} from "./yahoo";
 
 const MACRO_KEYWORDS = [
   "cpi",
@@ -69,13 +75,39 @@ export function projectUpcomingDividends(
   return projected;
 }
 
+/** Không có Finnhub (hoặc Finnhub không cover mã): ngày công bố tới theo lịch Yahoo. */
+async function fetchYahooEarningsEvent(
+  symbol: string,
+  from: string,
+  to: string
+): Promise<CalendarEvent[]> {
+  const next = await fetchYahooNextEarnings(symbol).catch(() => null);
+  if (!next || next.date < from || next.date > to) return [];
+  return [
+    {
+      id: `er-${symbol.toUpperCase()}-${next.date}`,
+      date: `${next.date}T12:00:00.000Z`,
+      title: "Báo cáo KQKD",
+      category: "earnings",
+      symbol: symbol.toUpperCase(),
+      subtitle: [
+        next.estimated ? "ngày dự kiến" : null,
+        next.epsEstimate != null ? `EPS dự báo ${formatDecimal(next.epsEstimate, 2)}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      impact: "high",
+    },
+  ];
+}
+
 async function fetchEarningsForSymbol(
   symbol: string,
   from: string,
   to: string
 ): Promise<CalendarEvent[]> {
   const key = finnhubKey();
-  if (!key) return [];
+  if (!key) return fetchYahooEarningsEvent(symbol, from, to);
 
   const events: CalendarEvent[] = [];
   const now = new Date().toISOString();
@@ -120,12 +152,44 @@ async function fetchEarningsForSymbol(
     if (events.length > 0) break;
   }
 
-  return events;
+  return events.length > 0 ? events : fetchYahooEarningsEvent(symbol, from, to);
+}
+
+const TONE_LABELS = { positive: "Tích cực", negative: "Tiêu cực" } as const;
+
+/**
+ * Tin Yahoo (14 ngày gần nhất) — dùng khi không có Finnhub. Yahoo gắn mã vào cả tin thị
+ * trường chung, nên chỉ giữ tin nhắc tới chính công ty, kèm nhãn tốt/xấu.
+ */
+async function fetchYahooNewsEvents(symbol: string): Promise<CalendarEvent[]> {
+  const since = Date.now() - 14 * 86_400_000;
+  const upper = symbol.toUpperCase();
+  const { rows, name } = await fetchYahooNewsWithName(symbol).catch(() => ({
+    rows: [],
+    name: undefined,
+  }));
+  return rows
+    .filter((n) => Date.parse(n.date) >= since)
+    .map((n) => ({ n, tone: assessHeadline(n.headline, { symbol: upper, name }) }))
+    .filter(({ tone }) => tone.relevant)
+    .slice(0, 5)
+    .map(({ n, tone }, i) => ({
+      id: `news-${upper}-${n.date}-${i}`,
+      date: n.date,
+      title: n.headline,
+      category: "news" as const,
+      symbol: upper,
+      subtitle: [n.source, tone.tone !== "neutral" ? TONE_LABELS[tone.tone] : null]
+        .filter(Boolean)
+        .join(" · "),
+      url: n.url,
+      impact: tone.tone === "negative" ? ("high" as const) : ("medium" as const),
+    }));
 }
 
 async function fetchNewsForSymbol(symbol: string): Promise<CalendarEvent[]> {
   const key = finnhubKey();
-  if (!key) return [];
+  if (!key) return fetchYahooNewsEvents(symbol);
 
   const to = new Date();
   const from = new Date();
@@ -414,8 +478,8 @@ export async function fetchDividendEvents(
           title: isProjected ? "Cổ tức dự kiến" : "Cổ tức",
           category: "dividend",
           symbol: d.symbol,
+          // Số tiền theo tiền niêm yết; lịch quy ra USD và nhân số cổ phiếu đang giữ.
           amount: d.amount,
-          subtitle: `$${formatDecimal(d.amount, 4)}/cp${isProjected ? " · ước tính từ lịch sử" : ""}`,
           impact: isProjected ? "medium" : "low",
         });
       }

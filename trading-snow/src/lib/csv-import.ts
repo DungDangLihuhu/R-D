@@ -87,7 +87,13 @@ function parseCsvLine(line: string, delimiter: Delimiter): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      inQuotes = !inQuotes;
+      // "" trong ô có ngoặc kép là một dấu " (chuẩn CSV).
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
     } else if (ch === delimiter && !inQuotes) {
       result.push(current.trim());
       current = "";
@@ -320,9 +326,13 @@ function parseSnowballTransactions(
   const iCountry = colIndex(headers, "country");
   const iExchange = colIndex(headers, "exchange", "market");
   const iCurrency = colIndex(headers, "currency");
+  const iNote = colIndex(headers, "note", "notes", "comment");
 
   const errors: string[] = [];
   const rows: CsvRow[] = [];
+  // Ghi chú trong file (bản xuất của app) được giữ; không có thì ghi nguồn import.
+  const noteFor = (cols: string[], eventRaw: string) =>
+    (iNote >= 0 ? cols[iNote]?.trim() : "") || `Snowball: ${eventRaw}`;
 
   if (iEvent < 0 || iDate < 0 || iPrice < 0 || iQty < 0) {
     return {
@@ -365,7 +375,7 @@ function parseSnowballTransactions(
         quantity: ratio,
         price: 0,
         fee: 0,
-        notes: `Snowball: ${eventRaw}`,
+        notes: noteFor(cols, eventRaw),
       });
       continue;
     }
@@ -402,7 +412,7 @@ function parseSnowballTransactions(
       quantity,
       price,
       fee,
-      notes: `Snowball: ${eventRaw}`,
+      notes: noteFor(cols, eventRaw),
       ...(!isCash && currency ? { currency } : {}),
     });
   }

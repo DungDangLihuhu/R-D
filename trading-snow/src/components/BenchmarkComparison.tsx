@@ -103,7 +103,8 @@ export function BenchmarkComparison({
   );
 
   const benchUrl = benchmarkWindow
-    ? `/api/benchmark?from=${extendBenchmarkFrom(benchmarkWindow.from)}&to=${benchmarkWindow.to}`
+    ? // `tr=1`: bản gồm cổ tức — khác URL để không dùng lại phản hồi cũ (chỉ giá) trong cache.
+      `/api/benchmark?from=${extendBenchmarkFrom(benchmarkWindow.from)}&to=${benchmarkWindow.to}&tr=1`
     : "";
 
   useEffect(() => {
@@ -174,7 +175,9 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            S&P 500: 0% đầu kỳ · Danh mục: (Δ lãi chốt + Δ float) / cost mở · &quot;Tất cả&quot;: tích lũy
+            {display?.method === "cost"
+              ? "S&P 500: 0% đầu kỳ · Danh mục: (Δ lãi chốt + Δ float) / cost mở (chưa tải được giá lịch sử)"
+              : "Lợi nhuận theo thời gian: không phụ thuộc lúc nạp hay rút tiền · cả hai gồm cổ tức"}
             {display?.clampedToHistory && (
               <> · Từ {formatDate(display.from)} (ngày trade đầu)</>
             )}
@@ -222,17 +225,20 @@ export function BenchmarkComparison({
               value={formatPercent(display.portfolioReturn)}
               trend={display.portfolioReturn >= 0 ? "up" : "down"}
               sub={
-                display.holdingsCost > 0
-                  ? `Cost mở: ${formatMoney(display.holdingsCost)}`
-                  : display.realizedPnl !== 0
-                    ? `Đã chốt: ${formatMoney(display.realizedPnl)}`
-                    : undefined
+                display.method === "twr"
+                  ? "Theo thời gian (TWR)"
+                  : display.holdingsCost > 0
+                    ? `Cost mở: ${formatMoney(display.holdingsCost)}`
+                    : display.realizedPnl !== 0
+                      ? `Đã chốt: ${formatMoney(display.realizedPnl)}`
+                      : undefined
               }
             />
             <StatCard
               label="S&P 500"
               value={formatPercent(display.sp500Return)}
               trend={display.sp500Return >= 0 ? "up" : "down"}
+              sub="SPY, gồm cổ tức"
             />
             <StatCard
               label="Vượt / thua S&P 500"

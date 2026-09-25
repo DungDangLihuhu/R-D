@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PenLine, Trash2 } from "lucide-react";
 import { CsvImport } from "@/components/CsvImport";
+import { DataBackup } from "@/components/DataBackup";
 import { SmsImport } from "@/components/SmsImport";
 import { TradeForm } from "@/components/TradeForm";
 import { TradeTable } from "@/components/TradeTable";
@@ -63,6 +64,7 @@ export default function TradesPage() {
           <PenLine className="h-4 w-4" />
           Thêm giao dịch thủ công
         </button>
+        <DataBackup />
       </div>
 
       {showManualForm && (
