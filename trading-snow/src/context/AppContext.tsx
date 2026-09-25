@@ -87,6 +87,8 @@ interface AppContextValue {
     skipped: number;
   };
   deleteTransaction: (id: string) => void;
+  /** Sửa một lệnh tại chỗ (giữ id). */
+  updateTransaction: (id: string, next: Omit<Transaction, "id">) => void;
   restoreTransaction: (tx: Transaction) => void;
   setMarketPrice: (symbol: string, price: number) => void;
   setMarketPrices: (prices: Record<string, number>) => void;
@@ -105,6 +107,7 @@ type AppActions = Pick<
   | "addTransaction"
   | "importTransactions"
   | "deleteTransaction"
+  | "updateTransaction"
   | "restoreTransaction"
   | "setMarketPrice"
   | "setMarketPrices"
@@ -684,6 +687,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const updateTransaction = useCallback((id: string, next: Omit<Transaction, "id">) => {
+    let fxStale = false;
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.map((t) => {
+        if (t.id !== id) return t;
+        // Đổi mã hoặc ngày thì tiền tệ/tỷ giá ngày khớp đã lưu không còn đúng: bỏ đi để
+        // bước gắn tỷ giá tính lại.
+        const sameFx =
+          t.symbol.toUpperCase() === next.symbol.toUpperCase() &&
+          t.date.slice(0, 10) === next.date.slice(0, 10);
+        if (!sameFx) fxStale = true;
+        const edited: Transaction = { ...next, id };
+        delete edited.currency;
+        delete edited.fxRate;
+        return sameFx ? { ...edited, currency: t.currency, fxRate: t.fxRate } : edited;
+      }),
+    }));
+    if (fxStale) fxAttempted.current.clear();
+  }, []);
+
   /** Hoàn tác xóa: giữ nguyên id cũ để không nhân bản khi bấm hai lần. */
   const restoreTransaction = useCallback((tx: Transaction) => {
     setState((s) =>
@@ -751,6 +775,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addTransaction,
       importTransactions,
       deleteTransaction,
+      updateTransaction,
       restoreTransaction,
       setMarketPrice,
       setMarketPrices,
@@ -766,6 +791,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addTransaction,
       importTransactions,
       deleteTransaction,
+      updateTransaction,
       restoreTransaction,
       setMarketPrice,
       setMarketPrices,

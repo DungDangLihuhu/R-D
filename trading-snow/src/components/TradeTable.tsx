@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Search, StickyNote, Trash2, Wallet } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, Pencil, Search, StickyNote, Trash2, Wallet } from "lucide-react";
 import { Pagination } from "@/components/Pagination";
 import { EmptyState } from "@/components/EmptyState";
 import { SymbolIdentity } from "@/components/SymbolIdentity";
+import { TradeForm } from "@/components/TradeForm";
 import { useApp } from "@/context/AppContext";
 import { usePagination } from "@/hooks/usePagination";
 import {
@@ -159,6 +160,7 @@ function TradeRow({
   companyLogo,
   pnl,
   onDelete,
+  onEdit,
 }: {
   layout: "table" | "card";
   /** Lệnh đã quy ra USD để hiển thị. */
@@ -169,6 +171,7 @@ function TradeRow({
   companyLogo?: string;
   pnl?: { pnl: number; pnlPercent: number };
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const cash = isCashSymbol(tx.symbol);
   const nativeHint =
@@ -179,14 +182,24 @@ function TradeRow({
       : undefined;
 
   const deleteBtn = (
-    <button
-      type="button"
-      onClick={onDelete}
-      className="app-btn-danger-ghost app-icon-btn"
-      aria-label={`Xóa giao dịch ${typeLabels[tx.type]} ${tx.symbol}`}
-    >
-      <Trash2 className="h-3.5 w-3.5" />
-    </button>
+    <span className="inline-flex items-center">
+      <button
+        type="button"
+        onClick={onEdit}
+        className="app-icon-btn text-app-muted hover:bg-app-tint hover:text-app-text"
+        aria-label={`Sửa giao dịch ${typeLabels[tx.type]} ${tx.symbol}`}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="app-btn-danger-ghost app-icon-btn"
+        aria-label={`Xóa giao dịch ${typeLabels[tx.type]} ${tx.symbol}`}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </span>
   );
 
   if (layout === "card") {
@@ -340,6 +353,8 @@ export function TradeTable() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDesc, setSortDesc] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   // Bảng hiện USD; lệnh gốc (tiền niêm yết) dùng cho hoàn tác xóa và chú thích giá.
   const { pnlByTxId, summary } = useMemo(
@@ -422,8 +437,16 @@ export function TradeTable() {
       companyLogo={state.marketQuotes?.[tx.symbol]?.logo}
       pnl={pnlByTxId.get(tx.id)}
       onDelete={() => handleDelete(tx)}
+      onEdit={() => {
+        setEditingId(tx.id);
+        requestAnimationFrame(() =>
+          editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+        );
+      }}
     />
   );
+  // Sửa trên lệnh gốc (giá theo tiền niêm yết), không phải bản đã quy ra USD.
+  const editing = editingId ? originals.get(editingId) : undefined;
 
   const handleDelete = (tx: Transaction) => {
     const original = originals.get(tx.id) ?? tx;
@@ -449,6 +472,16 @@ export function TradeTable() {
 
   return (
     <div className="space-y-4">
+      {editing && (
+        <div ref={editorRef} className="scroll-mt-24">
+          <TradeForm
+            key={editing.id}
+            initial={editing}
+            onSaved={() => setEditingId(null)}
+            onCancel={() => setEditingId(null)}
+          />
+        </div>
+      )}
       <TradeSummaryCard {...summary} />
 
       <div className="flex flex-wrap items-center gap-2">

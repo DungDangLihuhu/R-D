@@ -6,7 +6,7 @@ import { formatShares, formatSplitRatio } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
 import { toYahooSymbol } from "@/lib/symbol";
 import { heldQuantityAt } from "@/lib/trade-display";
-import type { AssetType, TransactionType } from "@/lib/types";
+import type { AssetType, Transaction, TransactionType } from "@/lib/types";
 
 const types: { value: TransactionType; label: string }[] = [
   { value: "BUY", label: "Mua" },
@@ -25,19 +25,48 @@ const assetTypes: { value: AssetType; label: string }[] = [
   { value: "OTHER", label: "Khác" },
 ];
 
-export function TradeForm({ onSaved }: { onSaved?: () => void }) {
-  const { state, activePortfolioId, addTransaction, currencyOf } = useApp();
-  const [type, setType] = useState<TransactionType>("BUY");
-  const [symbol, setSymbol] = useState("");
+export function TradeForm({
+  onSaved,
+  initial,
+  onCancel,
+}: {
+  onSaved?: () => void;
+  /** Có thì form sửa lệnh này (giữ id) thay vì thêm lệnh mới. Giá theo tiền niêm yết. */
+  initial?: Transaction;
+  onCancel?: () => void;
+}) {
+  const { state, activePortfolioId, addTransaction, updateTransaction, currencyOf } = useApp();
+  const editingSplit = initial?.type === "SPLIT";
+  const [type, setType] = useState<TransactionType>(initial?.type ?? "BUY");
+  const [symbol, setSymbol] = useState(
+    initial && initial.symbol !== "CASH" ? initial.symbol : ""
+  );
   const [exchange, setExchange] = useState("");
-  const [assetType, setAssetType] = useState<AssetType>("STOCK");
-  const [quantity, setQuantity] = useState("");
-  const [price, setPrice] = useState("");
-  const [fee, setFee] = useState("0");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState("");
-  const [splitNew, setSplitNew] = useState("");
+  const [assetType, setAssetType] = useState<AssetType>(initial?.assetType ?? "STOCK");
+  const [quantity, setQuantity] = useState(
+    initial && !editingSplit ? String(initial.quantity) : ""
+  );
+  const [price, setPrice] = useState(initial && !editingSplit ? String(initial.price) : "");
+  const [fee, setFee] = useState(initial ? String(initial.fee) : "0");
+  const [date, setDate] = useState(
+    initial ? initial.date.slice(0, 10) : new Date().toISOString().slice(0, 10)
+  );
+  const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [splitNew, setSplitNew] = useState(editingSplit ? String(initial.quantity) : "");
   const [splitOld, setSplitOld] = useState("1");
+
+  // Sửa lệnh: giữ giờ gốc nếu không đổi ngày, để thứ tự các lệnh cùng ngày không xáo trộn.
+  const isoDate = () =>
+    initial && initial.date.slice(0, 10) === date ? initial.date : new Date(date).toISOString();
+  const save = (tx: Omit<Transaction, "id">) => {
+    if (initial) updateTransaction(initial.id, { ...tx, portfolioId: initial.portfolioId });
+    else addTransaction(tx);
+  };
+  // Lệnh đang sửa không tính vào số cổ phiếu đang giữ khi cảnh báo bán vượt.
+  const otherTransactions = useMemo(
+    () => (initial ? state.transactions.filter((t) => t.id !== initial.id) : state.transactions),
+    [initial, state.transactions]
+  );
 
   const isCash = type === "DEPOSIT" || type === "WITHDRAW";
   const isSplit = type === "SPLIT";
@@ -47,9 +76,9 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
   const heldForSell = useMemo(
     () =>
       (type === "SELL" || type === "SPLIT") && resolvedSymbol
-        ? heldQuantityAt(state.transactions, activePortfolioId, resolvedSymbol, date)
+        ? heldQuantityAt(otherTransactions, activePortfolioId, resolvedSymbol, date)
         : null,
-    [type, resolvedSymbol, state.transactions, activePortfolioId, date]
+    [type, resolvedSymbol, otherTransactions, activePortfolioId, date]
   );
   const sellQuantity = parseFloat(quantity);
   const oversold =
@@ -88,7 +117,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       toast.error("Nhập tỷ lệ split hợp lệ, ví dụ 10 : 1");
       return;
     }
-    addTransaction({
+    save({
       portfolioId: activePortfolioId,
       type: "SPLIT",
       symbol: resolvedSymbol,
@@ -96,10 +125,12 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       quantity: ratio,
       price: 0,
       fee: 0,
-      date: new Date(date).toISOString(),
+      date: isoDate(),
       notes: notes || undefined,
     });
-    toast.success(`Đã lưu split ${resolvedSymbol} ${formatSplitRatio(ratio)}`);
+    toast.success(
+      `${initial ? "Đã cập nhật" : "Đã lưu"} split ${resolvedSymbol} ${formatSplitRatio(ratio)}`
+    );
     resetFields();
     onSaved?.();
   };
@@ -117,7 +148,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       toast.error("Nhập số lượng và giá hợp lệ");
       return;
     }
-    addTransaction({
+    save({
       portfolioId: activePortfolioId,
       type,
       symbol: isCash ? "CASH" : toYahooSymbol(symbol, exchange || undefined),
@@ -125,11 +156,15 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       quantity: q,
       price: p,
       fee: f,
-      date: new Date(date).toISOString(),
+      date: isoDate(),
       notes: notes || undefined,
     });
     const label = types.find((t) => t.value === type)?.label ?? type;
-    toast.success(`Đã lưu giao dịch ${label}${isCash ? "" : ` ${toYahooSymbol(symbol, exchange || undefined)}`}`);
+    toast.success(
+      `${initial ? "Đã cập nhật" : "Đã lưu"} giao dịch ${label}${
+        isCash ? "" : ` ${toYahooSymbol(symbol, exchange || undefined)}`
+      }`
+    );
     resetFields();
     onSaved?.();
   };
@@ -139,7 +174,7 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
       onSubmit={submit}
       className="space-y-4 app-card p-5"
     >
-      <h2 className="text-lg font-semibold">Thêm giao dịch</h2>
+      <h2 className="text-lg font-semibold">{initial ? "Sửa giao dịch" : "Thêm giao dịch"}</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="app-label">Loại</span>
@@ -302,12 +337,16 @@ export function TradeForm({ onSaved }: { onSaved?: () => void }) {
           placeholder="Tùy chọn"
         />
       </label>
-      <button
-        type="submit"
-        className="app-btn-primary"
-      >
-        Lưu giao dịch
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="app-btn-primary">
+          {initial ? "Lưu thay đổi" : "Lưu giao dịch"}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="app-btn-secondary">
+            Hủy
+          </button>
+        )}
+      </div>
     </form>
   );
 }
