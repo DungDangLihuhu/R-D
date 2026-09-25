@@ -1,5 +1,6 @@
 "use client";
 
+import { AllocationCard } from "@/components/AllocationCard";
 import { HoldingsTable } from "@/components/HoldingsTable";
 import { MissingSplitsNotice } from "@/components/MissingSplitsNotice";
 import { PageHeader } from "@/components/PageHeader";
@@ -53,6 +54,7 @@ export default function PortfolioPage() {
         />
       </div>
       <HoldingsTable />
+      <AllocationCard />
     </div>
   );
 }

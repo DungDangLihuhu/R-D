@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { StatCard } from "@/components/StatCard";
 import { PageHeader } from "@/components/PageHeader";
 import { ProfitCurvePanel } from "@/components/ProfitCurvePanel";
+import { TopMovers } from "@/components/TopMovers";
 import { useApp } from "@/context/AppContext";
 import { visiblePortfolioTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
@@ -60,6 +61,8 @@ export default function AnalyticsPage() {
           trend={stats.realizedPnl >= 0 ? "up" : "down"}
         />
       </div>
+
+      <TopMovers />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="app-card min-w-0">

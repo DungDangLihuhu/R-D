@@ -3,6 +3,7 @@ import type {
   Holding,
   MarketQuote,
   PortfolioStats,
+  SymbolPnl,
   Transaction,
 } from "./types";
 import {
@@ -32,6 +33,15 @@ function computePortfolioStatsInternal(
 
   const positions = new Map<string, PositionState>();
   const closedTrades: ClosedTrade[] = [];
+  const perSymbol = new Map<string, { invested: number; realized: number; dividends: number }>();
+  const symbolTotals = (symbol: string) => {
+    let entry = perSymbol.get(symbol);
+    if (!entry) {
+      entry = { invested: 0, realized: 0, dividends: 0 };
+      perSymbol.set(symbol, entry);
+    }
+    return entry;
+  };
   const lastPrices = new Map<string, number>();
 
   let cashBalance = 0;
@@ -94,6 +104,7 @@ function computePortfolioStatsInternal(
         cashBalance += gross - tx.fee;
         totalDividends += gross - tx.fee;
         addMonthlyPnl(tx.date, gross - tx.fee);
+        if (tx.symbol !== "CASH") symbolTotals(tx.symbol).dividends += gross - tx.fee;
         break;
       case "BUY": {
         const cost = gross + tx.fee;
@@ -103,6 +114,7 @@ function computePortfolioStatsInternal(
         pos.totalCost += cost;
         positions.set(tx.symbol, pos);
         lastPrices.set(tx.symbol, tx.price);
+        symbolTotals(tx.symbol).invested += cost;
         break;
       }
       case "SELL": {
@@ -112,6 +124,7 @@ function computePortfolioStatsInternal(
         const proceeds = gross - tx.fee;
         const pnl = proceeds - costBasis;
         realizedPnl += pnl;
+        symbolTotals(tx.symbol).realized += pnl;
         cashBalance += proceeds;
         addMonthlyPnl(tx.date, pnl);
 
@@ -181,6 +194,26 @@ function computePortfolioStatsInternal(
   }
 
   holdings.sort((a, b) => b.totalCost - a.totalCost);
+
+  const holdingBySymbol = new Map(holdings.map((h) => [h.symbol, h]));
+  const symbolPnl: SymbolPnl[] = [...perSymbol.entries()]
+    .map(([symbol, t]) => {
+      const holding = holdingBySymbol.get(symbol);
+      const unrealized =
+        holding?.marketPrice != null ? holding.quantity * holding.marketPrice - holding.totalCost : 0;
+      const total = t.realized + unrealized + t.dividends;
+      return {
+        symbol,
+        invested: t.invested,
+        realized: t.realized,
+        unrealized,
+        dividends: t.dividends,
+        total,
+        percent: t.invested > 0 ? (total / t.invested) * 100 : 0,
+        open: holding != null,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
 
   const wins = closedTrades.filter((t) => t.pnl > 0);
   const losses = closedTrades.filter((t) => t.pnl < 0);
@@ -275,6 +308,7 @@ function computePortfolioStatsInternal(
   const irr = computePortfolioIrr(irrFlows);
 
   return {
+    symbolPnl,
     totalDeposits,
     totalWithdrawals,
     totalDividends,

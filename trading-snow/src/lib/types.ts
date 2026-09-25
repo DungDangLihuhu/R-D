@@ -69,7 +69,23 @@ export interface ClosedTrade {
   date: string;
 }
 
+/** Lãi/lỗ toàn thời gian của một mã: đã chốt + đang giữ + cổ tức. */
+export interface SymbolPnl {
+  symbol: string;
+  /** Tổng tiền đã bỏ ra mua (gồm phí) — mẫu số của `percent`. */
+  invested: number;
+  realized: number;
+  unrealized: number;
+  dividends: number;
+  total: number;
+  percent: number;
+  /** Còn đang giữ. */
+  open: boolean;
+}
+
 export interface PortfolioStats {
+  /** Lãi/lỗ theo mã, lãi nhiều nhất trước. */
+  symbolPnl: SymbolPnl[];
   totalDeposits: number;
   totalWithdrawals: number;
   totalDividends: number;
