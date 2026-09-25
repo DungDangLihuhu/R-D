@@ -107,6 +107,10 @@ function sanitizeQuote(raw: unknown): MarketQuote | null {
   if (session) quote.marketSession = session;
   const currency = text(r.currency);
   if (currency) quote.currency = currency;
+  const regularChange = finite(r.regularChange);
+  if (regularChange != null) quote.regularChange = regularChange;
+  const regularChangePercent = finite(r.regularChangePercent);
+  if (regularChangePercent != null) quote.regularChangePercent = regularChangePercent;
   return quote;
 }
 

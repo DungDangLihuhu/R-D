@@ -32,15 +32,19 @@ export default function PortfolioPage() {
       <MissingSplitsNotice />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard
-          label="Tổng giá trị"
-          value={formatMoney(
-            stats.holdings.reduce(
-              (s, h) => s + h.quantity * (h.marketPrice ?? h.avgCost),
-              0
-            )
-          )}
+          label="Giá trị cổ phiếu"
+          value={formatMoney(stats.holdingsValue)}
+          sub={
+            stats.cashBalance >= 0
+              ? `Tổng tài sản ${formatMoney(stats.holdingsValue + stats.cashBalance)} (gồm tiền mặt)`
+              : undefined
+          }
         />
-        <StatCard label="Tiền vốn" value={formatMoney(stats.cashBalance)} />
+        <StatCard
+          label="Tiền mặt"
+          value={formatMoney(stats.cashBalance)}
+          sub={stats.cashBalance < 0 ? "Âm: còn thiếu lệnh nạp tiền" : "Nạp − rút − mua + bán + cổ tức"}
+        />
         <StatCard
           label="Lợi nhuận ròng"
           value={formatMoney(stats.totalProfit)}

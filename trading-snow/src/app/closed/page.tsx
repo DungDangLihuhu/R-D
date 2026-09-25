@@ -4,7 +4,7 @@ import { ClosedTradesTable } from "@/components/ClosedTradesTable";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { useApp } from "@/context/AppContext";
-import { formatMoney, formatPercent } from "@/lib/format";
+import { formatDecimal, formatMoney } from "@/lib/format";
 
 export default function ClosedTradesPage() {
   const { stats } = useApp();
@@ -36,8 +36,8 @@ export default function ClosedTradesPage() {
         />
         <StatCard
           label="Tỷ lệ thắng"
-          value={formatPercent(stats.winRate)}
-          trend={stats.winRate >= 50 ? "up" : "down"}
+          value={`${formatDecimal(stats.winRate, 1)}%`}
+          sub={`${stats.winCount}/${stats.totalTrades} lệnh có lãi`}
         />
       </div>
 

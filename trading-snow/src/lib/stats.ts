@@ -10,6 +10,7 @@ import {
   computePortfolioIrr,
   computeTotalProfit,
 } from "./portfolio-snowball";
+import { dayChange } from "./day-change";
 import { isTransactionHidden } from "./hidden-symbols";
 import { compareTransactionsChronologically } from "./transaction-order";
 
@@ -254,7 +255,7 @@ function computePortfolioStatsInternal(
   for (const h of holdings) {
     const quote = marketQuotes[h.symbol];
     if (quote) {
-      dailyHoldingsProfit += h.quantity * quote.change;
+      dailyHoldingsProfit += h.quantity * dayChange(quote).change;
     }
   }
   const prevHoldingsValue = holdingsValue - dailyHoldingsProfit;

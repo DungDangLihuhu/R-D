@@ -15,6 +15,7 @@ import {
   formatPnlArrow,
   formatShares,
 } from "@/lib/format";
+import { dayChange } from "@/lib/day-change";
 import { isUsdCurrency } from "@/lib/fx";
 
 // Bảng (màn rộng) và thẻ (mobile) là hai danh sách riêng: bảng mang vai trò table/row/cell
@@ -97,14 +98,15 @@ function HoldingRow({
     holding.marketPrice && holding.totalCost > 0
       ? (unrealized / holding.totalCost) * 100
       : 0;
-  const dailyChange =
-    quote && holding.marketPrice ? quote.change * holding.quantity : null;
-  const dailyPct = quote?.changePercent ?? null;
+  const today = quote ? dayChange(quote) : null;
+  const dailyChange = today && holding.marketPrice ? today.change * holding.quantity : null;
+  const dailyPct = today?.changePercent ?? null;
   const extendedSession =
     quote?.marketSession === "pre" || quote?.marketSession === "post"
       ? quote.marketSession
       : undefined;
-  const extendedPct = extendedSession ? dailyPct : null;
+  // Nhãn dưới giá chỉ nói phần ngoài giờ; cột "Hôm nay" là cả ngày.
+  const extendedPct = extendedSession ? (quote?.changePercent ?? null) : null;
 
   const priceSecondary = (align: "left" | "center" | "right") => {
     const items =

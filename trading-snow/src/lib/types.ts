@@ -51,6 +51,12 @@ export interface MarketQuote {
   marketSession?: MarketSession;
   /** Tiền tệ niêm yết theo Yahoo (USD, EUR, GBp…) — giá ở trên tính bằng đơn vị này. */
   currency?: string;
+  /**
+   * Biến động của phiên chính khi `price`/`change` là số sau giờ (xem `dayChange`).
+   * Không có với dữ liệu lưu từ bản cũ hoặc nguồn không phải Yahoo.
+   */
+  regularChange?: number;
+  regularChangePercent?: number;
 }
 
 export interface ClosedTrade {

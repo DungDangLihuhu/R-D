@@ -1,6 +1,7 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
 import { fetchJson } from "@/lib/fetch-cache";
+import { dayChange } from "@/lib/day-change";
 import { formatDecimal } from "@/lib/format";
 import { toast } from "@/lib/toast-store";
 import type { CalendarEvent, MarketQuote } from "@/lib/types";
@@ -50,13 +51,15 @@ export function notifyPriceMoves(
   const day = todayStr();
   for (const symbol of symbols) {
     const q = quotes[symbol];
-    if (!q || Math.abs(q.changePercent) < PRICE_MOVE_THRESHOLD) continue;
+    if (!q) continue;
+    const pct = dayChange(q).changePercent;
+    if (Math.abs(pct) < PRICE_MOVE_THRESHOLD) continue;
 
-    const dir = q.changePercent > 0 ? "up" : "down";
+    const dir = pct > 0 ? "up" : "down";
     const key = `price:${symbol}:${day}:${dir}`;
     showOnce(key, () => {
-      const sign = q.changePercent > 0 ? "+" : "";
-      toast.event(`${symbol} ${sign}${formatDecimal(q.changePercent, 1)}% hôm nay`, {
+      const sign = pct > 0 ? "+" : "";
+      toast.event(`${symbol} ${sign}${formatDecimal(pct, 1)}% hôm nay`, {
         description: q.name ?? "Biến động giá lớn trong danh mục",
       });
     });
