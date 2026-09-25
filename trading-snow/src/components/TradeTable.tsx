@@ -182,7 +182,7 @@ function TradeRow({
     <button
       type="button"
       onClick={onDelete}
-      className="app-btn-danger-ghost p-1.5"
+      className="app-btn-danger-ghost app-icon-btn"
       aria-label={`Xóa giao dịch ${typeLabels[tx.type]} ${tx.symbol}`}
     >
       <Trash2 className="h-3.5 w-3.5" />

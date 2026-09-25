@@ -414,8 +414,8 @@ export async function fetchDividendEvents(
           title: isProjected ? "Cổ tức dự kiến" : "Cổ tức",
           category: "dividend",
           symbol: d.symbol,
+          // Số tiền theo tiền niêm yết; lịch quy ra USD và nhân số cổ phiếu đang giữ.
           amount: d.amount,
-          subtitle: `$${formatDecimal(d.amount, 4)}/cp${isProjected ? " · ước tính từ lịch sử" : ""}`,
           impact: isProjected ? "medium" : "low",
         });
       }

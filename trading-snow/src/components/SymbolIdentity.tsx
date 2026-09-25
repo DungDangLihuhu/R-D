@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { SymbolAvatar } from "@/components/SymbolAvatar";
-import { tickerLabel } from "@/lib/symbol-profile";
+import { tickerWithExchange } from "@/lib/symbol-profile";
 
 export function SymbolIdentity({
   symbol,
@@ -33,7 +33,7 @@ export function SymbolIdentity({
       <div className="min-w-0">
         <p className={nameClassName}>{displayName}</p>
         {showTicker && (
-          <p className={`${tickerClassName} tabular-nums`}>{tickerLabel(symbol)}</p>
+          <p className={`${tickerClassName} tabular-nums`}>{tickerWithExchange(symbol)}</p>
         )}
         {extra}
       </div>

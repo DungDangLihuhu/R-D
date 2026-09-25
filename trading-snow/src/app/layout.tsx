@@ -12,8 +12,10 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Trading Snow — Nhật ký giao dịch",
+  // Trang con đặt tên riêng ("Danh mục · Trading Snow") để phân biệt các tab đang mở.
+  title: { default: "Trading Snow — Nhật ký giao dịch", template: "%s · Trading Snow" },
   description: "Web app thống kê trading kiểu Snowball",
+  appleWebApp: { title: "Trading Snow", statusBarStyle: "black-translucent" },
 };
 
 const themeInitScript = `(function(){try{var t=localStorage.getItem('trading-snow-theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}var d=document.documentElement;d.classList.toggle('dark',t==='dark');d.dataset.theme=t;}catch(e){}})();`;

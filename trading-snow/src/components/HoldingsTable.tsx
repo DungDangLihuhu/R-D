@@ -153,7 +153,7 @@ function HoldingRow({
       type="button"
       onClick={onToggleHidden}
       title={hidden ? "Hiện lại trong chỉ số" : "Tạm ẩn khỏi chỉ số"}
-      className={`rounded-lg p-1.5 transition-colors ${
+      className={`app-icon-btn ${
         hidden
           ? "text-amber-600 hover:bg-amber-50"
           : "text-gray-400 hover:bg-app-tint hover:text-gray-600"

@@ -47,3 +47,16 @@ describe("sanitizeAppState", () => {
     expect(result?.state.portfolios[0].id).toBe("default");
   });
 });
+
+describe("quotes", () => {
+  it("keeps the regular-session move needed for the day's change after hours", () => {
+    const result = sanitizeAppState({
+      portfolios: [{ id: "p", name: "Chính" }],
+      transactions: [],
+      marketQuotes: {
+        AAPL: { price: 336.94, change: -0.08, changePercent: -0.02, marketSession: "post", regularChange: -2.72, regularChangePercent: -0.8 },
+      },
+    });
+    expect(result?.state.marketQuotes?.AAPL).toMatchObject({ regularChange: -2.72, regularChangePercent: -0.8 });
+  });
+});

@@ -15,6 +15,30 @@ export function tickerLabel(symbol: string): string {
   return symbol.includes(".") ? symbol.split(".")[0] : symbol;
 }
 
+/** Hậu tố sàn của Yahoo → tên sàn ngắn. */
+const EXCHANGE_NAMES: Record<string, string> = {
+  PA: "Paris", L: "London", IL: "London", DE: "Xetra", F: "Frankfurt", AS: "Amsterdam",
+  BR: "Brussels", MI: "Milan", MC: "Madrid", LS: "Lisbon", SW: "Zurich", VI: "Vienna",
+  ST: "Stockholm", OL: "Oslo", CO: "Copenhagen", HE: "Helsinki", IR: "Dublin", WA: "Warsaw",
+  TO: "Toronto", V: "TSX-V", NE: "NEO", MX: "Mexico", SA: "São Paulo", HK: "Hong Kong",
+  T: "Tokyo", KS: "Korea", KQ: "KOSDAQ", SS: "Shanghai", SZ: "Shenzhen", TW: "Taiwan",
+  TWO: "Taiwan OTC", SI: "Singapore", AX: "ASX", NZ: "NZX", NS: "NSE", BO: "BSE",
+  JK: "Jakarta", BK: "Bangkok", KL: "Kuala Lumpur", VN: "HOSE", TA: "Tel Aviv",
+  JO: "Johannesburg",
+};
+
+/**
+ * Ký hiệu kèm sàn cho mã ngoài Mỹ: "SAN.PA" → "SAN · Paris". Chỉ cắt đuôi thì Sanofi
+ * (SAN.PA) trông như Santander (SAN, NYSE).
+ */
+export function tickerWithExchange(symbol: string): string {
+  const upper = symbol.toUpperCase();
+  const dot = upper.lastIndexOf(".");
+  if (upper === "CASH" || dot <= 0) return tickerLabel(symbol);
+  const exchange = EXCHANGE_NAMES[upper.slice(dot + 1)];
+  return exchange ? `${upper.slice(0, dot)} · ${exchange}` : upper;
+}
+
 export async function fetchSymbolProfile(symbol: string): Promise<SymbolProfile> {
   const key = symbol.trim().toUpperCase();
   if (!key || key === "CASH") return {};

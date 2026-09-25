@@ -387,6 +387,24 @@ button:not(:disabled) {
     color: var(--app-text-muted);
   }
 
+  /* Nút chỉ có biểu tượng (xóa lệnh, ẩn mã…). */
+  .app-icon-btn {
+    @apply inline-flex items-center justify-center rounded-lg p-1.5 transition-colors;
+  }
+
+  /* Màn hình cảm ứng: vùng bấm tối thiểu 40px — nút xóa và bộ lọc chỉ cao 28px, dễ bấm
+     trượt sang dòng bên cạnh. */
+  @media (pointer: coarse) {
+    .app-segmented-item,
+    .app-pill-active,
+    .app-pill-inactive {
+      @apply inline-flex min-h-10 items-center justify-center;
+    }
+    .app-icon-btn {
+      @apply min-h-10 min-w-10;
+    }
+  }
+
   .app-segmented-item:hover {
     color: var(--app-text);
   }
