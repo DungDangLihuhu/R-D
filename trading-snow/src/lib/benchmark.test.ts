@@ -106,4 +106,47 @@ describe("buildTwrGrowth", () => {
     // +1% cổ tức, rồi bán ở 105 khi giá đóng cửa hôm trước là 100: +5%.
     expect(result.growth.at(-1)).toBeCloseTo(1.01 * 1.05, 8);
   });
+
+  it("treats each buy as money in and each sale as money out, like a Snowball import", () => {
+    const history = {
+      AAA: [
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 120 },
+      ],
+      BBB: [
+        { date: "2025-01-06", close: 50 },
+        { date: "2025-01-07", close: 55 },
+      ],
+    };
+    const trades = [
+      trade({ id: "a1", symbol: "AAA", quantity: 10, price: 100, date: "2025-01-02" }),
+      trade({ id: "a2", symbol: "AAA", type: "SELL", quantity: 10, price: 120, date: "2025-01-03" }),
+      // Đã bán hết, rồi mở vị thế mới lớn gấp mười bằng tiền "nạp" mới.
+      trade({ id: "b1", symbol: "BBB", quantity: 200, price: 50, date: "2025-01-06" }),
+    ];
+    const result = buildTwrGrowth(trades, { BBB: 55 }, history);
+    // +20% ở AAA, đứng yên khi không cầm mã nào, rồi +10% ở BBB — không phụ thuộc số tiền.
+    expect(result.dates).toEqual(["2025-01-02", "2025-01-03", "2025-01-06", "2025-01-07"]);
+    expect(result.growth).toEqual([
+      expect.closeTo(1, 8),
+      expect.closeTo(1.2, 8),
+      expect.closeTo(1.2, 8),
+      expect.closeTo(1.32, 8),
+    ]);
+
+    // Lệnh nạp/rút tiền và lãi tiền mặt không phải lợi nhuận của phần cổ phiếu.
+    const cash = (partial: Partial<Transaction>) =>
+      trade({ symbol: "CASH", quantity: 1000, price: 1, ...partial });
+    const withCash = buildTwrGrowth(
+      [
+        cash({ id: "c1", type: "DEPOSIT", date: "2025-01-02" }),
+        ...trades,
+        cash({ id: "c2", type: "WITHDRAW", date: "2025-01-03" }),
+        cash({ id: "c3", type: "DIVIDEND", quantity: 50, date: "2025-01-07" }),
+      ],
+      { BBB: 55 },
+      history
+    );
+    expect(withCash.growth.at(-1)).toBeCloseTo(1.32, 8);
+  });
 });
