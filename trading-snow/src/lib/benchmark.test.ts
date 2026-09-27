@@ -314,6 +314,13 @@ describe("same cash flows (Snowball's comparison)", () => {
     expect(all?.sameCashFlows?.benchmarkProfit).toBeCloseTo(110, 6);
     // Kỳ 5 ngày (2/1 → 7/1): 1.000 mua ngày 5/1 nằm 2/5 kỳ, 1.000 bán ngày 6/1 rút ra 1/5 kỳ.
     expect(all?.sameCashFlows?.averageCapital).toBeCloseTo(1000 * 0.4 - 1000 * 0.2, 6);
+    // Lãi cộng dồn theo ngày cho biểu đồ, kết thúc đúng bằng hai con số trên.
+    expect(all?.sameCashFlows?.points.map((p) => [p.date, p.portfolio, p.sp500])).toEqual([
+      ["2026-01-02", 0, 0],
+      ["2026-01-05", 0, 0],
+      ["2026-01-06", 1000, expect.closeTo(100, 6)],
+      ["2026-01-07", expect.closeTo(1510, 6), expect.closeTo(110, 6)],
+    ]);
   });
 
   it("starts a shorter range holding the S&P worth what the portfolio held", () => {
