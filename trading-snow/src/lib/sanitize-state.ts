@@ -111,6 +111,8 @@ function sanitizeQuote(raw: unknown): MarketQuote | null {
   if (regularChange != null) quote.regularChange = regularChange;
   const regularChangePercent = finite(r.regularChangePercent);
   if (regularChangePercent != null) quote.regularChangePercent = regularChangePercent;
+  const regularPrice = finite(r.regularPrice);
+  if (regularPrice != null && regularPrice > 0) quote.regularPrice = regularPrice;
   return quote;
 }
 

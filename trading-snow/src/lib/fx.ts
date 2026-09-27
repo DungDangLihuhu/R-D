@@ -105,6 +105,7 @@ export function toUsdQuotes(
             price: quote.price * rate,
             change: quote.change * rate,
             ...(quote.regularChange != null && { regularChange: quote.regularChange * rate }),
+            ...(quote.regularPrice != null && { regularPrice: quote.regularPrice * rate }),
           };
   }
   return out;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBenchmarkComparison, buildTwrGrowth } from "./benchmark";
+import { buildBenchmarkComparison, buildTwrGrowth, resolveBenchmarkWindow } from "./benchmark";
 import type { Transaction } from "./types";
 
 const buy: Transaction = {
@@ -148,5 +148,97 @@ describe("buildTwrGrowth", () => {
       history
     );
     expect(withCash.growth.at(-1)).toBeCloseTo(1.32, 8);
+  });
+});
+
+describe("benchmark windows", () => {
+  const firstTrade = { ...buy, date: "2021-04-05T00:00:00.000Z" };
+  // 6 giờ sáng giờ máy: theo UTC vẫn là hôm trước, nhưng ngày của người dùng là 27/9.
+  const now = new Date(2026, 8, 27, 6, 0);
+  const from = (range: Parameters<typeof resolveBenchmarkWindow>[1], at = now, txs = [firstTrade]) =>
+    resolveBenchmarkWindow([], range, at, txs);
+
+  it("measures each range from the close on or before its start date", () => {
+    expect(from("ytd")).toEqual({ from: "2025-12-31", to: "2026-09-27", clampedToHistory: false });
+    expect(from("1y")?.from).toBe("2025-09-27");
+    expect(from("5y")?.from).toBe("2021-09-27");
+    // 31/8 lùi 6 tháng là 28/2, không tràn sang 3/3.
+    expect(from("6m", new Date(2026, 7, 31))?.from).toBe("2026-02-28");
+    // "Tất cả": từ phiên trước lệnh đầu tiên, để gồm cả lãi/lỗ của ngày mua đầu.
+    expect(from("all")).toMatchObject({ from: "2021-04-04", clampedToHistory: false });
+  });
+
+  it("starts at the first trade when the range is longer than the portfolio", () => {
+    const young = [{ ...buy, date: "2023-01-10T00:00:00.000Z" }];
+    expect(from("5y", now, young)).toMatchObject({ from: "2023-01-09", clampedToHistory: true });
+  });
+});
+
+describe("benchmark period base", () => {
+  const held = { ...buy, date: "2024-06-03T00:00:00.000Z" };
+  const closes = [
+    { date: "2024-06-03", close: 100 },
+    { date: "2025-09-26", close: 100 },
+    { date: "2025-12-31", close: 100 },
+    { date: "2026-01-02", close: 102 },
+    { date: "2026-06-01", close: 110 },
+  ];
+  const spyTr = [
+    { date: "2025-09-26", close: 480 },
+    { date: "2025-12-31", close: 500 },
+    { date: "2026-01-02", close: 510 },
+    { date: "2026-06-01", close: 550 },
+  ];
+
+  it("counts the first session of the year in YTD", () => {
+    const result = buildBenchmarkComparison(
+      { transactions: [held], marketPrices: {}, priceHistory: { XYZ: closes } },
+      spyTr,
+      { from: "2025-12-31", to: "2026-06-01" },
+      "ytd"
+    );
+    // Gốc là giá đóng cửa 31/12, không phải phiên 2/1 (cách cũ bỏ mất +2% và +2% của 2/1).
+    expect(result?.from).toBe("2025-12-31");
+    expect(result?.sp500Return).toBeCloseTo(10, 8);
+    expect(result?.portfolioReturn).toBeCloseTo(10, 8);
+  });
+
+  it("uses the last close before a start date that falls on a weekend", () => {
+    const result = buildBenchmarkComparison(
+      { transactions: [held], marketPrices: {}, priceHistory: { XYZ: closes } },
+      spyTr,
+      { from: "2025-09-27", to: "2026-06-01" },
+      "1y"
+    );
+    expect(result?.from).toBe("2025-09-26");
+    expect(result?.sp500Return).toBeCloseTo((550 / 480 - 1) * 100, 8);
+  });
+
+  it("includes the first day's gain since inception and starts the S&P the session before", () => {
+    const first = { ...buy, date: "2026-01-02T00:00:00.000Z" };
+    const history = { XYZ: [{ date: "2026-01-02", close: 105 }, { date: "2026-06-01", close: 110 }] };
+    const all = buildBenchmarkComparison(
+      { transactions: [first], marketPrices: {}, priceHistory: history },
+      spyTr,
+      { from: "2026-01-01", to: "2026-06-01" },
+      "all"
+    );
+    // Mua 100, đóng cửa 105 ngay hôm đó rồi 110: +10% tính từ giá mua.
+    expect(all).toMatchObject({ from: "2025-12-31", clampedToHistory: false });
+    expect(all?.points[0]).toMatchObject({ portfolio: 100, sp500: 100 });
+    expect(all?.portfolioReturn).toBeCloseTo(10, 8);
+    expect(all?.sp500Return).toBeCloseTo(10, 8);
+
+    // Khung 1 năm dài hơn danh mục (vd. có lệnh nạp tiền từ trước): S&P cũng chỉ tính từ
+    // phiên trước lệnh mua đầu tiên, không cộng thêm quãng danh mục chưa có cổ phiếu.
+    const year = buildBenchmarkComparison(
+      { transactions: [first], marketPrices: {}, priceHistory: history },
+      spyTr,
+      { from: "2025-06-01", to: "2026-06-01" },
+      "1y"
+    );
+    expect(year).toMatchObject({ from: "2025-12-31", clampedToHistory: true });
+    expect(year?.sp500Return).toBeCloseTo(10, 8);
+    expect(year?.portfolioReturn).toBeCloseTo(10, 8);
   });
 });
