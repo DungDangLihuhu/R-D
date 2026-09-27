@@ -57,6 +57,8 @@ export interface MarketQuote {
    */
   regularChange?: number;
   regularChangePercent?: number;
+  /** Giá phiên chính khi `price` là giá ngoài giờ (pre/post). */
+  regularPrice?: number;
 }
 
 export interface ClosedTrade {

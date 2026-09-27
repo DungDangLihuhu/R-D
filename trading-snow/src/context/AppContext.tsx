@@ -402,6 +402,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         currency?: string;
         regularChange?: number;
         regularChangePercent?: number;
+        regularPrice?: number;
       }[] = [];
       const mergedFx: Record<string, number> = {};
       let mergedUnresolved: string[] = [];
@@ -432,6 +433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               currency?: string;
               regularChange?: number;
               regularChangePercent?: number;
+              regularPrice?: number;
             }[];
             fx?: Record<string, number>;
             unresolved?: string[];
@@ -467,6 +469,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               currency: q.currency,
               regularChange: q.regularChange,
               regularChangePercent: q.regularChangePercent,
+              regularPrice: q.regularPrice,
             };
           }
         }

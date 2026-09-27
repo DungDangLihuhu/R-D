@@ -235,7 +235,7 @@ export async function fetchCloseHistory(
   symbol: string,
   from: Date,
   to: Date,
-  options?: { adjusted?: boolean }
+  options?: { adjusted?: boolean; revalidateSeconds?: number }
 ): Promise<CloseHistory> {
   const yahoo = toYahooSymbol(symbol);
   const period1 = Math.floor(from.getTime() / 1000);
@@ -243,7 +243,7 @@ export async function fetchCloseHistory(
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?interval=1d&period1=${period1}&period2=${period2}&events=split`;
   const res = await fetch(url, {
     headers: YAHOO_HEADERS,
-    next: { revalidate: 3600 },
+    next: { revalidate: options?.revalidateSeconds ?? 3600 },
   });
   if (!res.ok) return { points: [], splits: [] };
 

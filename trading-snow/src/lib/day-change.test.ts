@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayChange } from "./day-change";
+import { dayChange, regularSessionPrice } from "./day-change";
 
 describe("dayChange", () => {
   it("adds the regular session to the after-hours move", () => {
@@ -29,5 +29,19 @@ describe("dayChange", () => {
 
   it("falls back to the stored move when an old quote has no regular session", () => {
     expect(dayChange({ price: 336.94, change: -0.08, changePercent: -0.024, marketSession: "post" }).change).toBe(-0.08);
+  });
+});
+
+describe("regularSessionPrice", () => {
+  it("uses the regular-session price while the quote is pre- or after-hours", () => {
+    expect(
+      regularSessionPrice({ price: 336.94, change: -0.08, changePercent: -0.02, marketSession: "post", regularPrice: 337.02 })
+    ).toBe(337.02);
+    // Bản lưu cũ chưa có regularPrice: phần ngoài giờ tính từ giá đóng cửa.
+    expect(
+      regularSessionPrice({ price: 338, change: 0.98, changePercent: 0.29, marketSession: "pre" })
+    ).toBeCloseTo(337.02, 8);
+    expect(regularSessionPrice({ price: 340, change: 2.98, changePercent: 0.88, marketSession: "regular" })).toBe(340);
+    expect(regularSessionPrice({ price: 340, change: 2.98, changePercent: 0.88 })).toBe(340);
   });
 });

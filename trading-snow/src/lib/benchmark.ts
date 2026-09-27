@@ -1,6 +1,6 @@
 import type { Transaction } from "./types";
 import type { HistoryPoint } from "./yahoo";
-import { downsampleMonthly } from "./format";
+import { downsampleMonthly, downsampleWeekly } from "./format";
 import { createCloseLookup, type CloseSeries } from "./price-history";
 import { compareTransactionsChronologically } from "./transaction-order";
 
@@ -24,8 +24,10 @@ export interface ComparisonResult {
   outperformance: number;
   holdingsCost: number;
   realizedPnl: number;
+  /** Phiên chốt giá gốc: lợi nhuận tính từ giá đóng cửa của phiên này. */
   from: string;
   to: string;
+  /** Khung dài hơn lịch sử danh mục: cả hai tính từ phiên trước lệnh mua đầu tiên. */
   clampedToHistory: boolean;
 }
 
@@ -37,13 +39,24 @@ export const BENCHMARK_RANGES: { value: BenchmarkRange; label: string }[] = [
   { value: "all", label: "Tất cả" },
 ];
 
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() - months);
-  return d;
+/** Cùng ngày của `months` tháng trước; tháng đó ngắn hơn thì lấy ngày cuối tháng (31/8 → 28/2). */
+function monthsBefore(date: Date, months: number): Date {
+  const target = new Date(date.getFullYear(), date.getMonth() - months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(date.getDate(), lastDay));
+  return target;
 }
 
+/** Ngày lịch theo giờ máy, không phải UTC: 6 giờ sáng ở Việt Nam vẫn là hôm nay. */
 function toDateStr(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
   return d.toISOString().slice(0, 10);
 }
 
@@ -85,6 +98,12 @@ function portfolioInceptionDate(
   return fromTx < fromCurve ? fromTx : fromCurve;
 }
 
+/**
+ * `from` là ngày chốt giá gốc: lợi nhuận của kỳ tính từ giá đóng cửa của phiên cuối cùng
+ * không sau ngày đó — YTD từ phiên cuối năm trước, 1 năm từ phiên gần nhất tới ngày này năm
+ * ngoái, như Yahoo hay Google tính. "Tất cả" tính từ phiên trước lệnh đầu tiên để gồm cả
+ * lãi/lỗ của chính ngày mua đầu.
+ */
 export function resolveBenchmarkWindow(
   equityCurve: { date: string; equity: number }[],
   range: BenchmarkRange,
@@ -92,11 +111,7 @@ export function resolveBenchmarkWindow(
   transactions: Transaction[] = []
 ): { from: string; to: string; clampedToHistory: boolean } | null {
   const curve = ensureEquityCurve(equityCurve);
-  const portfolioStart =
-    curve.length > 0
-      ? portfolioInceptionDate(curve, transactions)
-      : portfolioInceptionDate([], transactions);
-
+  const portfolioStart = portfolioInceptionDate(curve, transactions);
   if (!portfolioStart) return null;
 
   const portfolioEnd =
@@ -105,56 +120,56 @@ export function resolveBenchmarkWindow(
       : toDateStr(now);
   const today = toDateStr(now);
   const to = today > portfolioEnd ? today : portfolioEnd;
+  const inception = dayBefore(portfolioStart);
 
   let requestedFrom: string;
   switch (range) {
     case "ytd":
-      requestedFrom = `${now.getFullYear()}-01-01`;
+      requestedFrom = `${now.getFullYear() - 1}-12-31`;
       break;
     case "6m":
-      requestedFrom = toDateStr(addMonths(now, 6));
+      requestedFrom = toDateStr(monthsBefore(now, 6));
       break;
     case "1y":
-      requestedFrom = toDateStr(addMonths(now, 12));
+      requestedFrom = toDateStr(monthsBefore(now, 12));
       break;
     case "5y":
-      requestedFrom = toDateStr(addMonths(now, 60));
+      requestedFrom = toDateStr(monthsBefore(now, 60));
       break;
     case "all":
     default:
-      requestedFrom = portfolioStart;
+      requestedFrom = inception;
       break;
   }
 
-  const clampedToHistory = requestedFrom < portfolioStart;
-  let from = clampedToHistory ? portfolioStart : requestedFrom;
-  if (from > to) from = portfolioStart;
-
-  return { from, to, clampedToHistory };
+  const clampedToHistory = requestedFrom < inception;
+  return { from: clampedToHistory ? inception : requestedFrom, to, clampedToHistory };
 }
 
+/** Phiên gốc là phiên cuối cùng không sau `from`, rồi mọi phiên tới `to`. */
 function pickBenchmarkSeries(
   benchmark: HistoryPoint[],
-  startDate: string,
-  endDate: string
+  from: string,
+  to: string
 ): HistoryPoint[] {
-  const series = benchmark
-    .filter((b) => b.date >= startDate && b.date <= endDate)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (series.length >= 2) return series;
-
   const upToEnd = benchmark
-    .filter((b) => b.date <= endDate)
+    .filter((b) => b.date <= to)
     .sort((a, b) => a.date.localeCompare(b.date));
+  if (upToEnd.length === 0) return [];
 
-  if (upToEnd.length >= 2) {
-    const idx = upToEnd.findIndex((b) => b.date >= startDate);
-    if (idx >= 0) return upToEnd.slice(idx);
-    return upToEnd.slice(-2);
-  }
+  let base = 0;
+  for (let i = 0; i < upToEnd.length && upToEnd[i].date <= from; i++) base = i;
+  const series = upToEnd.slice(base);
+  // Chưa có phiên nào sau phiên gốc (vd. ngày 1/1): kỳ chưa có biến động.
+  return series.length === 1 ? [series[0], { ...series[0], date: to }] : series;
+}
 
-  return benchmark.length >= 2 ? benchmark.slice(-2) : benchmark;
+/** Tới khoảng 1 năm vẽ từng phiên; dài hơn một điểm mỗi tuần, rất dài một điểm mỗi tháng. */
+function chartPoints(points: ComparisonPoint[]): ComparisonPoint[] {
+  const MAX_POINTS = 300;
+  if (points.length <= MAX_POINTS) return points;
+  const weekly = downsampleWeekly(points);
+  return weekly.length <= MAX_POINTS ? weekly : downsampleMonthly(points);
 }
 
 export interface PortfolioBenchmarkInput {
@@ -442,12 +457,31 @@ export function buildBenchmarkComparison(
   if (benchmark.length < 1) return null;
   if (portfolio.transactions.length === 0) return null;
 
-  const benchInRange = pickBenchmarkSeries(
-    benchmark,
-    window.from,
-    window.to
-  );
+  let benchInRange = pickBenchmarkSeries(benchmark, window.from, window.to);
   if (benchInRange.length < 2) return null;
+
+  const history = portfolio.priceHistory;
+  const twr =
+    history && Object.keys(history).length > 0
+      ? buildTwrGrowth(portfolio.transactions, portfolio.marketPrices, history)
+      : null;
+  let growthAt: (number | null)[] | null = twr
+    ? benchInRange.map((b) => growthOn(twr, b.date))
+    : null;
+  let clampedToHistory = window.clampedToHistory ?? false;
+
+  if (growthAt && growthAt[0] == null) {
+    const first = growthAt.findIndex((g) => g != null);
+    if (first < 0) {
+      growthAt = null;
+    } else if (first > 1) {
+      // Lệnh mua đầu tiên nằm giữa kỳ: cả hai tính từ phiên ngay trước ngày đó, không thì
+      // S&P được cộng thêm cả quãng danh mục chưa có cổ phiếu nào.
+      benchInRange = benchInRange.slice(first - 1);
+      growthAt = growthAt.slice(first - 1);
+      clampedToHistory = true;
+    }
+  }
 
   const benchValue = (p: HistoryPoint) => p.adjClose ?? p.close;
   const baseClose = benchValue(benchInRange[0]);
@@ -462,30 +496,24 @@ export function buildBenchmarkComparison(
   );
 
   const hasPortfolioData = portfolioSnaps.some((s) => s.returnPct != null);
-  if (!hasPortfolioData) return null;
+  if (!growthAt && !hasPortfolioData) return null;
 
   const rebaseToWindow = range !== "all";
   const startSnap =
     portfolioSnaps[0]?.returnPct != null
       ? portfolioSnaps[0]
       : portfolioSnaps.find((s) => s.returnPct != null);
-
-  const history = portfolio.priceHistory;
-  const twr =
-    history && Object.keys(history).length > 0
-      ? buildTwrGrowth(portfolio.transactions, portfolio.marketPrices, history)
-      : null;
-  const growthAt = twr ? dates.map((d) => growthOn(twr, d)) : null;
-  const twrStart = growthAt?.find((g): g is number => g != null && g > 0) ?? null;
+  // Phiên gốc trước lệnh mua đầu tiên: danh mục chưa có gì, chỉ số tăng trưởng là 1.
+  const twrBase = growthAt ? (growthAt[0] ?? 1) : null;
 
   const rawPoints: ComparisonPoint[] = benchInRange.map((b, i) => {
     const snap = portfolioSnaps[i];
     const sp500 = (benchValue(b) / baseClose) * 100;
 
     let portfolio: number | null;
-    if (growthAt && twrStart != null) {
-      const g = growthAt[i];
-      portfolio = g != null ? (g / twrStart) * 100 : null;
+    if (growthAt && twrBase != null) {
+      const g = growthAt[i] ?? (i === 0 ? twrBase : null);
+      portfolio = g != null ? (g / twrBase) * 100 : null;
     } else if (!rebaseToWindow) {
       portfolio = snap.returnPct != null ? 100 + snap.returnPct : null;
     } else if (startSnap) {
@@ -497,25 +525,20 @@ export function buildBenchmarkComparison(
     return { date: b.date, sp500, portfolio };
   });
 
-  if (rebaseToWindow && rawPoints.length > 0) {
-    rawPoints[0] = { ...rawPoints[0], sp500: 100 };
-  }
-
-  const points = downsampleMonthly(rawPoints);
   const lastSnap = [...portfolioSnaps].reverse().find((s) => s.returnPct != null);
   const lastPoint = rawPoints[rawPoints.length - 1];
   const sp500Return = lastPoint.sp500 - 100;
   const lastTwr = [...rawPoints].reverse().find((p) => p.portfolio != null)?.portfolio;
   const portfolioReturn =
-    growthAt && twrStart != null && lastTwr != null
+    growthAt && lastTwr != null
       ? lastTwr - 100
       : rebaseToWindow && lastSnap && startSnap
         ? periodPortfolioReturnPct(lastSnap, startSnap)
         : lastSnap?.returnPct ?? 0;
 
   return {
-    method: growthAt && twrStart != null ? "twr" : "cost",
-    points,
+    method: growthAt ? "twr" : "cost",
+    points: chartPoints(rawPoints),
     portfolioReturn,
     sp500Return,
     outperformance: portfolioReturn - sp500Return,
@@ -523,7 +546,7 @@ export function buildBenchmarkComparison(
     realizedPnl: lastSnap?.realizedPnl ?? 0,
     from: benchInRange[0].date,
     to: window.to,
-    clampedToHistory: window.clampedToHistory ?? false,
+    clampedToHistory,
   };
 }
 

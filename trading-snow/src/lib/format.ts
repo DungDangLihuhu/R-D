@@ -113,31 +113,45 @@ export function formatMonthKey(month: string): string {
   return `${mon}/${year}`;
 }
 
-/** Downsample chuỗi thời gian: 1 điểm / tháng, luôn giữ điểm đầu và cuối. */
-export function downsampleMonthly<T extends { date: string }>(points: T[]): T[] {
+/** Giữ điểm cuối cùng của mỗi nhóm (`key` của ngày), luôn giữ điểm đầu và cuối chuỗi. */
+function downsampleBy<T extends { date: string }>(points: T[], key: (date: string) => string): T[] {
   if (points.length <= 2) return points;
 
   const first = points[0];
   const last = points[points.length - 1];
-  const byMonth = new Map<string, T>();
+  const byKey = new Map<string, T>();
 
   for (const p of points) {
-    const key = p.date.slice(0, 7);
-    const prev = byMonth.get(key);
+    const k = key(p.date);
+    const prev = byKey.get(k);
     if (!prev || p.date >= prev.date) {
-      byMonth.set(key, p);
+      byKey.set(k, p);
     }
   }
 
   const seen = new Set<string>();
   const out: T[] = [];
-  for (const p of [first, ...byMonth.values(), last]) {
+  for (const p of [first, ...byKey.values(), last]) {
     if (seen.has(p.date)) continue;
     seen.add(p.date);
     out.push(p);
   }
 
   return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Downsample chuỗi thời gian: 1 điểm / tháng, luôn giữ điểm đầu và cuối. */
+export function downsampleMonthly<T extends { date: string }>(points: T[]): T[] {
+  return downsampleBy(points, (date) => date.slice(0, 7));
+}
+
+/** 1 điểm / tuần (tuần bắt đầu thứ Hai), luôn giữ điểm đầu và cuối. */
+export function downsampleWeekly<T extends { date: string }>(points: T[]): T[] {
+  return downsampleBy(points, (date) => {
+    const d = new Date(`${date.slice(0, 10)}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  });
 }
 
 /** Finnhub market cap is in millions USD */

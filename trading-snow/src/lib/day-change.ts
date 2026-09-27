@@ -17,3 +17,14 @@ export function dayChange(quote: MarketQuote): { change: number; changePercent: 
   }
   return { change: quote.change, changePercent: quote.changePercent };
 }
+
+/**
+ * Giá phiên chính: giá khớp trong phiên, hoặc giá đóng cửa khi đang pre/post-market. Chỉ số
+ * như S&P 500 chỉ có giá phiên chính, nên so sánh với nó mà lấy giá ngoài giờ của danh mục
+ * là cộng thêm cho danh mục biến động mà chỉ số chưa có.
+ */
+export function regularSessionPrice(quote: MarketQuote): number {
+  if (quote.marketSession !== "pre" && quote.marketSession !== "post") return quote.price;
+  // Dữ liệu cũ chưa lưu giá phiên chính: `change` ngoài giờ tính từ giá đóng cửa đó.
+  return quote.regularPrice ?? quote.price - quote.change;
+}

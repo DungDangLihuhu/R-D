@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { ProfitCurvePanel } from "@/components/ProfitCurvePanel";
 import { TopMovers } from "@/components/TopMovers";
 import { useApp } from "@/context/AppContext";
+import { regularSessionPrice } from "@/lib/day-change";
 import { visiblePortfolioTransactions } from "@/lib/hidden-symbols";
 import { formatMoney } from "@/lib/format";
 
@@ -35,6 +36,15 @@ export default function AnalyticsPage() {
     () => visiblePortfolioTransactions(usd.transactions, activePortfolioId, hiddenSymbols),
     [usd.transactions, activePortfolioId, hiddenSymbols]
   );
+  // S&P 500 chỉ có giá phiên chính: pre/after-hours thì danh mục cũng lấy giá phiên chính.
+  // Giá sửa tay (khác giá quote) giữ nguyên.
+  const benchmarkPrices = useMemo(() => {
+    const prices = { ...usd.marketPrices };
+    for (const [symbol, quote] of Object.entries(usd.marketQuotes)) {
+      if (prices[symbol] === quote.price) prices[symbol] = regularSessionPrice(quote);
+    }
+    return prices;
+  }, [usd.marketPrices, usd.marketQuotes]);
 
   return (
     <div className="space-y-6">
@@ -76,7 +86,7 @@ export default function AnalyticsPage() {
         equityCurve={stats.equityCurve}
         transactions={transactions}
         nativeTransactions={nativeTransactions}
-        marketPrices={usd.marketPrices}
+        marketPrices={benchmarkPrices}
       />
     </div>
   );

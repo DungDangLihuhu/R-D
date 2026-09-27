@@ -43,6 +43,13 @@ function formatChartAxisPercent(value: number): string {
   return `${sign}${pct.toFixed(0)}%`;
 }
 
+/** Mốc trục thời gian: phiên đầu mỗi tháng, thưa dần khi kỳ dài để còn khoảng 7 nhãn. */
+function monthTicks(dates: string[]): string[] {
+  const starts = dates.filter((d, i) => i === 0 || d.slice(0, 7) !== dates[i - 1].slice(0, 7));
+  const step = Math.max(1, Math.ceil(starts.length / 7));
+  return starts.filter((_, i) => i % step === 0);
+}
+
 function formatIndexedReturn(value: number): string {
   const pct = value - 100;
   const sign = pct > 0 ? "+" : pct < 0 ? "−" : "";
@@ -65,7 +72,9 @@ export function BenchmarkComparison({
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
   const [bench, setBench] = useState<
-    { url: string; points: HistoryPoint[] } | { url: string; error: string } | null
+    | { url: string; points: HistoryPoint[]; symbol?: string }
+    | { url: string; error: string }
+    | null
   >(null);
   const [shown, setShown] = useState<ComparisonResult | null>(null);
   const chartTheme = useChartTheme();
@@ -111,15 +120,16 @@ export function BenchmarkComparison({
     if (!benchUrl) return;
     let cancelled = false;
 
-    fetchJson<{ points?: HistoryPoint[]; error?: string }>(benchUrl, {
-      ttlMs: 15 * 60 * 1000,
+    // 5 phút như giá danh mục: điểm cuối hai bên cùng thời điểm.
+    fetchJson<{ points?: HistoryPoint[]; symbol?: string; error?: string }>(benchUrl, {
+      ttlMs: 5 * 60 * 1000,
     })
       .then((data) => {
         if (cancelled) return;
         setBench(
           data.error
             ? { url: benchUrl, error: data.error }
-            : { url: benchUrl, points: data.points ?? [] }
+            : { url: benchUrl, points: data.points ?? [], symbol: data.symbol }
         );
       })
       .catch(() => {
@@ -157,6 +167,9 @@ export function BenchmarkComparison({
   // Đổi khung thời gian thì giữ biểu đồ cũ trong lúc tải, không nháy trống.
   if (comparison && comparison !== shown) setShown(comparison);
   const display = comparison ?? (loading ? shown : null);
+  const priceOnlyIndex =
+    benchReady && "symbol" in benchReady && benchReady.symbol != null && benchReady.symbol !== "SPY";
+  const ticks = useMemo(() => (display ? monthTicks(display.points.map((p) => p.date)) : []), [display]);
 
   if (!hasData) {
     return (
@@ -177,16 +190,14 @@ export function BenchmarkComparison({
           <p className="text-xs text-gray-500">
             {display?.method === "cost"
               ? "S&P 500: 0% đầu kỳ · Danh mục: (Δ lãi chốt + Δ float) / cost mở (chưa tải được giá lịch sử)"
-              : "Lợi nhuận theo thời gian: không phụ thuộc lúc nạp hay rút tiền · cả hai gồm cổ tức"}
-            {display?.clampedToHistory && (
-              <> · Từ {formatDate(display.from)} (ngày trade đầu)</>
-            )}
+              : "Lợi nhuận theo thời gian của phần cổ phiếu: mua là tiền vào, bán và cổ tức là tiền ra · giá phiên chính"}
             {display && (
               <>
                 {" "}
-                · {formatDate(display.from)} – {formatDate(display.to)}
+                · từ giá đóng cửa {formatDate(display.from)} tới {formatDate(display.to)}
               </>
             )}
+            {display?.clampedToHistory && <> (danh mục bắt đầu sau đầu kỳ)</>}
           </p>
         </div>
 
@@ -238,7 +249,7 @@ export function BenchmarkComparison({
               label="S&P 500"
               value={formatPercent(display.sp500Return)}
               trend={display.sp500Return >= 0 ? "up" : "down"}
-              sub="SPY, gồm cổ tức"
+              sub={priceOnlyIndex ? "^GSPC, chỉ giá (không tải được SPY)" : "SPY, gồm cổ tức"}
             />
             <StatCard
               label="Vượt / thua S&P 500"
@@ -254,22 +265,16 @@ export function BenchmarkComparison({
 
           <div className="min-w-0 w-full">
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart
-                data={display.points.map((p, i, all) => {
-                  // Điểm đầu kỳ và điểm cuối tháng đầu cùng một tháng — chỉ ghi nhãn một lần.
-                  const label = formatChartMonthYear(p.date);
-                  const repeated = i > 0 && formatChartMonthYear(all[i - 1].date) === label;
-                  return { ...p, label: repeated ? "" : label };
-                })}
-              >
+              <LineChart data={display.points}>
                 <CartesianGrid stroke={chartTheme.grid} vertical={false} />
                 <XAxis
-                  dataKey="label"
+                  dataKey="date"
+                  ticks={ticks}
+                  interval={0}
+                  tickFormatter={(d) => formatChartMonthYear(String(d))}
                   tick={{ fill: chartTheme.tick, fontSize: 11 }}
                   axisLine={{ stroke: chartTheme.grid }}
                   tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={28}
                 />
                 <YAxis
                   tick={{ fill: chartTheme.tick, fontSize: 11 }}
@@ -288,10 +293,7 @@ export function BenchmarkComparison({
                       name === "portfolio" ? "Danh mục" : "S&P 500",
                     ];
                   }}
-                  labelFormatter={(_, payload) => {
-                    const date = payload?.[0]?.payload?.date as string | undefined;
-                    return date ? formatDate(date) : "";
-                  }}
+                  labelFormatter={(date) => (date ? formatDate(String(date)) : "")}
                 />
                 <Legend
                   formatter={(value) =>

@@ -54,9 +54,9 @@ describe("quotes", () => {
       portfolios: [{ id: "p", name: "Chính" }],
       transactions: [],
       marketQuotes: {
-        AAPL: { price: 336.94, change: -0.08, changePercent: -0.02, marketSession: "post", regularChange: -2.72, regularChangePercent: -0.8 },
+        AAPL: { price: 336.94, change: -0.08, changePercent: -0.02, marketSession: "post", regularChange: -2.72, regularChangePercent: -0.8, regularPrice: 337.02 },
       },
     });
-    expect(result?.state.marketQuotes?.AAPL).toMatchObject({ regularChange: -2.72, regularChangePercent: -0.8 });
+    expect(result?.state.marketQuotes?.AAPL).toMatchObject({ regularChange: -2.72, regularChangePercent: -0.8, regularPrice: 337.02 });
   });
 });
