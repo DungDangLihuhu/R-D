@@ -61,6 +61,61 @@ function formatIndexedReturn(value: number): string {
   return `${sign}${formatDecimal(Math.abs(pct), 2)}%`;
 }
 
+/**
+ * Cùng dòng tiền (cách Snowball): mỗi lệnh mua/bán trong kỳ là mua/bán SPY cùng số tiền.
+ * % = lãi ÷ vốn bình quân trong kỳ; hai bên chung mẫu số nên hiệu hai % là phần hơn/kém SPY.
+ */
+function SameCashFlowPanel({
+  profit,
+  benchmarkProfit,
+  averageCapital,
+}: NonNullable<ComparisonResult["sameCashFlows"]>) {
+  const diff = profit - benchmarkProfit;
+  const pct = averageCapital > 0 ? (value: number) => (value / averageCapital) * 100 : null;
+  const tone = (value: number) => (value >= 0 ? "text-emerald-600" : "text-rose-600");
+  const items = [
+    { label: "Danh mục", value: profit, sub: `Lãi ${signedMoney(profit)}` },
+    { label: "Nếu mua SPY", value: benchmarkProfit, sub: `Lãi ${signedMoney(benchmarkProfit)}` },
+    {
+      label: "Hơn / kém SPY",
+      value: diff,
+      sub: `${diff >= 0 ? "Hơn" : "Kém"} ${formatMoney(Math.abs(diff))}`,
+    },
+  ];
+
+  return (
+    <div className="mt-3 rounded-lg border border-app-border px-4 py-3">
+      <p className="text-xs text-app-muted">
+        Cùng dòng tiền (cách Snowball so sánh): nếu mỗi lệnh mua/bán trong kỳ là mua/bán SPY cùng
+        số tiền, cùng ngày
+      </p>
+      {/* Điện thoại: mỗi mục một hàng (nhãn trái, số phải) — ba cột không đủ chỗ cho số. */}
+      <div className="mt-2 grid gap-2 sm:grid-cols-3 sm:gap-3">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex min-w-0 items-baseline justify-between gap-3 sm:block"
+          >
+            <p className="text-xs text-app-muted">{item.label}</p>
+            <div className="text-right sm:text-left">
+              <p className={`text-lg font-semibold tabular-nums ${tone(item.value)}`}>
+                {pct ? formatPercent(pct(item.value)) : signedMoney(item.value)}
+              </p>
+              {pct && <p className="text-xs text-app-muted tabular-nums">{item.sub}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {pct && (
+        <p className="mt-2 text-xs text-app-muted">
+          % = lãi ÷ vốn bình quân trong kỳ ({formatMoney(averageCapital)}), tức lợi nhuận theo dòng
+          tiền (Modified Dietz), chưa quy ra năm.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function BenchmarkComparison({
   equityCurve,
   transactions,
@@ -289,40 +344,7 @@ export function BenchmarkComparison({
             />
           </div>
 
-          {display.sameCashFlows && (
-            <div className="mt-3 rounded-lg border border-app-border px-4 py-3">
-              <p className="text-xs text-app-muted">
-                Cùng dòng tiền (cách Snowball so sánh): nếu mỗi lệnh mua/bán trong kỳ là mua/bán
-                SPY cùng số tiền, cùng ngày
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-                <span className="text-app-muted">
-                  Lãi danh mục{" "}
-                  <strong className="text-app-text">{signedMoney(display.sameCashFlows.profit)}</strong>
-                </span>
-                <span className="text-app-muted">
-                  Nếu mua SPY{" "}
-                  <strong className="text-app-text">
-                    {signedMoney(display.sameCashFlows.benchmarkProfit)}
-                  </strong>
-                </span>
-                <span className="text-app-muted">
-                  Chênh lệch{" "}
-                  <strong
-                    className={
-                      display.sameCashFlows.profit >= display.sameCashFlows.benchmarkProfit
-                        ? "text-emerald-600"
-                        : "text-rose-600"
-                    }
-                  >
-                    {signedMoney(
-                      display.sameCashFlows.profit - display.sameCashFlows.benchmarkProfit
-                    )}
-                  </strong>
-                </span>
-              </div>
-            </div>
-          )}
+          {display.sameCashFlows && <SameCashFlowPanel {...display.sameCashFlows} />}
 
           <div className="mt-3 min-w-0 w-full">
             <ResponsiveContainer width="100%" height={300}>
