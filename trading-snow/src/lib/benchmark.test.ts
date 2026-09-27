@@ -312,6 +312,8 @@ describe("same cash flows (Snowball's comparison)", () => {
     // S&P: mua 1.000 ở 100 (10 đơn vị), bán 1.000 ở 110, còn 0,909 đơn vị × 121 = 110.
     expect(all?.sameCashFlows?.profit).toBeCloseTo(1510, 6);
     expect(all?.sameCashFlows?.benchmarkProfit).toBeCloseTo(110, 6);
+    // Kỳ 5 ngày (2/1 → 7/1): 1.000 mua ngày 5/1 nằm 2/5 kỳ, 1.000 bán ngày 6/1 rút ra 1/5 kỳ.
+    expect(all?.sameCashFlows?.averageCapital).toBeCloseTo(1000 * 0.4 - 1000 * 0.2, 6);
   });
 
   it("starts a shorter range holding the S&P worth what the portfolio held", () => {
@@ -324,5 +326,7 @@ describe("same cash flows (Snowball's comparison)", () => {
     // Đầu kỳ (đóng cửa 6/1) cầm 50 cổ × 20 = 1.000 → cuối kỳ 1.500 + cổ tức 10.
     expect(later?.sameCashFlows?.profit).toBeCloseTo(510, 6);
     expect(later?.sameCashFlows?.benchmarkProfit).toBeCloseTo(100, 6);
+    // Không mua/bán trong kỳ: vốn bình quân là giá trị đầu kỳ → danh mục +51%, SPY +10%.
+    expect(later?.sameCashFlows?.averageCapital).toBeCloseTo(1000, 6);
   });
 });

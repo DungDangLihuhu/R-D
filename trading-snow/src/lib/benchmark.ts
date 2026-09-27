@@ -39,6 +39,12 @@ export interface ComparisonResult {
     profit: number;
     /** Lãi trong kỳ nếu cùng dòng tiền đó mua/bán S&P 500. */
     benchmarkProfit: number;
+    /**
+     * Vốn bình quân trong kỳ (Modified Dietz): giá trị đầu kỳ + mỗi khoản mua/bán nhân phần
+     * thời gian còn lại của kỳ. Lãi ÷ vốn bình quân là lợi nhuận theo dòng tiền; hai bên cùng
+     * dòng tiền nên cùng mẫu số. ≤ 0 (bán ra nhiều hơn vốn) thì không tính được %.
+     */
+    averageCapital: number;
   };
 }
 
@@ -500,7 +506,7 @@ function sameCashFlowProfits(
   twr: { dates: string[]; values: number[] },
   bench: HistoryPoint[],
   benchValue: (p: HistoryPoint) => number
-): { profit: number; benchmarkProfit: number } | null {
+): { profit: number; benchmarkProfit: number; averageCapital: number } | null {
   if (bench.length < 2 || twr.dates.length === 0) return null;
   const benchDates = bench.map((b) => b.date);
   const levelOn = (day: string) => {
@@ -518,6 +524,12 @@ function sameCashFlowProfits(
   let units = startValue / levelOn(start);
   let invested = startValue;
   let dividends = 0;
+  const dayNumber = (day: string) => Date.parse(`${day}T00:00:00Z`) / 86_400_000;
+  const periodDays = dayNumber(end) - dayNumber(start);
+  // Phần thời gian của kỳ mà khoản tiền vào/ra ngày `day` còn nằm trong danh mục.
+  const remaining = (day: string) =>
+    periodDays > 0 ? Math.min(1, Math.max(0, (dayNumber(end) - dayNumber(day)) / periodDays)) : 0;
+  let averageCapital = startValue;
 
   // Lệnh sau ngày định giá cuối chưa có trong giá trị cuối kỳ: bỏ qua cả hai bên.
   const lastValued = twr.dates[twr.dates.length - 1];
@@ -528,9 +540,11 @@ function sameCashFlowProfits(
     if (tx.type === "BUY") {
       invested += gross + tx.fee;
       units += (gross + tx.fee) / levelOn(day);
+      averageCapital += (gross + tx.fee) * remaining(day);
     } else if (tx.type === "SELL") {
       invested -= gross - tx.fee;
       units -= (gross - tx.fee) / levelOn(day);
+      averageCapital -= (gross - tx.fee) * remaining(day);
     } else if (tx.type === "DIVIDEND") {
       dividends += gross;
     }
@@ -541,6 +555,7 @@ function sameCashFlowProfits(
   return {
     profit: endValue + dividends - invested,
     benchmarkProfit: units * levelOn(end) - invested,
+    averageCapital,
   };
 }
 
