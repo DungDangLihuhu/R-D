@@ -6,6 +6,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -25,9 +26,9 @@ import {
   type PortfolioBenchmarkInput,
 } from "@/lib/benchmark";
 import {
+  formatAxisMoney,
   formatChartMonthYear,
   formatDate,
-  formatDecimal,
   formatMoney,
   formatPercent,
 } from "@/lib/format";
@@ -36,13 +37,6 @@ import { fetchJson } from "@/lib/fetch-cache";
 import { useChartTheme } from "@/lib/chart-theme";
 import type { PortfolioStats, Transaction } from "@/lib/types";
 import type { ExDividend, HistoryPoint } from "@/lib/yahoo";
-
-function formatChartAxisPercent(value: number): string {
-  const pct = value - 100;
-  if (pct === 0) return "0%";
-  const sign = pct > 0 ? "+" : "";
-  return `${sign}${pct.toFixed(0)}%`;
-}
 
 /** Mốc trục thời gian: phiên đầu mỗi tháng, thưa dần khi kỳ dài để còn khoảng 7 nhãn. */
 function monthTicks(dates: string[]): string[] {
@@ -53,67 +47,6 @@ function monthTicks(dates: string[]): string[] {
 
 function signedMoney(value: number): string {
   return `${value >= 0.005 ? "+" : ""}${formatMoney(value)}`;
-}
-
-function formatIndexedReturn(value: number): string {
-  const pct = value - 100;
-  const sign = pct > 0 ? "+" : pct < 0 ? "−" : "";
-  return `${sign}${formatDecimal(Math.abs(pct), 2)}%`;
-}
-
-/**
- * Cùng dòng tiền (cách Snowball): mỗi lệnh mua/bán trong kỳ là mua/bán SPY cùng số tiền.
- * % = lãi ÷ vốn bình quân trong kỳ; hai bên chung mẫu số nên hiệu hai % là phần hơn/kém SPY.
- */
-function SameCashFlowPanel({
-  profit,
-  benchmarkProfit,
-  averageCapital,
-}: NonNullable<ComparisonResult["sameCashFlows"]>) {
-  const diff = profit - benchmarkProfit;
-  const pct = averageCapital > 0 ? (value: number) => (value / averageCapital) * 100 : null;
-  const tone = (value: number) => (value >= 0 ? "text-emerald-600" : "text-rose-600");
-  const items = [
-    { label: "Danh mục", value: profit, sub: `Lãi ${signedMoney(profit)}` },
-    { label: "Nếu mua SPY", value: benchmarkProfit, sub: `Lãi ${signedMoney(benchmarkProfit)}` },
-    {
-      label: "Hơn / kém SPY",
-      value: diff,
-      sub: `${diff >= 0 ? "Hơn" : "Kém"} ${formatMoney(Math.abs(diff))}`,
-    },
-  ];
-
-  return (
-    <div className="mt-3 rounded-lg border border-app-border px-4 py-3">
-      <p className="text-xs text-app-muted">
-        Cùng dòng tiền (cách Snowball so sánh): nếu mỗi lệnh mua/bán trong kỳ là mua/bán SPY cùng
-        số tiền, cùng ngày
-      </p>
-      {/* Điện thoại: mỗi mục một hàng (nhãn trái, số phải) — ba cột không đủ chỗ cho số. */}
-      <div className="mt-2 grid gap-2 sm:grid-cols-3 sm:gap-3">
-        {items.map((item) => (
-          <div
-            key={item.label}
-            className="flex min-w-0 items-baseline justify-between gap-3 sm:block"
-          >
-            <p className="text-xs text-app-muted">{item.label}</p>
-            <div className="text-right sm:text-left">
-              <p className={`text-lg font-semibold tabular-nums ${tone(item.value)}`}>
-                {pct ? formatPercent(pct(item.value)) : signedMoney(item.value)}
-              </p>
-              {pct && <p className="text-xs text-app-muted tabular-nums">{item.sub}</p>}
-            </div>
-          </div>
-        ))}
-      </div>
-      {pct && (
-        <p className="mt-2 text-xs text-app-muted">
-          % = lãi ÷ vốn bình quân trong kỳ ({formatMoney(averageCapital)}), tức lợi nhuận theo dòng
-          tiền (Modified Dietz), chưa quy ra năm.
-        </p>
-      )}
-    </div>
-  );
 }
 
 export function BenchmarkComparison({
@@ -246,7 +179,10 @@ export function BenchmarkComparison({
   const display = comparison ?? (loading ? shown : null);
   const priceOnlyIndex =
     benchReady && "symbol" in benchReady && benchReady.symbol != null && benchReady.symbol !== "SPY";
-  const ticks = useMemo(() => (display ? monthTicks(display.points.map((p) => p.date)) : []), [display]);
+  const cash = display?.sameCashFlows;
+  const ticks = useMemo(() => (cash ? monthTicks(cash.points.map((p) => p.date)) : []), [cash]);
+  // Lãi ÷ vốn bình quân trong kỳ; hai bên cùng dòng tiền nên cùng mẫu số.
+  const pct = cash && cash.averageCapital > 0 ? (v: number) => (v / cash.averageCapital) * 100 : null;
 
   if (!hasData) {
     return (
@@ -265,9 +201,9 @@ export function BenchmarkComparison({
         <div>
           <h2 className="font-semibold">So sánh với S&P 500</h2>
           <p className="text-xs text-gray-500">
-            {display?.method === "cost"
-              ? "S&P 500: 0% đầu kỳ · Danh mục: (Δ lãi chốt + Δ float) / cost mở (chưa tải được giá lịch sử)"
-              : "Lợi nhuận theo thời gian của phần cổ phiếu: mua là tiền vào, bán và cổ tức là tiền ra · cổ tức hai bên tính trước thuế · giá phiên chính"}
+            Cùng dòng tiền (cách Snowball so sánh): mỗi lệnh mua/bán trong kỳ là mua/bán{" "}
+            {priceOnlyIndex ? "chỉ số S&P 500 (^GSPC, chỉ giá — không tải được SPY)" : "SPY"} cùng
+            số tiền, cùng ngày · cổ tức trước thuế · giá phiên chính
             {display && (
               <>
                 {" "}
@@ -302,7 +238,13 @@ export function BenchmarkComparison({
         <p className="text-sm text-rose-600">{error}</p>
       )}
 
-      {display && (
+      {display && !cash && !loading && (
+        <p className="text-sm text-gray-500">
+          Chưa tải được giá lịch sử của các mã trong danh mục nên chưa so sánh được.
+        </p>
+      )}
+
+      {cash && (
         <div className={loading ? "pointer-events-none opacity-60" : undefined}>
           {loading && (
             <p className="mb-2 text-xs text-gray-400">Đang cập nhật khoảng thời gian...</p>
@@ -310,45 +252,38 @@ export function BenchmarkComparison({
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard
               label="Danh mục"
-              value={formatPercent(display.portfolioReturn)}
-              trend={display.portfolioReturn >= 0 ? "up" : "down"}
-              sub={
-                display.method === "twr"
-                  ? "Theo thời gian (TWR)"
-                  : display.holdingsCost > 0
-                    ? `Cost mở: ${formatMoney(display.holdingsCost)}`
-                    : display.realizedPnl !== 0
-                      ? `Đã chốt: ${formatMoney(display.realizedPnl)}`
-                      : undefined
-              }
+              value={pct ? formatPercent(pct(cash.profit)) : signedMoney(cash.profit)}
+              trend={cash.profit >= 0 ? "up" : "down"}
+              sub={`Lãi ${signedMoney(cash.profit)}`}
             />
             <StatCard
-              label="S&P 500"
-              value={formatPercent(display.sp500Return)}
-              trend={display.sp500Return >= 0 ? "up" : "down"}
-              sub={
-                priceOnlyIndex
-                  ? "^GSPC, chỉ giá (không tải được SPY)"
-                  : "SPY, gồm cổ tức trước thuế"
-              }
+              label="Nếu mua SPY"
+              value={pct ? formatPercent(pct(cash.benchmarkProfit)) : signedMoney(cash.benchmarkProfit)}
+              trend={cash.benchmarkProfit >= 0 ? "up" : "down"}
+              sub={`Lãi ${signedMoney(cash.benchmarkProfit)}`}
             />
             <StatCard
-              label="Vượt / thua S&P 500"
-              value={formatPercent(display.outperformance)}
-              trend={display.outperformance >= 0 ? "up" : "down"}
-              sub={
-                display.outperformance >= 0
-                  ? "Đánh bại thị trường"
-                  : "Kém thị trường"
+              label="Hơn / kém SPY"
+              value={
+                pct
+                  ? formatPercent(pct(cash.profit - cash.benchmarkProfit))
+                  : signedMoney(cash.profit - cash.benchmarkProfit)
               }
+              trend={cash.profit >= cash.benchmarkProfit ? "up" : "down"}
+              sub={`${cash.profit >= cash.benchmarkProfit ? "Hơn" : "Kém"} ${formatMoney(
+                Math.abs(cash.profit - cash.benchmarkProfit)
+              )}`}
             />
           </div>
-
-          {display.sameCashFlows && <SameCashFlowPanel {...display.sameCashFlows} />}
+          <p className="mt-2 text-xs text-gray-500">
+            {pct
+              ? `% = lãi ÷ vốn bình quân trong kỳ (${formatMoney(cash.averageCapital)}), tức lợi nhuận theo dòng tiền (Modified Dietz), chưa quy ra năm.`
+              : "Trong kỳ bán ra nhiều hơn vốn bỏ vào nên không tính được %, chỉ so số tiền lãi."}
+          </p>
 
           <div className="mt-3 min-w-0 w-full">
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={display.points}>
+              <LineChart data={cash.points}>
                 <CartesianGrid stroke={chartTheme.grid} vertical={false} />
                 <XAxis
                   dataKey="date"
@@ -363,25 +298,21 @@ export function BenchmarkComparison({
                   tick={{ fill: chartTheme.tick, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={48}
-                  tickFormatter={(v) => formatChartAxisPercent(Number(v))}
+                  width={56}
+                  tickFormatter={(v) => formatAxisMoney(Number(v))}
                   domain={["auto", "auto"]}
                 />
+                <ReferenceLine y={0} stroke={chartTheme.tick} strokeOpacity={0.4} />
                 <Tooltip
                   contentStyle={chartTheme.tooltip}
-                  formatter={(v, name) => {
-                    if (v == null) return ["—", name === "portfolio" ? "Danh mục" : "S&P 500"];
-                    return [
-                      formatIndexedReturn(Number(v)),
-                      name === "portfolio" ? "Danh mục" : "S&P 500",
-                    ];
-                  }}
+                  formatter={(v, name) => [
+                    v == null ? "—" : `Lãi ${signedMoney(Number(v))}`,
+                    name === "portfolio" ? "Danh mục" : "Nếu mua SPY",
+                  ]}
                   labelFormatter={(date) => (date ? formatDate(String(date)) : "")}
                 />
                 <Legend
-                  formatter={(value) =>
-                    value === "portfolio" ? "Danh mục" : "S&P 500"
-                  }
+                  formatter={(value) => (value === "portfolio" ? "Danh mục" : "Nếu mua SPY")}
                 />
                 <Line
                   type="monotone"
@@ -390,7 +321,6 @@ export function BenchmarkComparison({
                   strokeWidth={2}
                   dot={false}
                   name="portfolio"
-                  connectNulls
                 />
                 <Line
                   type="monotone"

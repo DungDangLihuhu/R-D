@@ -45,6 +45,8 @@ export interface ComparisonResult {
      * dòng tiền nên cùng mẫu số. ≤ 0 (bán ra nhiều hơn vốn) thì không tính được %.
      */
     averageCapital: number;
+    /** Lãi cộng dồn từ đầu kỳ theo ngày (US$): `portfolio` là danh mục, `sp500` là nếu mua SPY. */
+    points: ComparisonPoint[];
   };
 }
 
@@ -506,7 +508,7 @@ function sameCashFlowProfits(
   twr: { dates: string[]; values: number[] },
   bench: HistoryPoint[],
   benchValue: (p: HistoryPoint) => number
-): { profit: number; benchmarkProfit: number; averageCapital: number } | null {
+): NonNullable<ComparisonResult["sameCashFlows"]> | null {
   if (bench.length < 2 || twr.dates.length === 0) return null;
   const benchDates = bench.map((b) => b.date);
   const levelOn = (day: string) => {
@@ -533,9 +535,19 @@ function sameCashFlowProfits(
 
   // Lệnh sau ngày định giá cuối chưa có trong giá trị cuối kỳ: bỏ qua cả hai bên.
   const lastValued = twr.dates[twr.dates.length - 1];
-  for (const tx of transactions) {
+  const flows = transactions
+    .filter((tx) => {
+      const day = txDay(tx.date);
+      return (
+        day > start &&
+        day <= lastValued &&
+        tx.symbol !== "CASH" &&
+        (tx.type === "BUY" || tx.type === "SELL" || tx.type === "DIVIDEND")
+      );
+    })
+    .sort(compareTransactionsChronologically);
+  const apply = (tx: Transaction) => {
     const day = txDay(tx.date);
-    if (day <= start || day > lastValued || tx.symbol === "CASH") continue;
     const gross = tx.quantity * tx.price;
     if (tx.type === "BUY") {
       invested += gross + tx.fee;
@@ -545,18 +557,28 @@ function sameCashFlowProfits(
       invested -= gross - tx.fee;
       units -= (gross - tx.fee) / levelOn(day);
       averageCapital -= (gross - tx.fee) * remaining(day);
-    } else if (tx.type === "DIVIDEND") {
+    } else {
       dividends += gross;
     }
+  };
+
+  const points: ComparisonPoint[] = [];
+  let next = 0;
+  for (const b of bench) {
+    while (next < flows.length && txDay(flows[next].date) <= b.date) apply(flows[next++]);
+    points.push({
+      date: b.date,
+      portfolio: valueOn(b.date) + dividends - invested,
+      sp500: units * benchValue(b) - invested,
+    });
   }
+  while (next < flows.length) apply(flows[next++]);
 
   // Giá trị cuối là điểm cuối của TWR (giá phiên chính mới nhất).
-  const endValue = twr.values[twr.values.length - 1];
-  return {
-    profit: endValue + dividends - invested,
-    benchmarkProfit: units * levelOn(end) - invested,
-    averageCapital,
-  };
+  const profit = twr.values[twr.values.length - 1] + dividends - invested;
+  const benchmarkProfit = units * levelOn(end) - invested;
+  points[points.length - 1] = { date: end, portfolio: profit, sp500: benchmarkProfit };
+  return { profit, benchmarkProfit, averageCapital, points: chartPoints(points) };
 }
 
 /**
