@@ -63,6 +63,14 @@ export interface CloseHistory {
   /** Giá đóng cửa ngày — Yahoo đã chia sẵn theo các lần split về sau. */
   points: HistoryPoint[];
   splits: SplitEvent[];
+  /** Cổ tức mỗi cổ phiếu theo ngày giao dịch không hưởng quyền (khi yêu cầu `dividends`). */
+  dividends?: ExDividend[];
+}
+
+/** Cổ tức tiền mặt mỗi cổ phiếu, ghi vào ngày giao dịch không hưởng quyền. */
+export interface ExDividend {
+  date: string;
+  amount: number;
 }
 
 export interface YahooInsiderTransaction {
@@ -235,12 +243,13 @@ export async function fetchCloseHistory(
   symbol: string,
   from: Date,
   to: Date,
-  options?: { adjusted?: boolean; revalidateSeconds?: number }
+  options?: { adjusted?: boolean; dividends?: boolean; revalidateSeconds?: number }
 ): Promise<CloseHistory> {
   const yahoo = toYahooSymbol(symbol);
   const period1 = Math.floor(from.getTime() / 1000);
   const period2 = Math.floor(to.getTime() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?interval=1d&period1=${period1}&period2=${period2}&events=split`;
+  const events = options?.dividends ? "div,split" : "split";
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(yahoo)}?interval=1d&period1=${period1}&period2=${period2}&events=${events}`;
   const res = await fetch(url, {
     headers: YAHOO_HEADERS,
     next: { revalidate: options?.revalidateSeconds ?? 3600 },
@@ -277,7 +286,17 @@ export async function fetchCloseHistory(
     .filter((s) => Number.isFinite(s.ratio) && s.ratio > 0 && s.ratio !== 1)
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  return { points, splits };
+  if (!options?.dividends) return { points, splits };
+  const rawDividends: Record<string, { date?: number; amount?: number }> =
+    result?.events?.dividends ?? {};
+  const dividends: ExDividend[] = Object.values(rawDividends)
+    .map((d) => ({
+      date: new Date((d.date ?? 0) * 1000).toISOString().slice(0, 10),
+      amount: d.amount ?? 0,
+    }))
+    .filter((d) => d.amount > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return { points, splits, dividends };
 }
 
 interface YahooChartMeta {

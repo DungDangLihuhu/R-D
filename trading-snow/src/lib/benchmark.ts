@@ -1,5 +1,5 @@
 import type { Transaction } from "./types";
-import type { HistoryPoint } from "./yahoo";
+import type { ExDividend, HistoryPoint } from "./yahoo";
 import { downsampleMonthly, downsampleWeekly } from "./format";
 import { createCloseLookup, type CloseSeries } from "./price-history";
 import { compareTransactionsChronologically } from "./transaction-order";
@@ -29,6 +29,17 @@ export interface ComparisonResult {
   to: string;
   /** Khung dài hơn lịch sử danh mục: cả hai tính từ phiên trước lệnh mua đầu tiên. */
   clampedToHistory: boolean;
+  /**
+   * Cùng dòng tiền (cách Snowball so sánh): mỗi lệnh mua/bán trong kỳ là mua/bán S&P 500
+   * cùng số tiền, cùng ngày; đầu kỳ đang cầm cổ phiếu thì coi như cầm S&P cùng giá trị.
+   * Chỉ có khi tải được giá lịch sử.
+   */
+  sameCashFlows?: {
+    /** Lãi trong kỳ của danh mục: giá trị cuối + tiền bán + cổ tức (trước thuế) − giá trị đầu − tiền mua. */
+    profit: number;
+    /** Lãi trong kỳ nếu cùng dòng tiền đó mua/bán S&P 500. */
+    benchmarkProfit: number;
+  };
 }
 
 export const BENCHMARK_RANGES: { value: BenchmarkRange; label: string }[] = [
@@ -353,6 +364,33 @@ function periodPortfolioReturnPct(
 }
 
 /**
+ * Chuỗi tổng lợi nhuận của S&P 500 từ giá đóng cửa và cổ tức: mỗi lần không hưởng quyền,
+ * cổ tức (trước thuế, như phía danh mục) được tái đầu tư. Không có dữ liệu cổ tức thì dùng
+ * giá điều chỉnh của Yahoo.
+ */
+export function benchmarkLevels(
+  points: HistoryPoint[],
+  dividends: ExDividend[] | undefined
+): HistoryPoint[] {
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  if (!dividends) return sorted.map((p) => ({ date: p.date, close: p.adjClose ?? p.close }));
+
+  const byDate = new Map<string, number>();
+  for (const d of dividends) byDate.set(d.date, (byDate.get(d.date) ?? 0) + d.amount);
+  const out: HistoryPoint[] = [];
+  let level = sorted[0]?.close ?? 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i];
+    if (i > 0) {
+      const prev = sorted[i - 1].close;
+      level *= (p.close + (byDate.get(p.date) ?? 0)) / prev;
+    }
+    out.push({ date: p.date, close: level });
+  }
+  return out;
+}
+
+/**
  * Chỉ số tăng trưởng theo thời gian (TWR, 1 = trước khi có vị thế) của phần cổ phiếu, trên
  * lưới các ngày có giá đóng cửa. Mỗi ngày: (giá trị cuối ngày + tiền bán + cổ tức) so với
  * (giá trị hôm trước + tiền mua), rồi nhân dồn. Dòng tiền vào/ra không làm lệch kết quả nên
@@ -363,7 +401,7 @@ export function buildTwrGrowth(
   transactions: Transaction[],
   marketPrices: Record<string, number>,
   priceHistory: CloseSeries
-): { dates: string[]; growth: (number | null)[] } {
+): { dates: string[]; growth: (number | null)[]; values: number[] } {
   const grid = [
     ...new Set(Object.values(priceHistory).flatMap((points) => points.map((p) => p.date))),
   ].sort();
@@ -378,7 +416,7 @@ export function buildTwrGrowth(
         (t.type === "DIVIDEND" && t.symbol !== "CASH")
     )
     .sort(compareTransactionsChronologically);
-  if (grid.length === 0 || sorted.length === 0) return { dates: [], growth: [] };
+  if (grid.length === 0 || sorted.length === 0) return { dates: [], growth: [], values: [] };
 
   // Lệnh trước ngày đầu có giá vẫn phải vào lưới: thêm ngày của lệnh đầu tiên.
   const firstDay = txDay(sorted[0].date);
@@ -391,8 +429,9 @@ export function buildTwrGrowth(
   let txIdx = 0;
   let previousValue = 0;
   let growth: number | null = null;
+  const values: number[] = [];
 
-  const values = grid.map((date) => {
+  const growthSeries = grid.map((date) => {
     let bought = 0;
     let received = 0;
     while (txIdx < sorted.length && txDay(sorted[txIdx].date) <= date) {
@@ -400,7 +439,8 @@ export function buildTwrGrowth(
       const gross = tx.quantity * tx.price;
       if (tx.type === "BUY") bought += gross + tx.fee;
       else if (tx.type === "SELL") received += gross - tx.fee;
-      else if (tx.type === "DIVIDEND") received += gross - tx.fee;
+      // Cổ tức trước thuế: phí trên lệnh cổ tức là thuế khấu trừ, không tính vào so sánh.
+      else if (tx.type === "DIVIDEND") received += gross;
       if (tx.type !== "DIVIDEND") applyTrade(tx, positions, lastPrices, { value: 0 });
     }
 
@@ -420,27 +460,88 @@ export function buildTwrGrowth(
     const base = previousValue + bought;
     if (base > 0) growth = (growth ?? 1) * ((value + received) / base);
     previousValue = value;
+    values.push(value);
     return growth;
   });
 
-  return { dates: grid, growth: values };
+  return { dates: grid, growth: growthSeries, values };
 }
 
-/** Giá trị chỉ số tăng trưởng tại ngày gần nhất không sau `date`. */
-function growthOn(twr: { dates: string[]; growth: (number | null)[] }, date: string): number | null {
+/** Vị trí của ngày gần nhất không sau `date` trong dãy ngày tăng dần; -1 khi chưa có. */
+function indexOnOrBefore(dates: string[], date: string): number {
   let lo = 0;
-  let hi = twr.dates.length - 1;
+  let hi = dates.length - 1;
   let found = -1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    if (twr.dates[mid] <= date) {
+    if (dates[mid] <= date) {
       found = mid;
       lo = mid + 1;
     } else {
       hi = mid - 1;
     }
   }
-  return found >= 0 ? twr.growth[found] : null;
+  return found;
+}
+
+/** Giá trị chỉ số tăng trưởng tại ngày gần nhất không sau `date`. */
+function growthOn(twr: { dates: string[]; growth: (number | null)[] }, date: string): number | null {
+  const i = indexOnOrBefore(twr.dates, date);
+  return i >= 0 ? twr.growth[i] : null;
+}
+
+/**
+ * Cùng dòng tiền: đầu kỳ cầm S&P bằng giá trị cổ phiếu đang cầm, mỗi lệnh mua/bán trong kỳ
+ * mua/bán S&P cùng số tiền theo giá đóng cửa hôm đó. Bán nhiều hơn phần S&P đang có thì vị
+ * thế S&P âm — lãi vẫn so được (cách Long–Nickels), nên chỉ trả về lãi, không trả giá trị.
+ */
+function sameCashFlowProfits(
+  transactions: Transaction[],
+  twr: { dates: string[]; values: number[] },
+  bench: HistoryPoint[],
+  benchValue: (p: HistoryPoint) => number
+): { profit: number; benchmarkProfit: number } | null {
+  if (bench.length < 2 || twr.dates.length === 0) return null;
+  const benchDates = bench.map((b) => b.date);
+  const levelOn = (day: string) => {
+    const i = indexOnOrBefore(benchDates, day);
+    return benchValue(bench[Math.max(0, i)]);
+  };
+  const valueOn = (day: string) => {
+    const i = indexOnOrBefore(twr.dates, day);
+    return i >= 0 ? twr.values[i] : 0;
+  };
+
+  const start = benchDates[0];
+  const end = benchDates[benchDates.length - 1];
+  const startValue = valueOn(start);
+  let units = startValue / levelOn(start);
+  let invested = startValue;
+  let dividends = 0;
+
+  // Lệnh sau ngày định giá cuối chưa có trong giá trị cuối kỳ: bỏ qua cả hai bên.
+  const lastValued = twr.dates[twr.dates.length - 1];
+  for (const tx of transactions) {
+    const day = txDay(tx.date);
+    if (day <= start || day > lastValued || tx.symbol === "CASH") continue;
+    const gross = tx.quantity * tx.price;
+    if (tx.type === "BUY") {
+      invested += gross + tx.fee;
+      units += (gross + tx.fee) / levelOn(day);
+    } else if (tx.type === "SELL") {
+      invested -= gross - tx.fee;
+      units -= (gross - tx.fee) / levelOn(day);
+    } else if (tx.type === "DIVIDEND") {
+      dividends += gross;
+    }
+  }
+
+  // Giá trị cuối là điểm cuối của TWR (giá phiên chính mới nhất).
+  const endValue = twr.values[twr.values.length - 1];
+  return {
+    profit: endValue + dividends - invested,
+    benchmarkProfit: units * levelOn(end) - invested,
+  };
 }
 
 /**
@@ -525,6 +626,9 @@ export function buildBenchmarkComparison(
     return { date: b.date, sp500, portfolio };
   });
 
+  const sameCashFlows =
+    twr && growthAt ? sameCashFlowProfits(portfolio.transactions, twr, benchInRange, benchValue) : null;
+
   const lastSnap = [...portfolioSnaps].reverse().find((s) => s.returnPct != null);
   const lastPoint = rawPoints[rawPoints.length - 1];
   const sp500Return = lastPoint.sp500 - 100;
@@ -547,6 +651,7 @@ export function buildBenchmarkComparison(
     from: benchInRange[0].date,
     to: window.to,
     clampedToHistory,
+    ...(sameCashFlows && { sameCashFlows }),
   };
 }
 
