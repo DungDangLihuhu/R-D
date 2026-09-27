@@ -3,7 +3,6 @@ import {
   benchmarkLevels,
   buildBenchmarkComparison,
   buildTwrGrowth,
-  dividendWithholdingRate,
   resolveBenchmarkWindow,
 } from "./benchmark";
 import type { Transaction } from "./types";
@@ -257,27 +256,28 @@ describe("S&P 500 dividends", () => {
   ];
   const dividends = [{ date: "2026-03-20", amount: 1 }];
 
-  it("reinvests dividends on the ex-date, after the same withholding as the portfolio's", () => {
-    const gross = benchmarkLevels(points, dividends, 0);
-    expect(gross[1].close).toBeCloseTo(102, 8);
-    expect(gross[2].close).toBeCloseTo((102 * 102) / 101, 8);
-    // Nhà đầu tư Việt Nam: Mỹ giữ 30% cổ tức, SPY cũng vậy.
-    expect(benchmarkLevels(points, dividends, 0.3)[1].close).toBeCloseTo(101.7, 8);
+  it("reinvests the whole dividend on the ex-date", () => {
+    const levels = benchmarkLevels(points, dividends);
+    expect(levels[1].close).toBeCloseTo(102, 8);
+    expect(levels[2].close).toBeCloseTo((102 * 102) / 101, 8);
     // Phản hồi cũ không có cổ tức: dùng giá điều chỉnh của Yahoo.
     expect(benchmarkLevels([{ date: "2026-03-19", close: 100, adjClose: 98 }], undefined)[0].close).toBe(98);
   });
 
-  it("reads the withholding rate from the portfolio's own dividends", () => {
-    const div = (partial: Partial<Transaction>): Transaction => ({
-      ...buy,
-      type: "DIVIDEND",
-      quantity: 100,
-      price: 1,
-      ...partial,
-    });
-    expect(dividendWithholdingRate([div({ fee: 30 }), div({ fee: 0, currency: "EUR" })])).toBeCloseTo(0.3, 8);
-    expect(dividendWithholdingRate([div({ fee: 0 })])).toBe(0);
-    expect(dividendWithholdingRate([buy])).toBe(0);
+  it("counts the portfolio's dividends before withholding tax, like the S&P's", () => {
+    const history = {
+      XYZ: [
+        { date: "2025-01-02", close: 100 },
+        { date: "2025-01-03", close: 100 },
+      ],
+    };
+    const trades = (fee: number): Transaction[] => [
+      { ...buy, id: "a", date: "2025-01-02" },
+      { ...buy, id: "d", type: "DIVIDEND", quantity: 10, price: 1, fee, date: "2025-01-03" },
+    ];
+    // Thuế 30% ghi ở phí lệnh cổ tức không làm đổi lợi nhuận: vẫn +1%.
+    expect(buildTwrGrowth(trades(3), {}, history).growth.at(-1)).toBeCloseTo(1.01, 8);
+    expect(buildTwrGrowth(trades(0), {}, history).growth.at(-1)).toBeCloseTo(1.01, 8);
   });
 });
 
@@ -308,9 +308,9 @@ describe("same cash flows (Snowball's comparison)", () => {
       { from: "2026-01-04", to: "2026-01-07" },
       "all"
     );
-    // Danh mục: mua 1.000, bán 1.000, còn 50 cổ × 30 + cổ tức 7 → lãi 1.507.
+    // Danh mục: mua 1.000, bán 1.000, còn 50 cổ × 30 + cổ tức 10 (trước thuế) → lãi 1.510.
     // S&P: mua 1.000 ở 100 (10 đơn vị), bán 1.000 ở 110, còn 0,909 đơn vị × 121 = 110.
-    expect(all?.sameCashFlows?.profit).toBeCloseTo(1507, 6);
+    expect(all?.sameCashFlows?.profit).toBeCloseTo(1510, 6);
     expect(all?.sameCashFlows?.benchmarkProfit).toBeCloseTo(110, 6);
   });
 
@@ -321,8 +321,8 @@ describe("same cash flows (Snowball's comparison)", () => {
       { from: "2026-01-06", to: "2026-01-07" },
       "6m"
     );
-    // Đầu kỳ (đóng cửa 6/1) cầm 50 cổ × 20 = 1.000 → cuối kỳ 1.500 + cổ tức 7.
-    expect(later?.sameCashFlows?.profit).toBeCloseTo(507, 6);
+    // Đầu kỳ (đóng cửa 6/1) cầm 50 cổ × 20 = 1.000 → cuối kỳ 1.500 + cổ tức 10.
+    expect(later?.sameCashFlows?.profit).toBeCloseTo(510, 6);
     expect(later?.sameCashFlows?.benchmarkProfit).toBeCloseTo(100, 6);
   });
 });

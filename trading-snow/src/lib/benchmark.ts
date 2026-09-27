@@ -35,7 +35,7 @@ export interface ComparisonResult {
    * Chỉ có khi tải được giá lịch sử.
    */
   sameCashFlows?: {
-    /** Lãi trong kỳ của danh mục: giá trị cuối + tiền bán + cổ tức − giá trị đầu − tiền mua. */
+    /** Lãi trong kỳ của danh mục: giá trị cuối + tiền bán + cổ tức (trước thuế) − giá trị đầu − tiền mua. */
     profit: number;
     /** Lãi trong kỳ nếu cùng dòng tiền đó mua/bán S&P 500. */
     benchmarkProfit: number;
@@ -364,30 +364,13 @@ function periodPortfolioReturnPct(
 }
 
 /**
- * Tỷ lệ thuế khấu trừ trên cổ tức của chính danh mục (phí ghi trên lệnh cổ tức / cổ tức
- * gộp), ưu tiên mã niêm yết USD. Nhà đầu tư Việt Nam bị Mỹ giữ 30%; cổ tức S&P 500 trừ
- * cùng mức đó thì hai bên tính cổ tức như nhau.
- */
-export function dividendWithholdingRate(transactions: Transaction[]): number {
-  const dividends = transactions.filter(
-    (t) => t.type === "DIVIDEND" && t.symbol !== "CASH" && t.quantity * t.price > 0
-  );
-  const usd = dividends.filter((t) => !t.currency || t.currency === "USD");
-  const pool = usd.length > 0 ? usd : dividends;
-  const gross = pool.reduce((sum, t) => sum + t.quantity * t.price, 0);
-  const tax = pool.reduce((sum, t) => sum + Math.max(0, t.fee), 0);
-  if (gross <= 0) return 0;
-  return Math.min(0.5, tax / gross);
-}
-
-/**
  * Chuỗi tổng lợi nhuận của S&P 500 từ giá đóng cửa và cổ tức: mỗi lần không hưởng quyền,
- * cổ tức sau thuế được tái đầu tư. Không có dữ liệu cổ tức thì dùng giá điều chỉnh của Yahoo.
+ * cổ tức (trước thuế, như phía danh mục) được tái đầu tư. Không có dữ liệu cổ tức thì dùng
+ * giá điều chỉnh của Yahoo.
  */
 export function benchmarkLevels(
   points: HistoryPoint[],
-  dividends: ExDividend[] | undefined,
-  withholding = 0
+  dividends: ExDividend[] | undefined
 ): HistoryPoint[] {
   const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
   if (!dividends) return sorted.map((p) => ({ date: p.date, close: p.adjClose ?? p.close }));
@@ -400,7 +383,7 @@ export function benchmarkLevels(
     const p = sorted[i];
     if (i > 0) {
       const prev = sorted[i - 1].close;
-      level *= (p.close + (1 - withholding) * (byDate.get(p.date) ?? 0)) / prev;
+      level *= (p.close + (byDate.get(p.date) ?? 0)) / prev;
     }
     out.push({ date: p.date, close: level });
   }
@@ -456,7 +439,8 @@ export function buildTwrGrowth(
       const gross = tx.quantity * tx.price;
       if (tx.type === "BUY") bought += gross + tx.fee;
       else if (tx.type === "SELL") received += gross - tx.fee;
-      else if (tx.type === "DIVIDEND") received += gross - tx.fee;
+      // Cổ tức trước thuế: phí trên lệnh cổ tức là thuế khấu trừ, không tính vào so sánh.
+      else if (tx.type === "DIVIDEND") received += gross;
       if (tx.type !== "DIVIDEND") applyTrade(tx, positions, lastPrices, { value: 0 });
     }
 
@@ -548,7 +532,7 @@ function sameCashFlowProfits(
       invested -= gross - tx.fee;
       units -= (gross - tx.fee) / levelOn(day);
     } else if (tx.type === "DIVIDEND") {
-      dividends += gross - tx.fee;
+      dividends += gross;
     }
   }
 

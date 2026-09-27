@@ -16,7 +16,6 @@ import {
   BENCHMARK_RANGES,
   benchmarkLevels,
   buildBenchmarkComparison,
-  dividendWithholdingRate,
   ensureEquityCurve,
   extendBenchmarkFrom,
   hasBenchmarkTradingData,
@@ -158,14 +157,12 @@ export function BenchmarkComparison({
   }, [benchUrl]);
 
   const benchReady = bench && bench.url === benchUrl ? bench : null;
-  // Cổ tức S&P trừ cùng mức thuế như cổ tức của danh mục (nhà đầu tư Việt Nam: Mỹ giữ 30%).
-  const withholding = useMemo(() => dividendWithholdingRate(transactions), [transactions]);
   const benchSeries = useMemo(
     () =>
       benchReady && !("error" in benchReady)
-        ? benchmarkLevels(benchReady.points, benchReady.dividends, withholding)
+        ? benchmarkLevels(benchReady.points, benchReady.dividends)
         : null,
-    [benchReady, withholding]
+    [benchReady]
   );
   // Chờ giá lịch sử của các mã trong danh mục: không có nó thì giữa các lệnh vị thế bị
   // định giá theo giá khớp gần nhất và đường danh mục phẳng rồi vọt ở điểm cuối.
@@ -215,7 +212,7 @@ export function BenchmarkComparison({
           <p className="text-xs text-gray-500">
             {display?.method === "cost"
               ? "S&P 500: 0% đầu kỳ · Danh mục: (Δ lãi chốt + Δ float) / cost mở (chưa tải được giá lịch sử)"
-              : "Lợi nhuận theo thời gian của phần cổ phiếu: mua là tiền vào, bán và cổ tức là tiền ra · giá phiên chính"}
+              : "Lợi nhuận theo thời gian của phần cổ phiếu: mua là tiền vào, bán và cổ tức là tiền ra · cổ tức hai bên tính trước thuế · giá phiên chính"}
             {display && (
               <>
                 {" "}
@@ -277,9 +274,7 @@ export function BenchmarkComparison({
               sub={
                 priceOnlyIndex
                   ? "^GSPC, chỉ giá (không tải được SPY)"
-                  : withholding >= 0.005
-                    ? `SPY, gồm cổ tức sau thuế ${formatDecimal(withholding * 100, 0)}% như danh mục`
-                    : "SPY, gồm cổ tức"
+                  : "SPY, gồm cổ tức trước thuế"
               }
             />
             <StatCard
@@ -302,7 +297,7 @@ export function BenchmarkComparison({
               </p>
               <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
                 <span className="text-app-muted">
-                  Lãi thực tế{" "}
+                  Lãi danh mục{" "}
                   <strong className="text-app-text">{signedMoney(display.sameCashFlows.profit)}</strong>
                 </span>
                 <span className="text-app-muted">
