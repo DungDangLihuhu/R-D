@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildBenchmarkComparison, buildTwrGrowth, resolveBenchmarkWindow } from "./benchmark";
+import {
+  benchmarkLevels,
+  buildBenchmarkComparison,
+  buildTwrGrowth,
+  dividendWithholdingRate,
+  resolveBenchmarkWindow,
+} from "./benchmark";
 import type { Transaction } from "./types";
 
 const buy: Transaction = {
@@ -240,5 +246,83 @@ describe("benchmark period base", () => {
     expect(year).toMatchObject({ from: "2025-12-31", clampedToHistory: true });
     expect(year?.sp500Return).toBeCloseTo(10, 8);
     expect(year?.portfolioReturn).toBeCloseTo(10, 8);
+  });
+});
+
+describe("S&P 500 dividends", () => {
+  const points = [
+    { date: "2026-03-19", close: 100 },
+    { date: "2026-03-20", close: 101 },
+    { date: "2026-03-23", close: 102 },
+  ];
+  const dividends = [{ date: "2026-03-20", amount: 1 }];
+
+  it("reinvests dividends on the ex-date, after the same withholding as the portfolio's", () => {
+    const gross = benchmarkLevels(points, dividends, 0);
+    expect(gross[1].close).toBeCloseTo(102, 8);
+    expect(gross[2].close).toBeCloseTo((102 * 102) / 101, 8);
+    // Nhà đầu tư Việt Nam: Mỹ giữ 30% cổ tức, SPY cũng vậy.
+    expect(benchmarkLevels(points, dividends, 0.3)[1].close).toBeCloseTo(101.7, 8);
+    // Phản hồi cũ không có cổ tức: dùng giá điều chỉnh của Yahoo.
+    expect(benchmarkLevels([{ date: "2026-03-19", close: 100, adjClose: 98 }], undefined)[0].close).toBe(98);
+  });
+
+  it("reads the withholding rate from the portfolio's own dividends", () => {
+    const div = (partial: Partial<Transaction>): Transaction => ({
+      ...buy,
+      type: "DIVIDEND",
+      quantity: 100,
+      price: 1,
+      ...partial,
+    });
+    expect(dividendWithholdingRate([div({ fee: 30 }), div({ fee: 0, currency: "EUR" })])).toBeCloseTo(0.3, 8);
+    expect(dividendWithholdingRate([div({ fee: 0 })])).toBe(0);
+    expect(dividendWithholdingRate([buy])).toBe(0);
+  });
+});
+
+describe("same cash flows (Snowball's comparison)", () => {
+  const spyLevels = [
+    { date: "2026-01-02", close: 100 },
+    { date: "2026-01-05", close: 100 },
+    { date: "2026-01-06", close: 110 },
+    { date: "2026-01-07", close: 121 },
+  ];
+  const history = {
+    XYZ: [
+      { date: "2026-01-05", close: 10 },
+      { date: "2026-01-06", close: 20 },
+      { date: "2026-01-07", close: 30 },
+    ],
+  };
+  const trades: Transaction[] = [
+    { ...buy, id: "b", quantity: 100, price: 10, date: "2026-01-05T00:00:00.000Z" },
+    { ...buy, id: "s", type: "SELL", quantity: 50, price: 20, date: "2026-01-06T00:00:00.000Z" },
+    { ...buy, id: "d", type: "DIVIDEND", quantity: 50, price: 0.2, fee: 3, date: "2026-01-07T00:00:00.000Z" },
+  ];
+
+  it("buys and sells the S&P for the same amounts on the same days", () => {
+    const all = buildBenchmarkComparison(
+      { transactions: trades, marketPrices: {}, priceHistory: history },
+      spyLevels,
+      { from: "2026-01-04", to: "2026-01-07" },
+      "all"
+    );
+    // Danh mục: mua 1.000, bán 1.000, còn 50 cổ × 30 + cổ tức 7 → lãi 1.507.
+    // S&P: mua 1.000 ở 100 (10 đơn vị), bán 1.000 ở 110, còn 0,909 đơn vị × 121 = 110.
+    expect(all?.sameCashFlows?.profit).toBeCloseTo(1507, 6);
+    expect(all?.sameCashFlows?.benchmarkProfit).toBeCloseTo(110, 6);
+  });
+
+  it("starts a shorter range holding the S&P worth what the portfolio held", () => {
+    const later = buildBenchmarkComparison(
+      { transactions: trades, marketPrices: {}, priceHistory: history },
+      spyLevels,
+      { from: "2026-01-06", to: "2026-01-07" },
+      "6m"
+    );
+    // Đầu kỳ (đóng cửa 6/1) cầm 50 cổ × 20 = 1.000 → cuối kỳ 1.500 + cổ tức 7.
+    expect(later?.sameCashFlows?.profit).toBeCloseTo(507, 6);
+    expect(later?.sameCashFlows?.benchmarkProfit).toBeCloseTo(100, 6);
   });
 });

@@ -30,23 +30,28 @@ export async function GET(req: NextRequest) {
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   const live = to >= yesterday;
   const ttlSeconds = live ? 300 : 3600;
-  const options = { adjusted: true, revalidateSeconds: ttlSeconds };
+  const options = { adjusted: true, dividends: true, revalidateSeconds: ttlSeconds };
 
   try {
-    // Giá điều chỉnh cổ tức của SPY: danh mục tính cả cổ tức nhận được thì S&P 500 cũng vậy.
-    let points = await cached(cacheKey(["benchmark-tr", BENCHMARK, from, to]), ttlSeconds * 1000, async () =>
-      (await fetchCloseHistory(BENCHMARK, fromDate, toDate, options)).points
+    // Giá kèm cổ tức của SPY: client tự cộng cổ tức (trừ cùng mức thuế như cổ tức của danh
+    // mục) để S&P 500 và danh mục tính cổ tức giống nhau.
+    let symbol = BENCHMARK;
+    let history = await cached(cacheKey(["benchmark-div", BENCHMARK, from, to]), ttlSeconds * 1000, () =>
+      fetchCloseHistory(BENCHMARK, fromDate, toDate, options)
     );
-    if (points.length === 0) {
-      points = await cached(cacheKey(["benchmark-tr", "^GSPC", from, to]), ttlSeconds * 1000, async () =>
-        (await fetchCloseHistory("^GSPC", fromDate, toDate, options)).points
+    if (history.points.length === 0) {
+      symbol = "^GSPC";
+      history = await cached(cacheKey(["benchmark-div", "^GSPC", from, to]), ttlSeconds * 1000, () =>
+        fetchCloseHistory("^GSPC", fromDate, toDate, options)
       );
     }
     return jsonCached(
       {
-        symbol: points.length > 0 ? BENCHMARK : "^GSPC",
+        symbol,
         label: "S&P 500",
-        points,
+        points: history.points,
+        // ^GSPC là chỉ số giá, không có cổ tức.
+        ...(symbol === BENCHMARK && { dividends: history.dividends ?? [] }),
         updatedAt: new Date().toISOString(),
       },
       ttlSeconds,

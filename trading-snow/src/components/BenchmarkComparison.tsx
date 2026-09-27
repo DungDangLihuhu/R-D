@@ -14,7 +14,9 @@ import {
 import { StatCard } from "@/components/StatCard";
 import {
   BENCHMARK_RANGES,
+  benchmarkLevels,
   buildBenchmarkComparison,
+  dividendWithholdingRate,
   ensureEquityCurve,
   extendBenchmarkFrom,
   hasBenchmarkTradingData,
@@ -34,7 +36,7 @@ import { usePriceHistory } from "@/hooks/usePriceHistory";
 import { fetchJson } from "@/lib/fetch-cache";
 import { useChartTheme } from "@/lib/chart-theme";
 import type { PortfolioStats, Transaction } from "@/lib/types";
-import type { HistoryPoint } from "@/lib/yahoo";
+import type { ExDividend, HistoryPoint } from "@/lib/yahoo";
 
 function formatChartAxisPercent(value: number): string {
   const pct = value - 100;
@@ -48,6 +50,10 @@ function monthTicks(dates: string[]): string[] {
   const starts = dates.filter((d, i) => i === 0 || d.slice(0, 7) !== dates[i - 1].slice(0, 7));
   const step = Math.max(1, Math.ceil(starts.length / 7));
   return starts.filter((_, i) => i % step === 0);
+}
+
+function signedMoney(value: number): string {
+  return `${value >= 0.005 ? "+" : ""}${formatMoney(value)}`;
 }
 
 function formatIndexedReturn(value: number): string {
@@ -72,7 +78,7 @@ export function BenchmarkComparison({
 }) {
   const [range, setRange] = useState<BenchmarkRange>("all");
   const [bench, setBench] = useState<
-    | { url: string; points: HistoryPoint[]; symbol?: string }
+    | { url: string; points: HistoryPoint[]; dividends?: ExDividend[]; symbol?: string }
     | { url: string; error: string }
     | null
   >(null);
@@ -112,8 +118,8 @@ export function BenchmarkComparison({
   );
 
   const benchUrl = benchmarkWindow
-    ? // `tr=1`: bản gồm cổ tức — khác URL để không dùng lại phản hồi cũ (chỉ giá) trong cache.
-      `/api/benchmark?from=${extendBenchmarkFrom(benchmarkWindow.from)}&to=${benchmarkWindow.to}&tr=1`
+    ? // `tr=2`: bản kèm cổ tức SPY — khác URL để không dùng lại phản hồi cũ trong cache.
+      `/api/benchmark?from=${extendBenchmarkFrom(benchmarkWindow.from)}&to=${benchmarkWindow.to}&tr=2`
     : "";
 
   useEffect(() => {
@@ -121,7 +127,12 @@ export function BenchmarkComparison({
     let cancelled = false;
 
     // 5 phút như giá danh mục: điểm cuối hai bên cùng thời điểm.
-    fetchJson<{ points?: HistoryPoint[]; symbol?: string; error?: string }>(benchUrl, {
+    fetchJson<{
+      points?: HistoryPoint[];
+      dividends?: ExDividend[];
+      symbol?: string;
+      error?: string;
+    }>(benchUrl, {
       ttlMs: 5 * 60 * 1000,
     })
       .then((data) => {
@@ -129,7 +140,12 @@ export function BenchmarkComparison({
         setBench(
           data.error
             ? { url: benchUrl, error: data.error }
-            : { url: benchUrl, points: data.points ?? [], symbol: data.symbol }
+            : {
+                url: benchUrl,
+                points: data.points ?? [],
+                dividends: data.dividends,
+                symbol: data.symbol,
+              }
         );
       })
       .catch(() => {
@@ -142,19 +158,28 @@ export function BenchmarkComparison({
   }, [benchUrl]);
 
   const benchReady = bench && bench.url === benchUrl ? bench : null;
+  // Cổ tức S&P trừ cùng mức thuế như cổ tức của danh mục (nhà đầu tư Việt Nam: Mỹ giữ 30%).
+  const withholding = useMemo(() => dividendWithholdingRate(transactions), [transactions]);
+  const benchSeries = useMemo(
+    () =>
+      benchReady && !("error" in benchReady)
+        ? benchmarkLevels(benchReady.points, benchReady.dividends, withholding)
+        : null,
+    [benchReady, withholding]
+  );
   // Chờ giá lịch sử của các mã trong danh mục: không có nó thì giữa các lệnh vị thế bị
   // định giá theo giá khớp gần nhất và đường danh mục phẳng rồi vọt ở điểm cuối.
   const historyPending = historyStatus === "loading";
 
   const comparison = useMemo(() => {
-    if (!benchReady || "error" in benchReady || !benchmarkWindow || historyPending) return null;
+    if (!benchSeries || !benchmarkWindow || historyPending) return null;
     return buildBenchmarkComparison(
       { ...portfolioInput, priceHistory: closes ?? undefined },
-      benchReady.points,
+      benchSeries,
       benchmarkWindow,
       range
     );
-  }, [benchReady, benchmarkWindow, historyPending, portfolioInput, closes, range]);
+  }, [benchSeries, benchmarkWindow, historyPending, portfolioInput, closes, range]);
 
   const loading = Boolean(benchUrl) && (!benchReady || historyPending);
   const error =
@@ -249,7 +274,13 @@ export function BenchmarkComparison({
               label="S&P 500"
               value={formatPercent(display.sp500Return)}
               trend={display.sp500Return >= 0 ? "up" : "down"}
-              sub={priceOnlyIndex ? "^GSPC, chỉ giá (không tải được SPY)" : "SPY, gồm cổ tức"}
+              sub={
+                priceOnlyIndex
+                  ? "^GSPC, chỉ giá (không tải được SPY)"
+                  : withholding >= 0.005
+                    ? `SPY, gồm cổ tức sau thuế ${formatDecimal(withholding * 100, 0)}% như danh mục`
+                    : "SPY, gồm cổ tức"
+              }
             />
             <StatCard
               label="Vượt / thua S&P 500"
@@ -263,7 +294,42 @@ export function BenchmarkComparison({
             />
           </div>
 
-          <div className="min-w-0 w-full">
+          {display.sameCashFlows && (
+            <div className="mt-3 rounded-lg border border-app-border px-4 py-3">
+              <p className="text-xs text-app-muted">
+                Cùng dòng tiền (cách Snowball so sánh): nếu mỗi lệnh mua/bán trong kỳ là mua/bán
+                SPY cùng số tiền, cùng ngày
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
+                <span className="text-app-muted">
+                  Lãi thực tế{" "}
+                  <strong className="text-app-text">{signedMoney(display.sameCashFlows.profit)}</strong>
+                </span>
+                <span className="text-app-muted">
+                  Nếu mua SPY{" "}
+                  <strong className="text-app-text">
+                    {signedMoney(display.sameCashFlows.benchmarkProfit)}
+                  </strong>
+                </span>
+                <span className="text-app-muted">
+                  Chênh lệch{" "}
+                  <strong
+                    className={
+                      display.sameCashFlows.profit >= display.sameCashFlows.benchmarkProfit
+                        ? "text-emerald-600"
+                        : "text-rose-600"
+                    }
+                  >
+                    {signedMoney(
+                      display.sameCashFlows.profit - display.sameCashFlows.benchmarkProfit
+                    )}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3 min-w-0 w-full">
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={display.points}>
                 <CartesianGrid stroke={chartTheme.grid} vertical={false} />
