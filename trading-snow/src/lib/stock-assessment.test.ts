@@ -3,6 +3,7 @@ import {
   ANALYST_TARGET_WINDOW_SEC,
   INDUSTRY_SELL_PREMIUM,
   industryValuationSell,
+  listRecentPriceTargets,
   summarizeAnalystTargets,
   summarizeIndustryMultiples,
 } from "./analyst-targets";
@@ -65,6 +66,55 @@ describe("summarizeAnalystTargets", () => {
 
   it("uses a 90-day window", () => {
     expect(ANALYST_TARGET_WINDOW_SEC).toBe(90 * 24 * 3600);
+  });
+});
+
+describe("listRecentPriceTargets", () => {
+  const now = 1_800_000_000;
+
+  it("lists the last 6 months newest first and drops older rows", () => {
+    const rows = listRecentPriceTargets(
+      [
+        {
+          epochGradeDate: now - 10 * 86400,
+          firm: "Goldman",
+          currentPriceTarget: 120,
+          priorPriceTarget: 110,
+          action: "up",
+          toGrade: "Buy",
+        },
+        {
+          epochGradeDate: now - 40 * 86400,
+          firm: "JP Morgan",
+          currentPriceTarget: 140,
+          priceTargetAction: "Lowers",
+          priorPriceTarget: 150,
+        },
+        {
+          epochGradeDate: now - 100 * 86400,
+          firm: "Older",
+          currentPriceTarget: 115,
+        },
+        {
+          epochGradeDate: now - 200 * 86400,
+          firm: "Too old",
+          currentPriceTarget: 200,
+        },
+        {
+          epochGradeDate: now - 2 * 86400,
+          firm: "No target",
+          action: "reit",
+        },
+      ],
+      100,
+      now
+    );
+    expect(rows.map((r) => r.firm)).toEqual(["Goldman", "JP Morgan", "Older"]);
+    expect(rows[0]?.changeLabel).toBe("Nâng");
+    expect(rows[0]?.upsidePercent).toBeCloseTo(20, 5);
+    expect(rows[0]?.grade).toBe("Buy");
+    expect(rows[1]?.change).toBe("down");
+    expect(rows[2]?.changeLabel).toBe("Giữ");
   });
 });
 

@@ -36,6 +36,7 @@ const SECTION_LINKS = [
   { id: "tong-quan", label: "Tổng quan" },
   { id: "bieu-do", label: "Biểu đồ" },
   { id: "chi-so", label: "Chỉ số" },
+  { id: "target-price", label: "Target" },
   { id: "noi-bo", label: "Nội bộ" },
 ];
 
@@ -536,7 +537,9 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
             aria-label="Mục trong trang"
             className="sticky top-0 z-30 -mx-1 flex gap-1 overflow-x-auto bg-app-bg/90 px-1 py-1 backdrop-blur-sm scrollbar-none sm:top-[var(--app-header-h,7.5rem)]"
           >
-            {SECTION_LINKS.map((s) => (
+            {SECTION_LINKS.filter(
+              (s) => s.id !== "target-price" || (data.priceTargets?.length ?? 0) > 0
+            ).map((s) => (
               <a
                 key={s.id}
                 href={`#${s.id}`}
@@ -702,6 +705,70 @@ export function StockAnalysisView({ symbol }: { symbol: string }) {
               niêm yết mới, OTC, quỹ, hoặc mã Finnhub/Yahoo không cover. Giá và chart kỹ thuật
               vẫn lấy được nếu Yahoo có báo giá.
             </div>
+          )}
+
+          {(data.priceTargets?.length ?? 0) > 0 && (
+            <Section id="target-price" title="Target price CTCK">
+              <p className="-mt-2 mb-3 text-xs text-gray-500">
+                6 tháng gần nhất, mới nhất ở trên. Mốc bán vẫn dùng trung bình target 3 tháng.
+              </p>
+              <div className="max-h-[32rem] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-app-surface text-left text-gray-500">
+                    <tr>
+                      <th className="pb-2 pr-4">Ngày</th>
+                      <th className="pb-2 pr-4">CTCK</th>
+                      <th className="pb-2 pr-4">Thay đổi</th>
+                      <th className="pb-2 pr-4 text-right">Target</th>
+                      <th className="pb-2 pr-4 text-right">Trước</th>
+                      <th className="pb-2 text-right">So với giá</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.priceTargets ?? []).map((row) => (
+                      <tr
+                        key={`${row.epoch}-${row.firm}`}
+                        className="border-t border-gray-100"
+                      >
+                        <td className="py-2 pr-4 whitespace-nowrap">{formatDate(row.date)}</td>
+                        <td className="py-2 pr-4">
+                          <span className="font-medium">{row.firm}</span>
+                          {row.grade ? (
+                            <span className="mt-0.5 block text-xs text-gray-500">{row.grade}</span>
+                          ) : null}
+                        </td>
+                        <td
+                          className={`py-2 pr-4 whitespace-nowrap ${
+                            row.change === "up" || row.change === "init"
+                              ? "text-emerald-600"
+                              : row.change === "down"
+                                ? "text-rose-600"
+                                : "text-gray-500"
+                          }`}
+                        >
+                          {row.changeLabel}
+                        </td>
+                        <td className="py-2 pr-4 text-right tabular-nums font-medium">
+                          {formatMoney(row.price, data.currency)}
+                        </td>
+                        <td className="py-2 pr-4 text-right tabular-nums text-gray-500">
+                          {row.priorPrice != null
+                            ? formatMoney(row.priorPrice, data.currency)
+                            : "—"}
+                        </td>
+                        <td
+                          className={`py-2 text-right tabular-nums ${
+                            row.upsidePercent >= 0 ? "text-emerald-600" : "text-rose-600"
+                          }`}
+                        >
+                          {formatPercent(row.upsidePercent)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
           )}
 
           {data.earningsUpcoming.length > 0 && (
