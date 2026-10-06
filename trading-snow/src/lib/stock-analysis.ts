@@ -5,8 +5,10 @@ import { resolveYahooSymbolCandidates } from "./symbol";
 import { fetchPriceHistory, fetchQuoteForSymbol, fetchYahooInsiderData, fetchYahooNews, fetchYahooKeyStats, fetchYahooOptionFlow, fetchYahooPeerMultiples, yahooInsiderCode, yahooInsiderShareChange, yahooStatsToFinnhubMetrics } from "./yahoo";
 import type { YahooInsiderData, YahooKeyStats } from "./yahoo";
 import {
+  listRecentPriceTargets,
   summarizeAnalystTargets,
   summarizeIndustryMultiples,
+  type ListedPriceTarget,
 } from "./analyst-targets";
 import {
   computeStockAssessment,
@@ -110,6 +112,8 @@ export interface StockAnalysis {
     epsEstimate?: number | null;
   }[];
   recommendations: RecommendationRow[];
+  /** Target CTCK trong 6 tháng, mới nhất trước. */
+  priceTargets: ListedPriceTarget[];
   insiderTransactions: InsiderRow[];
   news: NewsRow[];
   priceHistory: { date: string; close: number }[];
@@ -1044,6 +1048,10 @@ export async function fetchStockAnalysis(symbol: string): Promise<StockAnalysis 
     earningsHistory,
     earningsUpcoming: upcoming.slice(0, 4),
     recommendations: recs.slice(0, 6),
+    priceTargets: listRecentPriceTargets(
+      yahooStats?.priceTargetHistory ?? [],
+      quote.price
+    ),
     insiderTransactions: [],
     news: [],
     priceHistory,

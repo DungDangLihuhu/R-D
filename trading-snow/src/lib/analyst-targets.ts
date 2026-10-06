@@ -1,6 +1,10 @@
 export const ANALYST_TARGET_WINDOW_DAYS = 90;
 export const ANALYST_TARGET_WINDOW_SEC = ANALYST_TARGET_WINDOW_DAYS * 24 * 3600;
 
+/** Danh sách target trên trang Phân tích: tối đa 6 tháng, mới nhất trước. */
+export const PRICE_TARGET_LIST_WINDOW_DAYS = 183;
+export const PRICE_TARGET_LIST_WINDOW_SEC = PRICE_TARGET_LIST_WINDOW_DAYS * 24 * 3600;
+
 /** Modest premium to the sector multiple — “đắt so với ngành”. */
 export const INDUSTRY_SELL_PREMIUM = 1.12;
 
@@ -8,6 +12,26 @@ export interface AnalystGradeRow {
   epochGradeDate: number;
   firm: string;
   currentPriceTarget?: number;
+  priorPriceTarget?: number;
+  /** Yahoo: up / down / init / main / reit, hoặc Raises / Lowers… */
+  action?: string;
+  priceTargetAction?: string;
+  toGrade?: string;
+  fromGrade?: string;
+}
+
+export type PriceTargetChange = "up" | "down" | "init" | "flat";
+
+export interface ListedPriceTarget {
+  epoch: number;
+  date: string;
+  firm: string;
+  price: number;
+  priorPrice?: number;
+  grade?: string;
+  change: PriceTargetChange;
+  changeLabel: string;
+  upsidePercent: number;
 }
 
 export interface AnalystTargetSummary {
@@ -117,6 +141,72 @@ export function summarizeAnalystTargets(
   }
 
   return null;
+}
+
+function changeFromAction(action: string | undefined): PriceTargetChange | null {
+  const key = (action ?? "").trim().toLowerCase();
+  if (!key) return null;
+  if (key === "up" || key === "raises" || key === "raise") return "up";
+  if (key === "down" || key === "lowers" || key === "lower") return "down";
+  if (key === "init" || key === "initiates" || key === "initiate") return "init";
+  if (key === "main" || key === "reit" || key === "maintains" || key === "reiterates") return "flat";
+  return null;
+}
+
+const CHANGE_LABEL: Record<PriceTargetChange, string> = {
+  up: "Nâng",
+  down: "Hạ",
+  init: "Khởi tạo",
+  flat: "Giữ",
+};
+
+/**
+ * Mọi target có giá trong 6 tháng, mới nhất trước.
+ * Trung bình mốc bán vẫn chỉ dùng 90 ngày (`summarizeAnalystTargets`).
+ */
+export function listRecentPriceTargets(
+  history: AnalystGradeRow[],
+  spot: number,
+  nowSec = Date.now() / 1000
+): ListedPriceTarget[] {
+  const cutoff = nowSec - PRICE_TARGET_LIST_WINDOW_SEC;
+  const rows: ListedPriceTarget[] = [];
+
+  for (const row of history) {
+    const epoch = toEpochSeconds(row.epochGradeDate);
+    const firm = row.firm?.trim();
+    const price = row.currentPriceTarget;
+    if (!firm || !(epoch >= cutoff) || price == null || !Number.isFinite(price) || !(price > 0)) {
+      continue;
+    }
+    const prior =
+      row.priorPriceTarget != null &&
+      Number.isFinite(row.priorPriceTarget) &&
+      row.priorPriceTarget > 0
+        ? row.priorPriceTarget
+        : undefined;
+    const fromAction =
+      changeFromAction(row.priceTargetAction) ?? changeFromAction(row.action);
+    let change: PriceTargetChange = fromAction ?? "flat";
+    if (!fromAction && prior != null) {
+      if (price > prior) change = "up";
+      else if (price < prior) change = "down";
+    }
+    rows.push({
+      epoch,
+      date: new Date(epoch * 1000).toISOString(),
+      firm,
+      price,
+      priorPrice: prior,
+      grade: row.toGrade?.trim() || undefined,
+      change,
+      changeLabel: CHANGE_LABEL[change],
+      upsidePercent: spot > 0 ? ((price - spot) / spot) * 100 : 0,
+    });
+  }
+
+  rows.sort((a, b) => b.epoch - a.epoch || a.firm.localeCompare(b.firm));
+  return rows;
 }
 
 export function summarizeIndustryMultiples(

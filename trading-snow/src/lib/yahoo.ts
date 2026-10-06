@@ -1,3 +1,4 @@
+import { PRICE_TARGET_LIST_WINDOW_SEC } from "./analyst-targets";
 import {
   encodeYahooSymbol,
   resolveYahooSymbolCandidates,
@@ -857,6 +858,11 @@ export interface YahooPriceTargetRow {
   epochGradeDate: number;
   firm: string;
   currentPriceTarget?: number;
+  priorPriceTarget?: number;
+  action?: string;
+  priceTargetAction?: string;
+  toGrade?: string;
+  fromGrade?: string;
 }
 
 export interface YahooKeyStats {
@@ -1158,7 +1164,7 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
   const session = await getYahooSession();
   if (!session) return null;
 
-  const cutoffSec = Date.now() / 1000 - 90 * 24 * 3600;
+  const cutoffSec = Date.now() / 1000 - PRICE_TARGET_LIST_WINDOW_SEC;
 
   for (const candidate of resolveYahooSymbolCandidates(symbol)) {
     const yahoo = toYahooSymbol(candidate);
@@ -1178,7 +1184,12 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
             history?: {
               epochGradeDate?: number;
               firm?: string;
-              currentPriceTarget?: number;
+              toGrade?: string;
+              fromGrade?: string;
+              action?: string;
+              priceTargetAction?: string;
+              currentPriceTarget?: unknown;
+              priorPriceTarget?: unknown;
             }[];
           };
           earningsHistory?: { history?: unknown };
@@ -1241,17 +1252,23 @@ export async function fetchYahooKeyStats(symbol: string): Promise<YahooKeyStats 
     for (const row of result.upgradeDowngradeHistory?.history ?? []) {
       const epoch = row.epochGradeDate;
       const firm = row.firm?.trim();
-      const target = row.currentPriceTarget;
       if (epoch == null || !Number.isFinite(epoch) || !firm) continue;
       const sec = epoch > 1e12 ? epoch / 1000 : epoch;
       if (sec < cutoffSec) continue;
+      const target = pickYahooNumber(row.currentPriceTarget);
+      const prior = pickYahooNumber(row.priorPriceTarget);
       priceTargetHistory.push({
         epochGradeDate: sec,
         firm,
-        currentPriceTarget:
-          typeof target === "number" && Number.isFinite(target) && target > 0 ? target : undefined,
+        currentPriceTarget: target != null && target > 0 ? target : undefined,
+        priorPriceTarget: prior != null && prior > 0 ? prior : undefined,
+        action: row.action?.trim() || undefined,
+        priceTargetAction: row.priceTargetAction?.trim() || undefined,
+        toGrade: row.toGrade?.trim() || undefined,
+        fromGrade: row.fromGrade?.trim() || undefined,
       });
     }
+    priceTargetHistory.sort((a, b) => b.epochGradeDate - a.epochGradeDate);
     stats.priceTargetHistory = priceTargetHistory;
     stats.earningsHistory = parseYahooEarningsHistory(result.earningsHistory?.history);
     stats.recommendationTrend = parseYahooRecommendationTrend(result.recommendationTrend?.trend);
